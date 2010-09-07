@@ -1,0 +1,37 @@
+8-Jul-2000:
+	Fix exploitable misused printf-function calls.
+
+14-Dec-1999:
+	linux-ftpd-0.16 is released.
+
+5-Dec-1999:
+	Performance fixes. (Andi Kleen, ak@suse.de)
+
+14-Sep-1999:
+	Added ftpusers(5) man page. (Peter Tobias, tobias@et-inf.fho-emden.de)
+
+1-Aug-1999:
+	Complete y2k and y2038 audit.
+
+31-Jul-1999:
+	Redid makefiles/config stuff for new confgen version.
+
+15-Jul-1999:
+	Merge from OpenBSD of 7/15/99.
+
+
+New in 0.10: (5/20/97)
+- Patches from Marek Michalkiewicz (marekm@i17linuxb.ists.pwr.wroc.pl):
+    - shadow support
+    - add code to use high data ports without IP_PORTRANGE
+    - add "CERT suggested fixes" from wu-ftpd-2.4.2-beta11 to popen.c
+    - add real strvis(3)
+    - other minor fixes
+- Correct printfs of off_t quantities and thus reporting of file sizes.
+- Merge from OpenBSD of 5/19/97 and reorganize source.
+- Fix shift/reduce conflict in ftpcmd.y and, consequently, fix SITE IDLE
+  command. [Jan. 1997]
+
+New in 0.09: (12/31/96)
+- Clean compilation with assorted gcc warnings enabled.
+- Ported from OpenBSD.  

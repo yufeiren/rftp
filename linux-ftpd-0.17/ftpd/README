@@ -1,0 +1,50 @@
+This source was retrieved from ftp.openbsd.org on
+Thu Jul 15 19:38:16 EDT 1999
+
+----
+
+To do a new import:
+
+1. go to ftp.openbsd.org and get sources from libexec/ftpd. The files
+are:
+
+    Makefile     ftpcmd.y    ftpd.c       logwtmp.c    popen.c
+    extern.h     ftpd.8      logutmp.c    pathnames.h
+
+If OpenBSD has added more files, be sure to get them and update this
+list. Put the files in a temp directory.
+
+2. Update this file as necessary (including particularly the date at
+the top) and copy it into the temp directory under the name README.
+
+3. Make sure CVSROOT is set correctly.
+
+4. Do the following:
+
+  cvs import -m "Import from OpenBSD <desc>" linux-ftpd/ftpd \
+	openbsd openbsd-<version>
+
+where <version> should represent the OpenBSD version, either a release
+number or the date of a -current in the form 19990630, and <desc>
+should hold the same information in a human-readable format.
+
+Note that you can't use . in cvs tags; use _ instead.
+
+E.g.:
+
+  cvs import -m "Import from OpenBSD 1.4" linux-ftpd/ftpd openbsd openbsd-1_4
+
+or
+
+  cvs import -m "Import from OpenBSD June 30, 1999" linux-ftpd/ftpd \
+	openbsd openbsd-19990630
+
+
+5. If there are merge conflicts cvs will tell you to do a cvs checkout
+with some -j flags. Do that in a scratch tree, clean up the conflicts,
+and commit the results. Then update your main working tree, build, and
+test.
+
+You may want to manually check any OpenBSD changes to see if they have
+added anything that won't work in Linux.
+

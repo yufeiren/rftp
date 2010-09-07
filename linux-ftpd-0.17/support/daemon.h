@@ -1,0 +1,1 @@
+int daemon(int, int);

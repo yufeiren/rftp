@@ -1,0 +1,26 @@
+# Dirs
+INSTALLROOT
+SBINDIR
+MANDIR
+
+# Modes
+DAEMONMODE
+MANMODE
+
+# Compiling
+# -Wwrite-strings        (Neither <arpa/ftp.h> nor bison output pass this)
+# -Wshadow               (seems to produce only bogus warnings)
+# -Wredundant-decls      (there are a number of such in Linux's /usr/include)
+ALLWARNINGS
+CC
+CFLAGS
+LDFLAGS
+LIBS
+YACC
+
+# Features
+BSDSIGNAL
+SHADOW
+FN(crypt)
+FN(snprintf)
+TYPE(socklen_t)
