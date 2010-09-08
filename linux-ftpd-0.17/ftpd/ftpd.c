@@ -300,7 +300,9 @@ main(int argc, char *argv[], char **envp)
 	struct hostent *hp;
 
 #ifdef __linux__
+DPRINTF(("1\n"));
 	initsetproctitle(argc, argv, envp);
+DPRINTF(("2\n"));
 	srandom(time(NULL)^(getpid()<<8));
 
 	/*
@@ -325,7 +327,7 @@ main(int argc, char *argv[], char **envp)
 
 	/* set this here so klogin can use it... */
 	(void)snprintf(ttyline, sizeof(ttyline), "ftp%d", getpid());
-
+DPRINTF(("3\n"));
 	while ((ch = getopt(argc, argv, argstr)) != -1) {
 		switch (ch) {
 		case 'A':
