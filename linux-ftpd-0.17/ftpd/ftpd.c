@@ -578,7 +578,6 @@ DPRINTF(("server get a new conn %d\n", fd2));
 			strcpy(dhostname, inet_ntoa(ctrl_addr.sin_addr));
 		}
 	}
-DPRINTF(("FTP server (%s) ready\n", version));
 	reply(220, "%s FTP server (%s) ready.",
 	      (multihome ? dhostname : hostname), version);
 	(void) setjmp(errcatch);
