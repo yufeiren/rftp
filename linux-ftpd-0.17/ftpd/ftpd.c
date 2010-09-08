@@ -446,7 +446,8 @@ DPRINTF(("4.2\n"));
 		    (char *)&on, sizeof(on)) < 0)
 			syslog(LOG_ERR, "control setsockopt: %m");;
 		server_addr.sin_family = AF_INET;
-		server_addr.sin_addr.s_addr = INADDR_ANY;
+/*		server_addr.sin_addr.s_addr = INADDR_ANY; */
+		server_addr.sin_addr.s_addr = inet_addr("192.168.1.2");
 		server_addr.sin_port = sv->s_port;
 DPRINTF(("4.3\n"));
 DPRINTF(("bind sinport: %d\n", ntohs(server_addr.sin_port)));
