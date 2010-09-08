@@ -448,11 +448,13 @@ DPRINTF(("4.2\n"));
 		server_addr.sin_family = AF_INET;
 		server_addr.sin_addr.s_addr = INADDR_ANY;
 		server_addr.sin_port = sv->s_port;
+DPRINTF(("4.3\n"));
 		if (bind(ctl_sock, (struct sockaddr *)&server_addr,
 			 sizeof(server_addr))) {
 			syslog(LOG_ERR, "control bind: %m");
 			exit(1);
 		}
+DPRINTF(("4.4\n"));
 		if (listen(ctl_sock, 32) < 0) {
 			syslog(LOG_ERR, "control listen: %m");
 			exit(1);
