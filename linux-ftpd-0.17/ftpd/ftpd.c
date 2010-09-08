@@ -327,7 +327,7 @@ DPRINTF(("2\n"));
 
 	/* set this here so klogin can use it... */
 	(void)snprintf(ttyline, sizeof(ttyline), "ftp%d", getpid());
-DPRINTF(("3\n"));
+
 	while ((ch = getopt(argc, argv, argstr)) != -1) {
 		switch (ch) {
 		case 'A':
@@ -410,11 +410,11 @@ DPRINTF(("3\n"));
 #define LOG_FTP LOG_DAEMON
 #endif
 	openlog("ftpd", LOG_PID | LOG_NDELAY, LOG_FTP);
-
+DPRINTF(("3\n"));
 	if (daemon_mode) {
 		int ctl_sock, fd2;
 		struct servent *sv;
-
+DPRINTF(("4\n"));
 		/*
 		 * Detach from parent.
 		 */
@@ -455,6 +455,7 @@ DPRINTF(("3\n"));
 			syslog(LOG_ERR, "control listen: %m");
 			exit(1);
 		}
+DPRINTF(("5\n"));
 		/*
 		 * Loop forever accepting connection requests and forking off
 		 * children to handle them.
