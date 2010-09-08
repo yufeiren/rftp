@@ -417,11 +417,11 @@ DPRINTF(("3\n"));
 DPRINTF(("4\n"));
 		/*
 		 * Detach from parent.
-		 */
+		 
 		if (daemon(1, 1) < 0) {
 			syslog(LOG_ERR, "failed to become a daemon");
 			exit(1);
-		}
+		}*/
 DPRINTF(("4.1\n"));
 		(void) signal(SIGCHLD, reapchild);
 		/*
