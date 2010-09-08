@@ -452,6 +452,7 @@ DPRINTF(("4.3\n"));
 DPRINTF(("bind sinport: %d\n", ntohs(server_addr.sin_port)));
 		if (bind(ctl_sock, (struct sockaddr *)&server_addr,
 			 sizeof(server_addr))) {
+DPRINTF(("bind error: %d %s\n", errno, strerror(errno)));
 			syslog(LOG_ERR, "control bind: %m");
 			exit(1);
 		}
