@@ -473,6 +473,7 @@ DPRINTF(("5\n"));
 			fd2 = accept(ctl_sock, (struct sockaddr *)&his_addr,
 				    &addrlen);
 			if (fork() == 0) {
+DPRINTF(("server get a new conn %d\n", fd2));
 				/* child */
 				(void) dup2(fd2, 0);
 				(void) dup2(fd2, 1);
@@ -577,7 +578,7 @@ DPRINTF(("5\n"));
 			strcpy(dhostname, inet_ntoa(ctrl_addr.sin_addr));
 		}
 	}
-
+DPRINTF(("FTP server (%s) ready\n", version));
 	reply(220, "%s FTP server (%s) ready.",
 	      (multihome ? dhostname : hostname), version);
 	(void) setjmp(errcatch);

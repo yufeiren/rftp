@@ -62,7 +62,7 @@ char ftp_rcsid[] =
 
 #include "ftp_var.h"
 #include "cmds.h"
-
+#include "errors.h"
 #include "../version.h"
 
 int data = -1;
@@ -183,6 +183,7 @@ hookup(char *host, int port)
 	}
 	if (verbose)
 		printf("Connected to %s.\n", hostname);
+DPRINTF(("connection established, and get reply from server\n"));
 	if (getreply(0) > 2) { 	/* read startup message from server */
 		if (cin)
 			(void) fclose(cin);
@@ -191,6 +192,7 @@ hookup(char *host, int port)
 		code = -1;
 		goto bad;
 	}
+DPRINTF(("get reply success\n"));
 #ifdef SO_OOBINLINE
 	{
 	int on = 1;
@@ -392,6 +394,7 @@ getreply(int expecteof)
 			}
 			if (dig < 4 && isdigit(c))
 				code = code * 10 + (c - '0');
+			/* 227  - entering passive mode */
 			if (!pflag && code == 227)
 				pflag = 1;
 			if (dig > 4 && pflag == 1 && isdigit(c))
