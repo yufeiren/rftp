@@ -422,6 +422,7 @@ DPRINTF(("4\n"));
 			syslog(LOG_ERR, "failed to become a daemon");
 			exit(1);
 		}
+DPRINTF(("4.1\n"));
 		(void) signal(SIGCHLD, reapchild);
 		/*
 		 * Get port number for ftp/tcp.
@@ -431,6 +432,7 @@ DPRINTF(("4\n"));
 			syslog(LOG_ERR, "getservbyname for ftp failed");
 			exit(1);
 		}
+DPRINTF(("4.2\n"));
 		/*
 		 * Open a socket, bind it to the FTP port, and start
 		 * listening.
