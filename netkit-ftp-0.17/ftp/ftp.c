@@ -222,10 +222,10 @@ DPRINTF(("start dologin: %s\n", host));
 		code = -1;
 		return(0);
 	}
-DPRINTF(("xruserpass finish\n"));
+DPRINTF(("xruserpass finish, luser = %d\n", luser));
 	while (luser == NULL) {
 		char *myname = getlogin();
-
+DPRINTF(("getlogin finish, myname = %s\n", myname));
 		if (myname == NULL) {
 			struct passwd *pp = getpwuid(getuid());
 
