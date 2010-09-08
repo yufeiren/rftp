@@ -67,6 +67,7 @@ char cmds_rcsid[] =
 #include "pathnames.h"
 #include "cmds.h"
 #include "glob.h"
+#include "errors.h"
 
 void intr(int);
 

@@ -216,12 +216,13 @@ dologin(const char *host)
 	char tmp[80];
 	char *luser, *pass, *zacct;
 	int n, aflag = 0;
-
+DPIRNTF(("start dologin: %s\n", host));
 	luser = pass = zacct = 0;
 	if (xruserpass(host, &luser, &pass, &zacct) < 0) {
 		code = -1;
 		return(0);
 	}
+DPIRNTF(("xruserpass finish\n"));
 	while (luser == NULL) {
 		char *myname = getlogin();
 
