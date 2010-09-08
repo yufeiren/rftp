@@ -126,6 +126,8 @@ typedef unsigned int useconds_t;
 #include "pathnames.h"
 #include "extern.h"
 
+#include "errors.h"
+
 #ifdef __STDC__
 #include <stdarg.h>
 #else
