@@ -67,6 +67,7 @@ char main_rcsid[] =
 
 #define Extern
 #include "ftp_var.h"
+#include "errors.h"
 int traceflag = 0;
 const char *home = "/";
 
@@ -124,7 +125,7 @@ main(volatile int argc, char **volatile argv)
         cp = (cp == NULL) ? argv[0] : cp+1;
         if (strcmp(cp, "pftp") == 0)
             passivemode = 1;
-
+DPRINTF(("main 1\n"));
 #ifdef __USE_READLINE__
 	/* 
 	 * Set terminal type so libreadline can parse .inputrc correctly
