@@ -449,6 +449,7 @@ DPRINTF(("4.2\n"));
 		server_addr.sin_addr.s_addr = INADDR_ANY;
 		server_addr.sin_port = sv->s_port;
 DPRINTF(("4.3\n"));
+DPRINTF(("bind sinport: %d\n", server_addr.sin_port));
 		if (bind(ctl_sock, (struct sockaddr *)&server_addr,
 			 sizeof(server_addr))) {
 			syslog(LOG_ERR, "control bind: %m");
