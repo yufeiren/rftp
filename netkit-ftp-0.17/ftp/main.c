@@ -192,6 +192,7 @@ DPRINTF(("main 1\n"));
 	/*
 	 * Set up the home directory in case we're globbing.
 	 */
+DPRINTF(("before getlogin\n"));
 	cp = getlogin();
 	if (cp != NULL) {
 		pw = getpwnam(cp);
@@ -215,6 +216,7 @@ DPRINTF(("main 1\n"));
 		(void) signal(SIGINT, intr);
 		(void) signal(SIGPIPE, lostpeer);
 	}
+DPRINTF(("before cmdscanner\n"));
 	for (;;) {
 		cmdscanner(top);
 		top = 1;
