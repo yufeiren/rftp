@@ -1,6 +1,6 @@
 include ../MCONFIG
 
-CFLAGS+=-I../support
+CFLAGS+=-I../support -I..
 LIBS+=-L../support -lsupport
 
 
