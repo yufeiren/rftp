@@ -939,11 +939,11 @@ skip:
 		 * We MUST do a chdir() after the chroot. Otherwise
 		 * the old current directory will be accessible as "."
 		 * outside the new root!
-		 */
+		 
 		if (chroot(rootdir) < 0 || chdir("/") < 0) {
 			reply(550, "Can't set guest privileges.");
 			goto bad;
-		}
+		}*/
 		strcpy(pw->pw_dir, "/");
 		setenv("HOME", "/", 1);
 	} else if (dochroot) {
