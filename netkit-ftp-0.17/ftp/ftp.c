@@ -352,7 +352,6 @@ getreply(int expecteof)
 		dig = n = code = 0;
 		cp = reply_string;
 		while ((c = getc(cin)) != '\n') {
-DPRINTF(("getreply: %d\n", c));
 			if (c == IAC) {     /* handle telnet commands */
 				switch (c = getc(cin)) {
 				case WILL:
