@@ -1,10 +1,10 @@
 include ../MCONFIG
 
-CFLAGS+=-I../support -I..
-LIBS+=-L../support -lsupport
+CFLAGS+=-I../support -I.. -I../../netkit-ftp-0.17/ftp
+LIBS+=-L../support -lsupport  -libverbs -lrdmacm -lpthread
 
 
-OBJS=ftpd.o ftpcmd.o logutmp.o logwtmp.o popen.o
+OBJS=ftpd.o ftpcmd.o logutmp.o logwtmp.o popen.o rdma.o
 
 ## our internal version of ls.
 # LSDIR	= ${.CURDIR}/../../bin/ls

@@ -134,6 +134,8 @@ typedef unsigned int useconds_t;
 #include <varargs.h>
 #endif
 
+#include "rdma.h"
+
 static char versionpre[] = "Version 6.4/OpenBSD/Linux";
 static char version[sizeof(versionpre)+sizeof(pkg)];
 
@@ -204,6 +206,7 @@ char	*krbtkfile_env = NULL;
 
 char	*ident = NULL;
 
+rdma_cb *dc_cb;
 
 /*
  * Timeout intervals for retrying connections
@@ -243,6 +246,7 @@ static void	 ack __P((const char *));
 static void	 myoob __P((int));
 static int	 checkuser __P((const char *, const char *));
 static FILE	*dataconn __P((const char *, off_t, const char *));
+static int	 rdmadataconn __P((const char *, off_t, const char *));
 static void	 dolog __P((struct sockaddr_in *));
 static const char	*curdir __P((void));
 static void	 end_login __P((void));
@@ -251,6 +255,7 @@ static int	guniquefd __P((const char *, char **));
 static void	 lostconn __P((int));
 static void	 sigquit __P((int));
 static int	 receive_data __P((FILE *, FILE *));
+static int	 rreceive_data __P((FILE *));
 static void	 replydirname __P((const char *, const char *));
 static void	 send_data __P((FILE *, FILE *, off_t, off_t, int));
 static struct passwd *
@@ -1170,6 +1175,87 @@ done:
 	(*closefunc)(fout);
 }
 
+void rstore(const char *name, const char *mode, int unique)
+{
+	FILE *fout, *din;
+	int (*closefunc) __P((FILE *));
+	struct stat st;
+	int fd;
+	int ret;
+
+	if (unique && stat(name, &st) == 0) {
+		char *nam;
+
+		fd = guniquefd(name, &nam);
+		if (fd == -1) {
+			LOGCMD(*mode == 'w' ? "put" : "append", name);
+			return;
+		}
+		name = nam;
+		if (restart_point)
+			mode = "r+";
+		fout = fdopen(fd, mode);
+	} else
+		fout = fopen(name, mode);
+
+	closefunc = fclose;
+	if (fout == NULL) {
+		perror_reply(553, name);
+		LOGCMD(*mode == 'w' ? "put" : "append", name);
+		return;
+	}
+	byte_count = -1;
+	if (restart_point) {
+		if (type == TYPE_A) {
+			off_t i, n;
+			int c;
+
+			n = restart_point;
+			i = 0;
+			while (i++ < n) {
+				if ((c=getc(fout)) == EOF) {
+					perror_reply(550, name);
+					goto done;
+				}
+				if (c == '\n')
+					i++;
+			}
+			/*
+			 * We must do this seek to "current" position
+			 * because we are changing from reading to
+			 * writing.
+			 */
+			if (fseek(fout, 0L, SEEK_CUR) < 0) {
+				perror_reply(550, name);
+				goto done;
+			}
+		} else if (lseek(fileno(fout), restart_point, SEEK_SET) < 0) {
+			perror_reply(550, name);
+			goto done;
+		}
+	}
+	/* din = dataconn(name, (off_t)-1, "r"); */
+	ret = rdmadataconn(name, (off_t)-1, "r");
+	if (ret != 0)
+		goto done;
+	
+/*	if (din == NULL)
+		goto done; */
+	if (rreceive_data(fout) == 0) {
+		if (unique)
+			reply(226, "Transfer complete (unique file name:%s).",
+			    name);
+		else
+			reply(226, "Transfer complete.");
+	}
+/*	(void) fclose(din);*/
+	data = -1;
+	pdata = -1;
+done:
+	LOGBYTES(*mode == 'w' ? "put" : "append", name, byte_count);
+	(*closefunc)(fout);
+}
+
 static FILE * getdatasock(const char *mode)
 {
 	int on = 1, s, t, tries;
@@ -1345,6 +1431,168 @@ static FILE * dataconn(const char *name, off_t size, const char *mode)
 	return (file);
 }
 
+static int rdmadataconn(const char *name, off_t size, const char *mode)
+{
+	char sizebuf[32];
+	FILE *file;
+	int retry = 0, tos;
+	
+	struct ibv_send_wr *bad_send_wr;
+	struct ibv_recv_wr *bad_recv_wr;
+	int ret;
+
+	file_size = size;
+	byte_count = 0;
+	if (size != (off_t) -1) {
+		(void) snprintf(sizebuf, sizeof(sizebuf), " (%lld bytes)", 
+				(quad_t) size);
+	} else
+		sizebuf[0] = '\0';
+	if (pdata >= 0) {
+		struct sockaddr_in from;
+		int s;
+		socklen_t fromlen = sizeof(from);
+
+		signal (SIGALRM, toolong);
+		(void) alarm ((unsigned) timeout);
+		s = accept(pdata, (struct sockaddr *)&from, &fromlen);
+		(void) alarm (0);
+		if (s < 0) {
+			reply(425, "Can't open data connection.");
+			(void) close(pdata);
+			pdata = -1;
+			return (NULL);
+		}
+		if (ntohs(from.sin_port) < IPPORT_RESERVED) {
+			perror_reply(425, "Can't build data connection");
+			(void) close(pdata);
+			(void) close(s);
+			pdata = -1;
+			return (NULL);
+		}
+		if (from.sin_addr.s_addr != his_addr.sin_addr.s_addr) {
+			perror_reply(435, "Can't build data connection"); 
+			(void) close(pdata);
+			(void) close(s);
+			pdata = -1;
+			return (NULL);
+		}
+		(void) close(pdata);
+		pdata = s;
+#ifdef IP_TOS
+		tos = IPTOS_THROUGHPUT;
+		(void) setsockopt(s, IPPROTO_IP, IP_TOS, (char *)&tos,
+		    sizeof(int));
+#endif
+		reply(150, "Opening %s mode data connection for '%s'%s.",
+		     type == TYPE_A ? "ASCII" : "BINARY", name, sizebuf);
+		return (fdopen(pdata, mode));
+	}
+	if (data >= 0) {
+		reply(125, "Using existing data connection for '%s'%s.",
+		    name, sizebuf);
+		usedefault = 1;
+		return (fdopen(data, mode));
+	}
+	if (usedefault)
+		data_dest = his_addr;
+	usedefault = 1;
+/*	file = getdatasock(mode);
+	if (file == NULL) {
+		reply(425, "Can't create data socket (%s,%d): %s.",
+		    inet_ntoa(data_source.sin_addr),
+		    ntohs(data_source.sin_port), strerror(errno));
+		return (NULL);
+	}
+	data = fileno(file);
+*/
+	dc_cb = (rdma_cb *) malloc(sizeof(rdma_cb));
+	if (dc_cb == NULL) {
+		syslog(LOG_ERR, "malloc: %m");
+		return(NULL);
+	}
+	
+	memset(dc_cb, '\0', sizeof(rdma_cb));
+	rdma_cb_init(dc_cb);
+	
+	/*
+	 * attempt to connect to reserved port on client machine;
+	 * this looks like an attack
+	 */
+	if (ntohs(data_dest.sin_port) < IPPORT_RESERVED ||
+	    ntohs(data_dest.sin_port) == 2049) {		/* XXX */
+		perror_reply(425, "Can't build data connection");
+		(void) fclose(file);
+		data = -1;
+		return NULL;
+	}
+	if (data_dest.sin_addr.s_addr != his_addr.sin_addr.s_addr) {
+		perror_reply(435, "Can't build data connection");
+		(void) fclose(file);
+		data = -1;
+		return NULL;
+	}
+	
+	ret = iperf_setup_qp(dc_cb, dc_cb->cm_id);
+	if (ret) {
+		syslog(LOG_ERR, "iperf_setup_qp: %m");
+		goto err0;
+	}
+
+	ret = iperf_setup_buffers(dc_cb);
+	if (ret) {
+		syslog(LOG_ERR, "iperf_setup_buffers: %m");
+		goto err1;
+	}
+
+	ret = ibv_post_recv(dc_cb->qp, &dc_cb->rq_wr, &bad_recv_wr);
+	if (ret) {
+		syslog(LOG_ERR, "ibv_post_recv: %m");
+		goto err2;
+	}
+
+	ret = pthread_create(dc_cb->cqthread, NULL, cq_thread, dc_cb);
+	if (ret) {
+		syslog(LOG_ERR, "pthread_create: %m");
+		goto err2;
+	}
+	
+	/* rdma connect */
+	ret = iperf_connect_client(dc_cb);
+	if (ret) {
+		syslog(LOG_ERR, "iperf_connect_client: %m");
+		goto err3;
+	}
+	
+	reply(150, "Opening %s mode data connection for '%s'%s.",
+	     type == TYPE_A ? "ASCII" : "BINARY", name, sizebuf);
+	return (0);
+	
+err3:
+	pthread_cancel(dc_cb->cqthread);
+	pthread_join(dc_cb->cqthread, NULL);
+err2:
+	iperf_free_buffers(dc_cb);
+err1:
+	iperf_free_qp(dc_cb);
+err0:
+	return (1);
+	
+/*	while (connect(data, (struct sockaddr *)&data_dest,
+	    sizeof(data_dest)) < 0) {
+		if (errno == EADDRINUSE && retry < swaitmax) {
+			sleep((unsigned) swaitint);
+			retry += swaitint;
+			continue;
+		}
+		perror_reply(425, "Can't build data connection");
+		(void) fclose(file);
+		data = -1;
+		return (NULL);
+	} */
+	
+}
+
 /*
  * Tranfer the contents of "instr" to "outstr" peer using the appropriate
  * encapsulation of the data subject to Mode, Structure, and Type.
@@ -1505,6 +1753,107 @@ static int receive_data(FILE *instr, FILE *outstr)
 		if (cnt < 0)
 			goto data_err;
 		transflag = 0;
+		return (0);
+
+	case TYPE_E:
+		reply(553, "TYPE E not implemented.");
+		transflag = 0;
+		return (-1);
+
+	case TYPE_A:
+		while ((c = getc(instr)) != EOF) {
+			byte_count++;
+			if (c == '\n')
+				bare_lfs++;
+			while (c == '\r') {
+				if (ferror(outstr))
+					goto data_err;
+				if ((c = getc(instr)) != '\n') {
+					(void) putc ('\r', outstr);
+					if (c == '\0' || c == EOF)
+						goto contin2;
+				}
+			}
+			(void) putc(c, outstr);
+	contin2:	;
+		}
+		fflush(outstr);
+		if (ferror(instr))
+			goto data_err;
+		if (ferror(outstr))
+			goto file_err;
+		transflag = 0;
+		if (bare_lfs) {
+			lreply(226,
+		"WARNING! %d bare linefeeds received in ASCII mode",
+			    bare_lfs);
+		(void)printf("   File may not have transferred correctly.\r\n");
+		}
+		return (0);
+	default:
+		reply(550, "Unimplemented TYPE %d in receive_data", type);
+		transflag = 0;
+		return (-1);
+	}
+
+data_err:
+	transflag = 0;
+	perror_reply(426, "Data Connection");
+	return (-1);
+
+file_err:
+	transflag = 0;
+	perror_reply(452, "Error writing file");
+	return (-1);
+}
+
+static int rreceive_data(FILE *outstr)
+{
+	int c;
+	int cnt;
+	volatile int bare_lfs = 0;
+	char buf[BUFSIZ];
+	
+	int ret;
+
+	transflag++;
+	if (setjmp(urgcatch)) {
+		transflag = 0;
+		return (-1);
+	}
+	switch (type) {
+
+	case TYPE_I:
+	case TYPE_L:
+		signal (SIGALRM, lostconn);
+		
+		/* receive data via rdma connection */
+		rmsgheader hdr;
+		
+		for ( ; ; ) {
+			/* wait for the client send ADV - READ? WRITE? */
+			sem_wait(&dc_cb->sem);
+		
+			/* tell the peer where to write */
+			dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
+			dc_cb->send_buf.stat = ACTIVE_WRITE_ADV;
+			ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
+			if (ret) {
+				syslog(LOG_ERR, "ibv_post_send: %m");
+				break;
+			}
+			
+			/* wait the finish of rdma write */
+			sem_wait(&dc_cb->sem);
+			
+			/* write the data to the file */
+			memcpy(&hdr, rdma_sink_buf, sizeof(rmsgheader));
+			cnt = hdr.dlen;
+			
+			writen(fileno(outstr), \
+				rdma_sink_buf + sizeof(rmsgheader), cnt);
+		}
+		
 		return (0);
 
 	case TYPE_E:

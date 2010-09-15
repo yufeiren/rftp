@@ -112,6 +112,7 @@ struct rdma_info_blk {
 	uint32_t rkey;
 	uint32_t size;
 	uint32_t mode;	/* for rdma transfer mode */
+	uint32_t stat;  /* status */
 };
 
 

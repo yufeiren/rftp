@@ -134,12 +134,15 @@ struct tab cmdtab[] = {		/* In order defined in RFC 765 */
 	{ "REIN", REIN, ARGS, 0,	"(reinitialize server state)" },
 	{ "QUIT", QUIT, ARGS, 1,	"(terminate service)", },
 	{ "PORT", PORT, ARGS, 1,	"<sp> b0, b1, b2, b3, b4" },
+	{ "RADR", RADR, ARGS, 1,	"<sp> b0, b1, b2, b3, b4" },
 	{ "PASV", PASV, ARGS, 1,	"(set server in passive mode)" },
+	{ "RPSV", RPSV, ARGS, 1,	"(set server in passive rmda mode)" },
 	{ "TYPE", TYPE, ARGS, 1,	"<sp> [ A | E | I | L ]" },
 	{ "STRU", STRU, ARGS, 1,	"(specify file structure)" },
 	{ "MODE", MODE, ARGS, 1,	"(specify transfer mode)" },
 	{ "RETR", RETR, STR1, 1,	"<sp> file-name" },
 	{ "STOR", STOR, STR1, 1,	"<sp> file-name" },
+	{ "RSTR", RSTR, STR1, 1,	"<sp> file-name" },
 	{ "APPE", APPE, STR1, 1,	"<sp> file-name" },
 	{ "MLFL", MLFL, OSTR, 0,	"(mail file)" },
 	{ "MAIL", MAIL, OSTR, 0,	"(mail to user)" },
@@ -205,6 +208,7 @@ struct tab sitetab[] = {
 	ABOR	DELE	CWD	LIST	NLST	SITE
 	STAT	HELP	NOOP	MKD	RMD	PWD
 	CDUP	STOU	SMNT	SYST	SIZE	MDTM
+	RADR	RPSV	RSTR
 
 	UMASK	IDLE	CHMOD
 
@@ -270,6 +274,35 @@ cmd
 						pdata = -1;
 					}
 					reply(200, "PORT command successful.");
+				}
+			}
+		}
+	| RADR check_login SP host_port CRLF
+		{
+			if ($2) {
+				if ($4) {
+					usedefault = 1;
+					reply(500,	
+					    "Illegal RADR rejected (range errors).");
+				} else if (portcheck &&
+				    ntohs(data_dest.sin_port) < IPPORT_RESERVED) {
+					usedefault = 1;
+					reply(500,
+					    "Illegal RADR rejected (reserved port).");
+				} else if (portcheck &&
+				    memcmp(&data_dest.sin_addr,
+				    &his_addr.sin_addr,
+				    sizeof data_dest.sin_addr)) {
+					usedefault = 1;
+					reply(500,
+					    "Illegal RADR rejected (address wrong).");
+				} else {
+					usedefault = 0;
+					if (pdata >= 0) {
+						(void) close(pdata);
+						pdata = -1;
+					}
+					reply(200, "RADR command successful.");
 				}
 			}
 		}
@@ -364,6 +397,13 @@ cmd
 		{
 			if ($2 && $4 != NULL)
 				store($4, "w", 0);
+			if ($4 != NULL)
+				free($4);
+		}
+	| RSTR check_login SP pathname CRLF
+		{
+			if ($2 && $4 != NULL)
+				rstore($4, "w", 0);
 			if ($4 != NULL)
 				free($4);
 		}

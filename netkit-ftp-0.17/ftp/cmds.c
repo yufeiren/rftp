@@ -543,6 +543,10 @@ usage:
 		argv[2] = argv[1];
 	}
 	cmd = (argv[0][0] == 'a') ? "APPE" : ((sunique) ? "STOU" : "STOR");
+	
+	/* rdma store == RSTR */
+	cmd = "RSTR";
+	
 	if (loc && ntflag) {
 		argv[2] = dotrans(argv[2]);
 	}

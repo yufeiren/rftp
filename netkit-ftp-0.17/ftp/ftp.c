@@ -845,6 +845,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		restart_point = 0;
 		lmode = "r+w";
 	}
+	
 	if (remote) {
 		if (command("%s %s", cmd, remote) != PRELIM) {
 			(void) signal(SIGINT, oldintr);
@@ -891,6 +892,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			
 			/* talk to peer what type of transfer to use */
 			dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
+			dc_cb->send_buf.stat = ACTIVE_WRITE_ADV;
 			ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
 			if (ret) {
 				fprintf(stderr, "post send error %d\n", ret);
@@ -898,7 +900,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			}
 			dc_cb->state = ACTIVE_WRITE_ADV;
 			
-			/* wait the peer tell me where should i write */
+			/* wait the peer tell me where should i write to */
 			sem_wait(&dc_cb->sem);
 			if (dc_cb->state != ACTIVE_WRITE_RESP) {
 				fprintf(stderr, \
@@ -932,6 +934,15 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 					"wait for ACTIVE_WRITE_FIN state %d\n", \
 					dc_cb->state);
 				return;
+			}
+			
+			/* tell the peer transfer finished */
+			dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
+			dc_cb->send_buf.stat = ACTIVE_WRITE_FIN;
+			ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
+			if (ret) {
+				fprintf(stderr, "post send error %d\n", ret);
+				break;
 			}
 			
 			if (tick && (bytes >= hashbytes)) {
@@ -1636,7 +1647,7 @@ noport:
 		p = (char *)&data_addr.sin_port;
 #define	UC(b)	(((int)b)&0xff)
 		result =
-		    command("PORT %d,%d,%d,%d,%d,%d",
+		    command("RADR %d,%d,%d,%d,%d,%d",
 		      UC(a[0]), UC(a[1]), UC(a[2]), UC(a[3]),
 		      UC(p[0]), UC(p[1]));
 		if (result == ERROR && sendport == -1) {
