@@ -1537,10 +1537,10 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	}
 	
 	syslog(LOG_ERR, "rdma_resolve_addr start");
-	rc = rdma_resolve_addr(dc_cb->cm_id, NULL, \
+	ret = rdma_resolve_addr(dc_cb->cm_id, NULL, \
 		(struct sockaddr *) &data_dest, 2000);
-	if (rc) {
-		syslog();
+	if (ret) {
+		syslog(LOG_ERR, "rdma_resolve_addr: %m");
 		return;
 	}
 
