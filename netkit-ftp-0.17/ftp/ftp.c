@@ -66,6 +66,7 @@ char ftp_rcsid[] =
 #include "../version.h"
 
 #include "rdma.h"
+extern struct acptq acceptedTqh;
 
 int data = -1;
 off_t restart_point = 0;
