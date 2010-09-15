@@ -207,6 +207,8 @@ char	*krbtkfile_env = NULL;
 char	*ident = NULL;
 
 rdma_cb *dc_cb;
+int rdma_debug = 0;
+struct acptq acceptedTqh;
 
 /*
  * Timeout intervals for retrying connections
