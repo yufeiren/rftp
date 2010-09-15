@@ -236,7 +236,7 @@ int iperf_accept(struct rdma_cb *cb);
 
 void iperf_format_send(struct rdma_cb *cb, char *buf, struct ibv_mr *mr);
 
-/* data transfer method */
+/* data transfer method
 
 int cli_act_rdma_rd(struct rdma_cb *cb);
 int cli_act_rdma_wr(struct rdma_cb *cb);
@@ -246,7 +246,7 @@ int cli_pas_rdma_wr(struct rdma_cb *cb);
 int svr_act_rdma_rd(struct rdma_cb *cb);
 int svr_act_rdma_wr(struct rdma_cb *cb);
 int svr_pas_rdma_rd(struct rdma_cb *cb);
-int svr_pas_rdma_wr(struct rdma_cb *cb);
+int svr_pas_rdma_wr(struct rdma_cb *cb); */
 
 ssize_t	 readn(int, void *, size_t);		/* from APUE2e */
 ssize_t	 writen(int, const void *, size_t);	/* from APUE2e */
