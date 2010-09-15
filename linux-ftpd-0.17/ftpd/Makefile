@@ -1,6 +1,6 @@
 include ../MCONFIG
 
-CFLAGS+=-I../support -I.. -I../../netkit-ftp-0.17/ftp
+CFLAGS+=-I../support -I..
 LIBS+=-L../support -lsupport  -libverbs -lrdmacm -lpthread
 
 
