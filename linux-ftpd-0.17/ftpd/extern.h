@@ -61,6 +61,7 @@ void	send_file_list __P((const char *));
 void	statcmd __P((void));
 void	statfilecmd __P((char *));
 void	store __P((const char *, const char *, int));
+void	rstore __P((const char *, const char *, int));
 void	upper __P((char *));
 void	user __P((char *));
 void	yyerror __P((char *));
