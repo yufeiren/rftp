@@ -333,7 +333,7 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 	return 0;
 
 error:
-	cb->state = ERROR;
+	cb->state = STATE_ERROR;
 	sem_post(&cb->sem);
 	return ret;
 }
