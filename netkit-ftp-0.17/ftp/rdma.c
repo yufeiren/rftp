@@ -168,7 +168,7 @@ int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 		cb->state = ADDR_RESOLVED;
 		ret = rdma_resolve_route(cma_id, 2000);
 		if (ret) {
-			cb->state = ERROR;
+			cb->state = STATE_ERROR;
 			perror("rdma_resolve_route");
 			sem_post(&cb->sem);
 		}
@@ -673,7 +673,7 @@ int iperf_accept(struct rdma_cb *cb)
 	}
 
 	sem_wait(&cb->sem);
-	if (cb->state == ERROR) {
+	if (cb->state == STATE_ERROR) {
 		fprintf(stderr, "wait for CONNECTED state %d\n", cb->state);
 		return -1;
 	}
