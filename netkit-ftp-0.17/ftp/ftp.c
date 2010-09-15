@@ -813,6 +813,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			return;
 		}
 	}
+	DPRINTF(("rdmainitconn start\n"));
 	if (rdmainitconn()) {
 		(void) signal(SIGINT, oldintr);
 		if (oldintp)
@@ -822,6 +823,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			(*closefunc)(fin);
 		return;
 	}
+	DPRINTF(("rdmainitconn successful\n"));
 	if (sigsetjmp(sendabort, 1))
 		goto abort;
 
@@ -846,6 +848,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		lmode = "r+w";
 	}
 	
+	DPRINTF(("%s %s start\n", cmd, remote));
 	if (remote) {
 		if (command("%s %s", cmd, remote) != PRELIM) {
 			(void) signal(SIGINT, oldintr);
@@ -864,9 +867,11 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 				(*closefunc)(fin);
 			return;
 		}
-	
+	DPRINTF(("%s %s successful\n", cmd, remote));
 /*	dout = dataconn(lmode); */
+	DPRINTF(("rdmadataconn start\n"));
 	rdmadataconn(lmode);
+	DPRINTF(("rdmadataconn successful\n"));
 	
 /*	if (dout == NULL)
 		goto abort; */
@@ -882,6 +887,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		
 		/* read data to the data source buffer */
 		rmsgheader rhdr;
+		DPRINTF(("data transfer start\n"));
 		
 		while ((c = readn(fileno(fin), dc_cb->rdma_source_buf + sizeof(rmsgheader), dc_cb->size)) > 0) {
 			bytes += c;
@@ -952,6 +958,8 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 					hashbytes += TICKBYTES;
 			}
 		}
+		
+		DPRINTF(("data transfer finished\n"));
 		
 		if (hash && (bytes > 0)) {
 			if (bytes < HASHBYTES)
