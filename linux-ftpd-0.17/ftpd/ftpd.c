@@ -1515,8 +1515,9 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	}
 	
 	memset(dc_cb, '\0', sizeof(rdma_cb));
+	syslog(LOG_ERR, "rdma_cb_init start");
 	rdma_cb_init(dc_cb);
-	
+	syslog(LOG_ERR, "rdma_cb_init finish");
 	/*
 	 * attempt to connect to reserved port on client machine;
 	 * this looks like an attack
@@ -1534,25 +1535,25 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		data = -1;
 		return NULL;
 	}
-	
+	syslog(LOG_ERR, "iperf_setup_qp start");
 	ret = iperf_setup_qp(dc_cb, dc_cb->cm_id);
 	if (ret) {
 		syslog(LOG_ERR, "iperf_setup_qp: %m");
 		goto err0;
 	}
-
+	syslog(LOG_ERR, "iperf_setup_buffers start");
 	ret = iperf_setup_buffers(dc_cb);
 	if (ret) {
 		syslog(LOG_ERR, "iperf_setup_buffers: %m");
 		goto err1;
 	}
-
+	syslog(LOG_ERR, "ibv_post_recv start");
 	ret = ibv_post_recv(dc_cb->qp, &dc_cb->rq_wr, &bad_recv_wr);
 	if (ret) {
 		syslog(LOG_ERR, "ibv_post_recv: %m");
 		goto err2;
 	}
-
+	syslog(LOG_ERR, "pthread_create start");
 	ret = pthread_create(dc_cb->cqthread, NULL, cq_thread, dc_cb);
 	if (ret) {
 		syslog(LOG_ERR, "pthread_create: %m");
