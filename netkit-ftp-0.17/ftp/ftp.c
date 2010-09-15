@@ -1754,6 +1754,31 @@ rdmadataconn(const char *lmode)
 		goto err3;
 	}
 	DPRINTF(("iperf_accept success\n"));
+	
+	/* wait for connection established */
+	struct wcm_id *item;
+	
+	DEBUG_LOG("rdma accepting client connection request\n");
+	
+	TAILQ_LOCK(&acceptedTqh);
+	if ( TAILQ_EMPTY(&acceptedTqh) )
+		if ( TAILQ_WAIT(&acceptedTqh) != 0)
+			fprintf(stderr, "TAILQ_WAIT acceptedTqh\n");
+	
+	item = TAILQ_FIRST(&acceptedTqh);
+	dc_cb->child_cm_id = item->child_cm_id;
+	TAILQ_REMOVE(&acceptedTqh, item, entries);
+	
+	TAILQ_UNLOCK(&acceptedTqh);
+	
+	free(item);
+
+//	sem_wait(&mCb->sem); wait here
+	if (mCb->state != CONNECT_REQUEST) {
+		fprintf(stderr, "wait for CONNECT_REQUEST state %d\n",
+			mCb->state);
+		return;
+	}
 
 	return;
 	

@@ -221,6 +221,9 @@ DPRINTF(("before getlogin\n"));
 		(void) signal(SIGPIPE, lostpeer);
 	}
 DPRINTF(("before cmdscanner\n"));
+
+	TAILQ_INIT(&acceptedTqh);
+	
 	for (;;) {
 		cmdscanner(top);
 		top = 1;
