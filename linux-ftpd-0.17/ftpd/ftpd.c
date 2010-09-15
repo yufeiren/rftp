@@ -1535,6 +1535,22 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		data = -1;
 		return NULL;
 	}
+	
+	syslog(LOG_ERR, "rdma_resolve_addr start");
+	rc = rdma_resolve_addr(dc_cb->cm_id, NULL, \
+		(struct sockaddr *) &data_dest, 2000);
+	if (rc) {
+		syslog();
+		return;
+	}
+
+	sem_wait(&dc_cb->sem);
+	if (dc_cb->state != ROUTE_RESOLVED) {
+		syslog(LOG_ERR, "waiting for addr/route resolution state %d\n", 
+			dc_cb->state);
+		return;
+	}
+	
 	syslog(LOG_ERR, "iperf_setup_qp start");
 	ret = iperf_setup_qp(dc_cb, dc_cb->cm_id);
 	if (ret) {
