@@ -51,7 +51,45 @@
  * threads are not available, this does nothing.
  * ------------------------------------------------------------------- */
 
-#include "headers.h"
+/* standard C headers */
+#include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
+#include <ctype.h>
+#include <errno.h>
+#include <string.h>
+#include <time.h>
+#include <math.h>
+/* required on AIX for FD_SET (requires bzero).
+ * often this is the same as <string.h> */
+    #ifdef HAVE_STRINGS_H
+        #include <strings.h>
+    #endif // HAVE_STRINGS_H
+
+/* unix headers */
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <sys/time.h>
+    #include <signal.h>
+    #include <unistd.h>
+
+/** Added for daemonizing the process */
+    #include <syslog.h>
+
+/** Added for semaphore */
+    #include <semaphore.h>
+
+/** Added for PRIx64 */
+    #include <inttypes.h>
+
+    #include <netdb.h>
+    #include <netinet/in.h>
+    #include <netinet/tcp.h>
+
+    #include <arpa/inet.h>   /* netinet/in.h must be before this on SunOS */
+
+    #include <pthread.h>
+
 #include "rdma.h"
 
 extern struct acptq acceptedTqh;
