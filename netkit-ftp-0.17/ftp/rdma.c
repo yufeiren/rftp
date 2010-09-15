@@ -683,7 +683,7 @@ int iperf_accept(struct rdma_cb *cb)
 
 void iperf_format_send(struct rdma_cb *cb, char *buf, struct ibv_mr *mr)
 {
-	struct iperf_rdma_info *info = &cb->send_buf;
+	struct rdma_info_blk *info = &cb->send_buf;
 
 	info->buf = htonll((uint64_t) (unsigned long) buf);
 	info->rkey = htonl(mr->rkey);
