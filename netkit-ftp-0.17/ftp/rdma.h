@@ -61,6 +61,8 @@ extern "C" {
 #include <rdma/rdma_cma.h>
 #include <infiniband/arch.h>
 
+#include <semaphore.h>
+
 #include "queue.h"
 
 extern int rdma_debug;
