@@ -1813,7 +1813,10 @@ static int rreceive_data(FILE *outstr)
 	int cnt;
 	volatile int bare_lfs = 0;
 	char buf[BUFSIZ];
+	FILE *instr;
 	
+	/* for rdma */
+	struct ibv_send_wr *bad_wr;
 	int ret;
 
 	transflag++;
@@ -1847,7 +1850,7 @@ static int rreceive_data(FILE *outstr)
 			sem_wait(&dc_cb->sem);
 			
 			/* write the data to the file */
-			memcpy(&hdr, rdma_sink_buf, sizeof(rmsgheader));
+			memcpy(&hdr, dc_cb->rdma_sink_buf, sizeof(rmsgheader));
 			cnt = hdr.dlen;
 			
 			writen(fileno(outstr), \
