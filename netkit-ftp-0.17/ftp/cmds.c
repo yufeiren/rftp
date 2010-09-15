@@ -505,6 +505,54 @@ usage:
 	    argv[1] != oldargv1 || argv[2] != oldargv2);
 }
 
+/*
+ * Send a single file using RDMA
+ */
+void
+rput(int argc, char *argv[])
+{
+	const char *cmd;
+	int loc = 0;
+	char *oldargv1, *oldargv2;
+
+	if (argc == 2) {
+		argc++;
+		argv[2] = argv[1];
+		loc++;
+	}
+	if (argc < 2 && !another(&argc, &argv, "local-file"))
+		goto usage;
+	if (argc < 3 && !another(&argc, &argv, "remote-file")) {
+usage:
+		printf("usage: %s local-file remote-file\n", argv[0]);
+		code = -1;
+		return;
+	}
+	oldargv1 = argv[1];
+	oldargv2 = argv[2];
+	argv[1] = globulize(argv[1]);
+	if (!argv[1]) {
+		code = -1;
+		return;
+	}
+	/*
+	 * If "globulize" modifies argv[1], and argv[2] is a copy of
+	 * the old argv[1], make it a copy of the new argv[1].
+	 */
+	if (argv[1] != oldargv1 && argv[2] == oldargv1) {
+		argv[2] = argv[1];
+	}
+	cmd = (argv[0][0] == 'a') ? "APPE" : ((sunique) ? "STOU" : "STOR");
+	if (loc && ntflag) {
+		argv[2] = dotrans(argv[2]);
+	}
+	if (loc && mapflag) {
+		argv[2] = domap(argv[2]);
+	}
+	rdmasendrequest(cmd, argv[1], argv[2],
+	    argv[1] != oldargv1 || argv[2] != oldargv2);
+}
+
 void mabort(int);
 
 /*
@@ -641,6 +689,13 @@ get(int argc, char *argv[])
 {
 	(void) getit(argc, argv, 0, restart_point ? "r+w" : "w" );
 }
+
+void
+rget(int argc, char *argv[])
+{
+	(void) getit(argc, argv, 0, restart_point ? "r+w" : "w" );
+}
+
 
 /*
  * Receive one file.

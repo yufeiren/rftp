@@ -27,10 +27,12 @@ void user(int argc, char *argv[]);
 void ls(int argc, char *argv[]);
 void mls(int argc, char *argv[]);
 void get(int argc, char *argv[]);
+void rget(int argc, char *argv[]);    /* data transfer channel use rdma */
 void mget(int argc, char *argv[]);
 void help(int argc, char *argv[]);
 void append(int argc, char *argv[]);
 void put(int argc, char *argv[]);
+void rput(int argc, char *argv[]);    /* data transfer channel use rdma */
 void mput(int argc, char *argv[]);
 void renamefile(int argc, char *argv[]);
 void status(void);

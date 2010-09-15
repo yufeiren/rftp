@@ -65,8 +65,11 @@ char ftp_rcsid[] =
 #include "errors.h"
 #include "../version.h"
 
+#include "rdma.h"
+
 int data = -1;
 off_t restart_point = 0;
+rdma_cb *dc_cb;		/* data channel rdma control block */
 
 static struct sockaddr_in hisctladdr;
 static struct sockaddr_in data_addr;
@@ -94,6 +97,7 @@ static void abort_remote(FILE *din);
 
 FILE *cin, *cout;
 static FILE *dataconn(const char *);
+static void rdmadataconn(const char *);
 
 char *
 hookup(char *host, int port)
@@ -726,6 +730,322 @@ abort:
 		ptransfer("sent", bytes, &start, &stop);
 }
 
+void
+rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
+{
+	struct stat st;
+	struct timeval start, stop;
+	register int c, d;
+	FILE *volatile fin, *volatile dout = 0;
+	int (*volatile closefunc)(FILE *);
+	void (*volatile oldintr)(int);
+	void (*volatile oldintp)(int);
+	volatile long bytes = 0, hashbytes = HASHBYTES;
+	char buf[BUFSIZ], *bufp;
+	const char *volatile lmode;
+	
+	/* for rdma */
+	struct ibv_send_wr *bad_wr;
+
+	if (verbose && printnames) {
+		if (local && *local != '-')
+			printf("local: %s ", local);
+		if (remote)
+			printf("remote: %s\n", remote);
+	}
+	if (proxy) {
+		proxtrans(cmd, local, remote);
+		return;
+	}
+	if (curtype != type)
+		changetype(type, 0);
+	closefunc = NULL;
+	oldintr = NULL;
+	oldintp = NULL;
+	lmode = "w";
+	if (sigsetjmp(sendabort, 1)) {
+		while (cpend) {
+			(void) getreply(0);
+		}
+		if (data >= 0) {
+			(void) close(data);
+			data = -1;
+		}
+		if (oldintr)
+			(void) signal(SIGINT,oldintr);
+		if (oldintp)
+			(void) signal(SIGPIPE,oldintp);
+		code = -1;
+		return;
+	}
+	oldintr = signal(SIGINT, abortsend);
+	if (strcmp(local, "-") == 0)
+		fin = stdin;
+	else if (*local == '|') {
+		oldintp = signal(SIGPIPE,SIG_IGN);
+		fin = popen(local + 1, "r");
+		if (fin == NULL) {
+			perror(local + 1);
+			(void) signal(SIGINT, oldintr);
+			(void) signal(SIGPIPE, oldintp);
+			code = -1;
+			return;
+		}
+		closefunc = pclose;
+	} else {
+		fin = fopen(local, "r");
+		if (fin == NULL) {
+			fprintf(stderr, "local: %s: %s\n", local,
+				strerror(errno));
+			(void) signal(SIGINT, oldintr);
+			code = -1;
+			return;
+		}
+		closefunc = fclose;
+		if (fstat(fileno(fin), &st) < 0 ||
+		    (st.st_mode&S_IFMT) != S_IFREG) {
+			fprintf(stdout, "%s: not a plain file.\n", local);
+			(void) signal(SIGINT, oldintr);
+			fclose(fin);
+			code = -1;
+			return;
+		}
+	}
+	if (rdmainitconn()) {
+		(void) signal(SIGINT, oldintr);
+		if (oldintp)
+			(void) signal(SIGPIPE, oldintp);
+		code = -1;
+		if (closefunc != NULL)
+			(*closefunc)(fin);
+		return;
+	}
+	if (sigsetjmp(sendabort, 1))
+		goto abort;
+
+	if (restart_point &&
+	    (strcmp(cmd, "STOR") == 0 || strcmp(cmd, "APPE") == 0)) {
+		if (fseek(fin, (long) restart_point, 0) < 0) {
+			fprintf(stderr, "local: %s: %s\n", local,
+				strerror(errno));
+			restart_point = 0;
+			if (closefunc != NULL)
+				(*closefunc)(fin);
+			return;
+		}
+		if (command("REST %ld", (long) restart_point)
+			!= CONTINUE) {
+			restart_point = 0;
+			if (closefunc != NULL)
+				(*closefunc)(fin);
+			return;
+		}
+		restart_point = 0;
+		lmode = "r+w";
+	}
+	if (remote) {
+		if (command("%s %s", cmd, remote) != PRELIM) {
+			(void) signal(SIGINT, oldintr);
+			if (oldintp)
+				(void) signal(SIGPIPE, oldintp);
+			if (closefunc != NULL)
+				(*closefunc)(fin);
+			return;
+		}
+	} else
+		if (command("%s", cmd) != PRELIM) {
+			(void) signal(SIGINT, oldintr);
+			if (oldintp)
+				(void) signal(SIGPIPE, oldintp);
+			if (closefunc != NULL)
+				(*closefunc)(fin);
+			return;
+		}
+	
+/*	dout = dataconn(lmode); */
+	rdmadataconn(lmode);
+	
+/*	if (dout == NULL)
+		goto abort; */
+	(void) gettimeofday(&start, (struct timezone *)0);
+	oldintp = signal(SIGPIPE, SIG_IGN);
+	switch (curtype) {
+
+	case TYPE_I:
+	case TYPE_L:
+		errno = d = 0;
+		
+		/* default use RDMA_WRITE write data to peer */
+		
+		/* read data to the data source buffer */
+		rmsgheader rhdr;
+		
+		while ((c = readn(fileno(fin), rdma_source_buf + sizeof(rmsgheader), dc_cb->size)) > 0) {
+			bytes += c;
+
+			/* take care of the message header */			
+			rhdr.dlen = c;
+			memcpy(rdma_source_buf, &rhdr, sizeof(rmsgheader));
+			
+			/* talk to peer what type of transfer to use */
+			dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
+			ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
+			if (ret) {
+				fprintf(stderr, "post send error %d\n", ret);
+				break;
+			}
+			dc_cb->state = ACTIVE_WRITE_ADV;
+			
+			/* wait the peer tell me where should i write */
+			sem_wait(&dc_cb->sem);
+			if (dc_cb->state != ACTIVE_WRITE_RESP) {
+				fprintf(stderr, \
+					"wait for ACTIVE_WRITE_RESP state %d\n", \
+					dc_cb->state);
+				return;
+			}
+			
+			/* start data transfer using RDMA_WRITE */
+			dc_cb->rdma_sq_wr.opcode = IBV_WR_RDMA_WRITE;
+			dc_cb->rdma_sq_wr.wr.rdma.rkey = dc_cb->remote_rkey;
+			dc_cb->rdma_sq_wr.wr.rdma.remote_addr = dc_cb->remote_addr;
+/*			dc_cb->rdma_sq_wr.sg_list->length = dc_cb->remote_len;
+*/			dc_cb->rdma_sq_wr.sg_list->length = c + sizeof(rmsgheader);
+			DEBUG_LOG("rdma write from lkey %x laddr %x len %d\n",
+				  dc_cb->rdma_sq_wr.sg_list->lkey,
+				  dc_cb->rdma_sq_wr.sg_list->addr,
+				  dc_cb->rdma_sq_wr.sg_list->length);
+			
+			ret = ibv_post_send(cb->qp, &cb->rdma_sq_wr, &bad_send_wr);
+			if (ret) {
+				fprintf(stderr, "post send error %d\n", ret);
+				return;
+			}
+			dc_cb->state != ACTIVE_WRITE_POST;
+			
+			/* wait the finish of RDMA_WRITE */
+			sem_wait(&dc_cb->sem);
+			if (dc_cb->state != ACTIVE_WRITE_FIN) {
+				fprintf(stderr, \
+					"wait for ACTIVE_WRITE_FIN state %d\n", \
+					dc_cb->state);
+				return;
+			}
+			
+			if (tick && (bytes >= hashbytes)) {
+				printf("\rBytes transferred: %ld", bytes);
+				(void) fflush(stdout);
+				while (bytes >= hashbytes)
+					hashbytes += TICKBYTES;
+			}
+		}
+		
+		if (hash && (bytes > 0)) {
+			if (bytes < HASHBYTES)
+				(void) putchar('#');
+			(void) putchar('\n');
+			(void) fflush(stdout);
+		}
+		if (tick) {
+			(void) printf("\rBytes transferred: %ld\n", bytes);
+			(void) fflush(stdout);
+		}
+		if (c < 0)
+			fprintf(stderr, "local: %s: %s\n", local,
+				strerror(errno));
+		if (d < 0) {
+			if (errno != EPIPE) 
+				perror("netout");
+			bytes = -1;
+		}
+
+		break;
+
+	case TYPE_A:
+		while ((c = getc(fin)) != EOF) {
+			if (c == '\n') {
+				while (hash && (bytes >= hashbytes)) {
+					(void) putchar('#');
+					(void) fflush(stdout);
+					hashbytes += HASHBYTES;
+				}
+				if (tick && (bytes >= hashbytes)) {
+					(void) printf("\rBytes transferred: %ld",
+						bytes);
+					(void) fflush(stdout);
+					while (bytes >= hashbytes)
+						hashbytes += TICKBYTES;
+				}
+				if (ferror(dout))
+					break;
+				(void) putc('\r', dout);
+				bytes++;
+			}
+			(void) putc(c, dout);
+			bytes++;
+	/*		if (c == '\r') {			  	*/
+	/*		(void)	putc('\0', dout);  (* this violates rfc */
+	/*			bytes++;				*/
+	/*		}                          			*/     
+		}
+		if (hash) {
+			if (bytes < hashbytes)
+				(void) putchar('#');
+			(void) putchar('\n');
+			(void) fflush(stdout);
+		}
+		if (tick) {
+			(void) printf("\rBytes transferred: %ld\n", bytes);
+			(void) fflush(stdout);
+		}
+		if (ferror(fin))
+			fprintf(stderr, "local: %s: %s\n", local,
+				strerror(errno));
+		if (ferror(dout)) {
+			if (errno != EPIPE)
+				perror("netout");
+			bytes = -1;
+		}
+		break;
+	}
+	(void) gettimeofday(&stop, (struct timezone *)0);
+	if (closefunc != NULL)
+		(*closefunc)(fin);
+	(void) fclose(dout);
+	/* closes data as well, so discard it */
+	data = -1;
+	(void) getreply(0);
+	(void) signal(SIGINT, oldintr);
+	if (oldintp)
+		(void) signal(SIGPIPE, oldintp);
+	if (bytes > 0)
+		ptransfer("sent", bytes, &start, &stop);
+	return;
+abort:
+	(void) gettimeofday(&stop, (struct timezone *)0);
+	(void) signal(SIGINT, oldintr);
+	if (oldintp)
+		(void) signal(SIGPIPE, oldintp);
+	if (!cpend) {
+		code = -1;
+		return;
+	}
+	if (dout) {
+		(void) fclose(dout);
+	}
+	if (data >= 0) {
+		/* if it just got closed with dout, again won't hurt */
+		(void) close(data);
+		data = -1;
+	}
+	(void) getreply(0);
+	code = -1;
+	if (closefunc != NULL && fin != NULL)
+		(*closefunc)(fin);
+	if (bytes > 0)
+		ptransfer("sent", bytes, &start, &stop);
+}
+
 static void
 abortrecv(int ignore)
 {
@@ -1205,6 +1525,136 @@ bad:
 	return (1);
 }
 
+/*
+ * Need to start a listen on the data channel before we send the command,
+ * otherwise the server's connect may fail.
+ */
+static int
+rdmainitconn(void)
+{
+	register char *p, *a;
+	int result, tmpno = 0;
+	socklen_t len;
+	int on = 1;
+	int tos;
+	u_long a1,a2,a3,a4,p1,p2;
+
+	if (passivemode) {
+		data = socket(AF_INET, SOCK_STREAM, 0);
+		if (data < 0) {
+			perror("ftp: socket");
+			return(1);
+		}
+		if (options & SO_DEBUG &&
+		    setsockopt(data, SOL_SOCKET, SO_DEBUG, (char *)&on,
+			       sizeof (on)) < 0)
+			perror("ftp: setsockopt (ignored)");
+		if (command("PASV") != COMPLETE) {
+			printf("Passive mode refused.\n");
+			return(1);
+		}
+
+		/*
+		 * What we've got at this point is a string of comma separated
+		 * one-byte unsigned integer values, separated by commas.
+		 * The first four are the an IP address. The fifth is the MSB
+		 * of the port number, the sixth is the LSB. From that we'll
+		 * prepare a sockaddr_in.
+		 */
+
+		if (sscanf(pasv,"%ld,%ld,%ld,%ld,%ld,%ld",
+			   &a1,&a2,&a3,&a4,&p1,&p2)
+		    != 6) 
+		{
+			printf("Passive mode address scan failure. Shouldn't happen!\n");
+			return(1);
+		}
+
+		data_addr.sin_family = AF_INET;
+		data_addr.sin_addr.s_addr = htonl((a1 << 24) | (a2 << 16) |
+						  (a3 << 8) | a4);
+		data_addr.sin_port = htons((p1 << 8) | p2);
+
+		if (connect(data, (struct sockaddr *) &data_addr,
+		    sizeof(data_addr))<0) {
+			perror("ftp: connect");
+			return(1);
+		}
+#ifdef IP_TOS
+		tos = IPTOS_THROUGHPUT;
+		if (setsockopt(data, IPPROTO_IP, IP_TOS, (char *)&tos,
+		    sizeof(tos)) < 0)
+			perror("ftp: setsockopt TOS (ignored)");
+#endif
+		return(0);
+	}
+noport:
+	data_addr = myctladdr;
+	if (sendport)
+		data_addr.sin_port = 0;	/* let system pick one ? in rdma env */ 
+/*	if (data != -1)
+		(void) close(data); */
+	dc_cb = (rdma_cb *) malloc(sizeof(rdma_cb));
+	if (dc_cb == NULL) {
+		perror("ftp: malloc");
+		return(1);
+	}
+	
+	memset(dc_cb, '\0', sizeof(rdma_cb));
+	rdma_cb_init(dc_cb);
+	
+	if (rdma_bind_addr(dc_cb->cm_id, (struct sockaddr *) &data_addr)) {
+		perror("ftp: rdma_bind_addr");
+		return(1);
+	}
+	DEBUG_LOG("rdma_bind_addr successful\n");
+	DPRINTF(("rdma_bind_addr successful\n"));
+
+	/* addr info */
+	struct sockaddr *localaddr = NULL;
+	localaddr = rdma_get_local_addr(dc_cb->cm_id);
+	if (localaddr == NULL) {
+		perror("ftp: rdma_get_local_addr");
+		return(1);
+	}
+
+	memcpy(&data_addr, localaddr, sizeof(data_addr));
+	free(localaddr);
+
+	DEBUG_LOG("rdma_listen\n");
+	DPRINTF(("before rdma_listen\n"));
+	if (rdma_listen(dc_cb->cm_id, RLISTENBACKLOG)) {
+		perror("ftp: rdma_listen");
+		return(1);
+	}
+	DPRINTF(("rdma_listen successful\n"));
+
+	if (sendport) {
+		a = (char *)&data_addr.sin_addr;
+		p = (char *)&data_addr.sin_port;
+#define	UC(b)	(((int)b)&0xff)
+		result =
+		    command("PORT %d,%d,%d,%d,%d,%d",
+		      UC(a[0]), UC(a[1]), UC(a[2]), UC(a[3]),
+		      UC(p[0]), UC(p[1]));
+		if (result == ERROR && sendport == -1) {
+			sendport = 0;
+			tmpno = 1;
+			goto noport;
+		}
+		return (result != COMPLETE);
+	}
+	if (tmpno)
+		sendport = 1;
+
+	return (0);
+bad:
+	(void) close(data), data = -1;
+	if (tmpno)
+		sendport = 1;
+	return (1);
+}
+
 static FILE *
 dataconn(const char *lmode)
 {
@@ -1229,6 +1679,72 @@ dataconn(const char *lmode)
 		perror("ftp: setsockopt TOS (ignored)");
 #endif
 	return (fdopen(data, lmode));
+}
+
+static void
+rdmadataconn(const char *lmode)
+{
+	struct sockaddr_in from;
+	int s, tos;
+	socklen_t fromlen = sizeof(from);
+
+	struct ibv_send_wr *bad_send_wr;
+	struct ibv_recv_wr *bad_recv_wr;
+	int ret;
+
+        if (passivemode)
+            return (fdopen(data, lmode));
+
+	/* rdma_accept */
+	DPRINTF(("before iperf_setup_qp\n"));
+	ret = iperf_setup_qp(dc_cb, dc_cb->child_cm_id);
+	if (ret) {
+		fprintf(stderr, "setup_qp failed: %d\n", ret);
+		goto err0;
+	}
+	DPRINTF(("iperf_setup_qp success\n"));
+
+	DPRINTF(("before iperf_setup_buffers\n"));
+	ret = iperf_setup_buffers(dc_cb);
+	if (ret) {
+		fprintf(stderr, "rping_setup_buffers failed: %d\n", ret);
+		goto err1;
+	}
+	DPRINTF(("iperf_setup_buffers success\n"));
+
+	DPRINTF(("before ibv_post_recv\n"));
+	ret = ibv_post_recv(dc_cb->qp, &dc_cb->rq_wr, &bad_recv_wr);
+	if (ret) {
+		fprintf(stderr, "ibv_post_recv failed: %d\n", ret);
+		goto err2;
+	}
+	DPRINTF(("ibv_post_recv success\n"));
+
+	ret = pthread_create(dc_cb->cqthread, NULL, cq_thread, dc_cb);
+	if (ret) {
+		fprintf(stderr, "pthread_create cq_thread failed: %d\n", ret);
+		goto err2;
+	}
+	
+	DPRINTF(("before iperf_accept\n"));
+	ret = iperf_accept(dc_cb);
+	if (ret) {
+		fprintf(stderr, "accept error %d\n", ret);
+		goto err3;
+	}
+	DPRINTF(("iperf_accept success\n"));
+
+	return;
+	
+err3:
+	pthread_cancel(dc_cb->cqthread);
+	pthread_join(dc_cb->cqthread, NULL);
+err2:
+	iperf_free_buffers(dc_cb);
+err1:
+	iperf_free_qp(dc_cb);
+err0:
+	return;
 }
 
 static void
