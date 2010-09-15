@@ -918,7 +918,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 				  dc_cb->rdma_source_sq_wr.sg_list->addr,
 				  dc_cb->rdma_source_sq_wr.sg_list->length);
 			
-			ret = ibv_post_send(cb->qp, &cb->rdma_source_sq_wr, &bad_send_wr);
+			ret = ibv_post_send(dc_cb->qp, &dc_cb->rdma_source_sq_wr, &bad_wr);
 			if (ret) {
 				fprintf(stderr, "post send error %d\n", ret);
 				return;
