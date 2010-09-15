@@ -1632,7 +1632,7 @@ noport:
 	}
 
 	memcpy(&data_addr, localaddr, sizeof(data_addr));
-	free(localaddr);
+/*	free(localaddr); */
 
 	DEBUG_LOG("rdma_listen\n");
 	DPRINTF(("before rdma_listen\n"));
