@@ -89,6 +89,7 @@
     #include <pthread.h>
 
 #include "rdma.h"
+#include "errors.h"
 
 extern struct acptq acceptedTqh;
 

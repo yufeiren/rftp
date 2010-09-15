@@ -83,6 +83,8 @@ void help(int argc, char *argv[]);
 static void cmdscanner(int top);
 static char *slurpstring(void);
 
+int rdma_debug = 0;
+
 static
 void
 usage(void)
