@@ -1854,7 +1854,7 @@ static int rreceive_data(FILE *outstr)
 			cnt = hdr.dlen;
 			
 			writen(fileno(outstr), \
-				rdma_sink_buf + sizeof(rmsgheader), cnt);
+				dc_cb->rdma_sink_buf + sizeof(rmsgheader), cnt);
 		}
 		
 		return (0);
