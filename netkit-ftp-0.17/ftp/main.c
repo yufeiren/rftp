@@ -68,6 +68,7 @@ char main_rcsid[] =
 #define Extern
 #include "ftp_var.h"
 #include "errors.h"
+#include "rdma.h"
 int traceflag = 0;
 const char *home = "/";
 
