@@ -87,6 +87,7 @@ extern int connected;
 static char *gunique(char *);
 static void proxtrans(const char *cmd, char *local, char *remote);
 static int initconn(void);
+static int rdmainitconn(void);
 static void ptransfer(const char *direction, long bytes, 
 		      const struct timeval *t0, 
 		      const struct timeval *t1);
@@ -226,7 +227,7 @@ DPRINTF(("start dologin: %s\n", host));
 		code = -1;
 		return(0);
 	}
-DPRINTF(("xruserpass finish, luser = %d\n", luser));
+DPRINTF(("xruserpass finish, luser = %s\n", luser));
 	while (luser == NULL) {
 		char *myname = getlogin();
 DPRINTF(("getlogin finish, myname = %s\n", myname));
@@ -746,6 +747,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	
 	/* for rdma */
 	struct ibv_send_wr *bad_wr;
+	int ret;
 
 	if (verbose && printnames) {
 		if (local && *local != '-')
@@ -880,7 +882,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		/* read data to the data source buffer */
 		rmsgheader rhdr;
 		
-		while ((c = readn(fileno(fin), rdma_source_buf + sizeof(rmsgheader), dc_cb->size)) > 0) {
+		while ((c = readn(fileno(fin), dc_cb->rdma_source_buf + sizeof(rmsgheader), dc_cb->size)) > 0) {
 			bytes += c;
 
 			/* take care of the message header */			
@@ -906,17 +908,17 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			}
 			
 			/* start data transfer using RDMA_WRITE */
-			dc_cb->rdma_sq_wr.opcode = IBV_WR_RDMA_WRITE;
-			dc_cb->rdma_sq_wr.wr.rdma.rkey = dc_cb->remote_rkey;
-			dc_cb->rdma_sq_wr.wr.rdma.remote_addr = dc_cb->remote_addr;
+			dc_cb->rdma_source_sq_wr.opcode = IBV_WR_RDMA_WRITE;
+			dc_cb->rdma_source_sq_wr.wr.rdma.rkey = dc_cb->remote_rkey;
+			dc_cb->rdma_source_sq_wr.wr.rdma.remote_addr = dc_cb->remote_addr;
 /*			dc_cb->rdma_sq_wr.sg_list->length = dc_cb->remote_len;
-*/			dc_cb->rdma_sq_wr.sg_list->length = c + sizeof(rmsgheader);
+*/			dc_cb->rdma_source_sq_wr.sg_list->length = c + sizeof(rmsgheader);
 			DEBUG_LOG("rdma write from lkey %x laddr %x len %d\n",
-				  dc_cb->rdma_sq_wr.sg_list->lkey,
-				  dc_cb->rdma_sq_wr.sg_list->addr,
-				  dc_cb->rdma_sq_wr.sg_list->length);
+				  dc_cb->rdma_source_sq_wr.sg_list->lkey,
+				  dc_cb->rdma_source_sq_wr.sg_list->addr,
+				  dc_cb->rdma_source_sq_wr.sg_list->length);
 			
-			ret = ibv_post_send(cb->qp, &cb->rdma_sq_wr, &bad_send_wr);
+			ret = ibv_post_send(cb->qp, &cb->rdma_source_sq_wr, &bad_send_wr);
 			if (ret) {
 				fprintf(stderr, "post send error %d\n", ret);
 				return;
