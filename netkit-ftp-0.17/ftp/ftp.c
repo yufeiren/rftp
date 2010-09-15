@@ -887,7 +887,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 
 			/* take care of the message header */			
 			rhdr.dlen = c;
-			memcpy(rdma_source_buf, &rhdr, sizeof(rmsgheader));
+			memcpy(dc_cb->rdma_source_buf, &rhdr, sizeof(rmsgheader));
 			
 			/* talk to peer what type of transfer to use */
 			dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
