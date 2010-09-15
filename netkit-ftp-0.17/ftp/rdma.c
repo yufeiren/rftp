@@ -108,7 +108,7 @@ static int server_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 	DEBUG_LOG("Received rkey %x addr %" PRIx64 " len %d from peer\n",
 		  cb->remote_rkey, cb->remote_addr, cb->remote_len);
 	
-	switch ( cb->remote_mode ) {
+/*	switch ( cb->remote_mode ) {
 	case MODE_RDMA_ACTRD:
 		cb->trans_mode = kRdmaTrans_PasRead;
 		break;
@@ -125,12 +125,12 @@ static int server_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 		fprintf(stderr, "unrecognize transfer mode %d\n", \
 			cb->remote_mode);
 		break;
-	}
+	}*/
 	
-	if (cb->state <= CONNECTED || cb->state == RDMA_WRITE_COMPLETE)
+/*	if (cb->state <= CONNECTED || cb->state == ACTIVE_WRITE_FIN)
 		cb->state = RDMA_READ_ADV;
 	else
-		cb->state = RDMA_WRITE_ADV;
+		cb->state = RDMA_WRITE_ADV; */
 	DPRINTF(("server_recv success\n"));
 	
 	return 0;
@@ -142,12 +142,12 @@ static int client_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 		fprintf(stderr, "Received bogus data, size %d\n", wc->byte_len);
 		return -1;
 	}
-
+/*
 	if (cb->state == RDMA_READ_ADV)
 		cb->state = RDMA_WRITE_ADV;
 	else
 		cb->state = RDMA_WRITE_COMPLETE;
-
+*/
 	return 0;
 }
 
@@ -541,14 +541,13 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 
 /* rdma_sink_mr */
 	cb->rdma_sink_buf = malloc(cb->size + sizeof(rmsgheader));
-	if (!cb->rdma_buf) {
+	if (!cb->rdma_sink_buf) {
 		fprintf(stderr, "rdma_sink_buf malloc failed\n");
 		ret = -ENOMEM;
 		goto err2;
 	}
 
 	cb->rdma_sink_mr = ibv_reg_mr(cb->pd, cb->rdma_sink_buf, cb->size + sizeof(rmsgheader),
-				 IBV_ACCESS_LOCAL_READ |
 				 IBV_ACCESS_REMOTE_WRITE);
 	if (!cb->rdma_sink_mr) {
 		fprintf(stderr, "rdma_sink_mr reg_mr failed\n");
@@ -596,12 +595,10 @@ void iperf_free_buffers(struct rdma_cb *cb)
 	DEBUG_LOG("rping_free_buffers called on cb %p\n", cb);
 	ibv_dereg_mr(cb->recv_mr);
 	ibv_dereg_mr(cb->send_mr);
-	ibv_dereg_mr(cb->rdma_mr);
-	free(cb->rdma_buf);
-	if (!cb->server) {
-		ibv_dereg_mr(cb->start_mr);
-		free(cb->start_buf);
-	}
+	ibv_dereg_mr(cb->rdma_sink_mr);
+	ibv_dereg_mr(cb->rdma_source_mr);
+	free(cb->rdma_sink_buf);
+	free(cb->rdma_source_buf);
 }
 
 
