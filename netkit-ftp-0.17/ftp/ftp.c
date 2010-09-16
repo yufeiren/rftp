@@ -1775,9 +1775,9 @@ rdmadataconn(const char *lmode)
 	free(item);
 
 //	sem_wait(&mCb->sem); wait here
-	if (mCb->state != CONNECT_REQUEST) {
+	if (dc_cb->state != CONNECT_REQUEST) {
 		fprintf(stderr, "wait for CONNECT_REQUEST state %d\n",
-			mCb->state);
+			dc_cb->state);
 		return;
 	}
 
