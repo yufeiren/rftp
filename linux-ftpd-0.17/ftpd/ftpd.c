@@ -1583,6 +1583,7 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	}
 	
 	/* rdma connect */
+	syslog(LOG_ERR, "rdma_connect_client start");
 	ret = rdma_connect_client(dc_cb);
 	if (ret) {
 		syslog(LOG_ERR, "iperf_connect_client: %m");
