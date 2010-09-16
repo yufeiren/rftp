@@ -1750,6 +1750,7 @@ rdmadataconn(const char *lmode)
 	child_dc_cb->server = 1;
 	
 	child_dc_cb->child_cm_id = dc_cb->child_cm_id;
+	child_dc_cb->child_cm_id->context = child_dc_cb;
 	
 	sem_init(&child_dc_cb->sem, 0, 0);
 	

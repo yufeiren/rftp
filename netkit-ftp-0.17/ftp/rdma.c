@@ -211,6 +211,7 @@ int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 			cb->state = CONNECTED;
 		}
 		sem_post(&cb->sem);
+		DEBUG_LOG("child cma %p\n", cb->child_cm_id);
 		break;
 
 	case RDMA_CM_EVENT_ADDR_ERROR:
