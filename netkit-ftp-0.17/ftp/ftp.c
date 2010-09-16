@@ -1626,6 +1626,8 @@ noport:
 	memset(dc_cb, '\0', sizeof(rdma_cb));
 	rdma_cb_init(dc_cb);
 	
+	sem_init(&dc_cb->sem, 0, 0);
+	
 	if (rdma_bind_addr(dc_cb->cm_id, (struct sockaddr *) &data_addr)) {
 		perror("ftp: rdma_bind_addr");
 		return(1);
@@ -1748,6 +1750,8 @@ rdmadataconn(const char *lmode)
 	child_dc_cb->server = 1;
 	
 	child_dc_cb->child_cm_id = dc_cb->child_cm_id;
+	
+	sem_init(&child_dc_cb->sem, 0, 0);
 	
 	DPRINTF(("before iperf_setup_qp\n"));
 	ret = iperf_setup_qp(child_dc_cb, child_dc_cb->child_cm_id);

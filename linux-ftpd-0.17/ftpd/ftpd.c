@@ -1523,6 +1523,8 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	syslog(LOG_ERR, "buffer size is %d\n", dc_cb->size);
 	dc_cb->server = 0;
 	
+	sem_init(&dc_cb->sem, 0, 0);
+	
 	/*
 	 * attempt to connect to reserved port on client machine;
 	 * this looks like an attack
