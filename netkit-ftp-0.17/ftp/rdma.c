@@ -150,6 +150,44 @@ static int client_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 	return 0;
 }
 
+static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
+{
+	struct ibv_send_wr *bad_wr;
+
+	if (wc->byte_len != sizeof(cb->recv_buf)) {
+		fprintf(stderr, "Received bogus data, size %d\n", wc->byte_len);
+		return -1;
+	}
+	
+	if (cb->recv_buf.mode == kRdmaTrans_ActWrte) {
+		switch (cb->recv_buf.stat)
+		case ACTIVE_WRITE_ADV:
+			DPRINTF(("get ACTIVE_WRITE_ADV\n"));
+			iperf_format_send(cb, cb->rdma_sink_buf, cb->rdma_sink_mr);
+			cb->send_buf.stat = ACTIVE_WRITE_RESP;
+			/* ibv_post_send(cb->qp, &cb->sq_wr, &bad_wr); */
+			break;
+		case ACTIVE_WRITE_RESP:
+			DPRINTF(("get ACTIVE_WRITE_RESP\n"));
+			cb->remote_rkey = ntohl(cb->recv_buf.rkey);
+			cb->remote_addr = ntohll(cb->recv_buf.buf);
+			cb->remote_len  = ntohl(cb->recv_buf.size);
+			break;
+		case ACTIVE_WRITE_FIN:
+			DPRINTF(("get ACTIVE_WRITE_FIN\n"));
+			break;
+		default:
+			fprintf(stderr, "unrecognized stat");
+			break;
+		
+	}
+
+	DEBUG_LOG("Received rkey %x addr %" PRIx64 " len %d from peer\n",
+		  cb->remote_rkey, cb->remote_addr, cb->remote_len);
+	
+	return 0;
+}
+
 
 int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 				    struct rdma_cm_event *event)
@@ -305,8 +343,10 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 		case IBV_WC_RECV:
 			DEBUG_LOG("recv completion\n");
 			DPRINTF(("IBV_WC_RECV cb->server %d\n", cb->server));
-			ret = cb->server ? server_recv(cb, &wc) :
+/*			ret = cb->server ? server_recv(cb, &wc) :
 					   client_recv(cb, &wc);
+*/
+			ret = do_recv(cb, &wc);
 			if (ret) {
 				fprintf(stderr, "recv wc error: %d\n", ret);
 				goto error;

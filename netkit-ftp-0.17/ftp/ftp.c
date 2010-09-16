@@ -911,12 +911,12 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			
 			/* wait the peer tell me where should i write to */
 			sem_wait(&child_dc_cb->sem);
-			if (child_dc_cb->state != ACTIVE_WRITE_RESP) {
+/*			if (child_dc_cb->state != ACTIVE_WRITE_RESP) {
 				fprintf(stderr, \
 					"wait for ACTIVE_WRITE_RESP state %d\n", \
 					child_dc_cb->state);
 				return;
-			}
+			} */
 			
 			/* start data transfer using RDMA_WRITE */
 			child_dc_cb->rdma_source_sq_wr.opcode = IBV_WR_RDMA_WRITE;
@@ -938,12 +938,12 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			
 			/* wait the finish of RDMA_WRITE */
 			sem_wait(&child_dc_cb->sem);
-			if (child_dc_cb->state != ACTIVE_WRITE_FIN) {
+/*			if (child_dc_cb->state != ACTIVE_WRITE_FIN) {
 				fprintf(stderr, \
 					"wait for ACTIVE_WRITE_FIN state %d\n", \
 					child_dc_cb->state);
 				return;
-			}
+			} */
 			
 			/* tell the peer transfer finished */
 			child_dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
@@ -960,6 +960,9 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 				while (bytes >= hashbytes)
 					hashbytes += TICKBYTES;
 			}
+			
+			/* wait the client to notify next round data transfer */
+			sem_wait(&child_dc_cb->sem);
 		}
 		
 		DPRINTF(("data transfer finished\n"));

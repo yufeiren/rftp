@@ -1867,7 +1867,7 @@ static int rreceive_data(FILE *outstr)
 		
 			/* tell the peer where to write */
 			dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
-			dc_cb->send_buf.stat = ACTIVE_WRITE_ADV;
+			dc_cb->send_buf.stat = ACTIVE_WRITE_RESP;
 			ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
 			if (ret) {
 				syslog(LOG_ERR, "ibv_post_send: %m");
@@ -1883,6 +1883,15 @@ static int rreceive_data(FILE *outstr)
 			
 			writen(fileno(outstr), \
 				dc_cb->rdma_sink_buf + sizeof(rmsgheader), cnt);
+				
+			/* notify the client to go on */
+			dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
+			dc_cb->send_buf.stat = ACTIVE_WRITE_FIN;
+			ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
+			if (ret) {
+				syslog(LOG_ERR, "ibv_post_send: %m");
+				break;
+			}
 		}
 		
 		return (0);
