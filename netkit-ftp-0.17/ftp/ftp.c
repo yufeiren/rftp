@@ -1779,12 +1779,12 @@ rdmadataconn(const char *lmode)
 		goto err2;
 	}
 
-	sem_wait(&child_dc_cb->sem);
-	if (child_dc_cb->state != CONNECT_REQUEST) {
+/*	sem_wait(&dc_cb->sem);
+	if (dc_cb->state != CONNECT_REQUEST) {
 		fprintf(stderr, "wait for CONNECT_REQUEST state %d\n",
 			dc_cb->state);
 		return;
-	}
+	}*/
 
 	/* rdma_accept */
 	DPRINTF(("before iperf_accept\n"));
