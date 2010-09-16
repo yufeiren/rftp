@@ -177,7 +177,7 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 			DPRINTF(("get ACTIVE_WRITE_FIN\n"));
 			break;
 		default:
-			fprintf(stderr, "unrecognized stat");
+			fprintf(stderr, "unrecognized stat %d\n", cb->recv_buf.stat);
 			break;
 		}
 	}
@@ -734,7 +734,7 @@ void iperf_format_send(struct rdma_cb *cb, char *buf, struct ibv_mr *mr)
 
 	info->buf = htonll((uint64_t) (unsigned long) buf);
 	info->rkey = htonl(mr->rkey);
-	info->size = htonl(cb->size);
+	info->size = htonl(cb->size + sizeof(rmsgheader));
 	
 /*	switch ( cb->trans_mode ) {
 	case kRdmaTrans_ActRead:

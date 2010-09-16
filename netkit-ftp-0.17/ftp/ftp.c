@@ -919,6 +919,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			} */
 			
 			/* start data transfer using RDMA_WRITE */
+			DPRINTF(("start data transfer using RDMA_WRITE\n"));
 			child_dc_cb->rdma_source_sq_wr.opcode = IBV_WR_RDMA_WRITE;
 			child_dc_cb->rdma_source_sq_wr.wr.rdma.rkey = child_dc_cb->remote_rkey;
 			child_dc_cb->rdma_source_sq_wr.wr.rdma.remote_addr = child_dc_cb->remote_addr;
