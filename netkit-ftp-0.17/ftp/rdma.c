@@ -549,8 +549,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 		goto err2;
 	}
 
-	cb->rdma_sink_mr = ibv_reg_mr(cb->pd, cb->rdma_sink_buf, cb->size + sizeof(rmsgheader),
-				 IBV_ACCESS_REMOTE_WRITE);
+	cb->rdma_sink_mr = ibv_reg_mr(cb->pd, cb->rdma_sink_buf, cb->size + sizeof(rmsgheader), IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
 	if (!cb->rdma_sink_mr) {
 		fprintf(stderr, "rdma_sink_mr reg_mr failed\n");
 		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr rdma_sink_buf");
