@@ -346,8 +346,8 @@ void *cq_thread(void *arg)
 	void *ev_ctx;
 	int ret;
 	
-	DEBUG_LOG("cq_thread started.\n");
-	syslog(LOG_ERR, "cq_thread start");
+	DEBUG_LOG("cq_thread started\n");
+
 	while (1) {	
 		pthread_testcancel();
 
