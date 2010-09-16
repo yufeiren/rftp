@@ -1790,10 +1790,10 @@ rdmadataconn(const char *lmode)
 		fprintf(stderr, "accept error %d\n", ret);
 		goto err3;
 	}
-	DPRINTF(("iperf_accept success\n"));
+/*	DPRINTF(("iperf_accept success\n")); */
 
 	return;
-	
+
 err3:
 	pthread_cancel(dc_cb->cqthread);
 	pthread_join(dc_cb->cqthread, NULL);
@@ -1802,6 +1802,7 @@ err2:
 err1:
 	iperf_free_qp(dc_cb);
 err0:
+	printf("rdmadataconn error\n");
 	return;
 }
 
