@@ -1518,6 +1518,10 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	syslog(LOG_ERR, "rdma_cb_init start");
 	rdma_cb_init(dc_cb);
 	syslog(LOG_ERR, "rdma_cb_init finish");
+	
+	dc_cb->size = 1024 * 1024 * 10;
+	syslog(LOG_ERR, "buffer size is %d\n", dc_cb->size);
+	
 	/*
 	 * attempt to connect to reserved port on client machine;
 	 * this looks like an attack
