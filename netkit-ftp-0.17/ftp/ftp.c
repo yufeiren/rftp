@@ -70,7 +70,8 @@ extern struct acptq acceptedTqh;
 
 int data = -1;
 off_t restart_point = 0;
-rdma_cb *dc_cb;		/* data channel rdma control block */
+rdma_cb *dc_cb;		/* data channel rdma control block - for listen */
+rdma_cb *child_dc_cb;	/* data channel rdma control block - for child */
 
 static struct sockaddr_in hisctladdr;
 static struct sockaddr_in data_addr;
@@ -1717,45 +1718,6 @@ rdmadataconn(const char *lmode)
         if (passivemode)
             return (fdopen(data, lmode));
 
-	/* rdma_accept */
-	DPRINTF(("before iperf_setup_qp\n"));
-	ret = iperf_setup_qp(dc_cb, dc_cb->child_cm_id);
-	if (ret) {
-		fprintf(stderr, "setup_qp failed: %d\n", ret);
-		goto err0;
-	}
-	DPRINTF(("iperf_setup_qp success\n"));
-
-	DPRINTF(("before iperf_setup_buffers\n"));
-	ret = iperf_setup_buffers(dc_cb);
-	if (ret) {
-		fprintf(stderr, "rping_setup_buffers failed: %d\n", ret);
-		goto err1;
-	}
-	DPRINTF(("iperf_setup_buffers success\n"));
-
-	DPRINTF(("before ibv_post_recv\n"));
-	ret = ibv_post_recv(dc_cb->qp, &dc_cb->rq_wr, &bad_recv_wr);
-	if (ret) {
-		fprintf(stderr, "ibv_post_recv failed: %d\n", ret);
-		goto err2;
-	}
-	DPRINTF(("ibv_post_recv success\n"));
-
-	ret = pthread_create(dc_cb->cqthread, NULL, cq_thread, dc_cb);
-	if (ret) {
-		fprintf(stderr, "pthread_create cq_thread failed: %d\n", ret);
-		goto err2;
-	}
-	
-	DPRINTF(("before iperf_accept\n"));
-	ret = iperf_accept(dc_cb);
-	if (ret) {
-		fprintf(stderr, "accept error %d\n", ret);
-		goto err3;
-	}
-	DPRINTF(("iperf_accept success\n"));
-	
 	/* wait for connection established */
 	struct wcm_id *item;
 	
@@ -1773,13 +1735,62 @@ rdmadataconn(const char *lmode)
 	TAILQ_UNLOCK(&acceptedTqh);
 	
 	free(item);
+	
+	child_dc_cb = (rdma_cb *) malloc(sizeof(rdma_cb));
+	if (child_dc_cb == NULL) {
+		fprintf(stderr, "malloc fail\n");
+		goto err0;
+	}
+	
+	rdma_cb_init(child_dc_cb);
+	
+	child_dc_cb->child_cm_id = dc_cb->child_cm_id;
+	
+	DPRINTF(("before iperf_setup_qp\n"));
+	ret = iperf_setup_qp(child_dc_cb, child_dc_cb->child_cm_id);
+	if (ret) {
+		fprintf(stderr, "setup_qp failed: %d\n", ret);
+		goto err0;
+	}
+	DPRINTF(("iperf_setup_qp success\n"));
+
+	DPRINTF(("before iperf_setup_buffers\n"));
+	ret = iperf_setup_buffers(child_dc_cb);
+	if (ret) {
+		fprintf(stderr, "rping_setup_buffers failed: %d\n", ret);
+		goto err1;
+	}
+	DPRINTF(("iperf_setup_buffers success\n"));
+
+	DPRINTF(("before ibv_post_recv\n"));
+	ret = ibv_post_recv(child_dc_cb->qp, &child_dc_cb->rq_wr, &bad_recv_wr);
+	if (ret) {
+		fprintf(stderr, "ibv_post_recv failed: %d\n", ret);
+		goto err2;
+	}
+	DPRINTF(("ibv_post_recv success\n"));
+
+	ret = pthread_create(child_dc_cb->cqthread, NULL, cq_thread, child_dc_cb);
+	if (ret) {
+		fprintf(stderr, "pthread_create cq_thread failed: %d\n", ret);
+		goto err2;
+	}
 
 //	sem_wait(&mCb->sem); wait here
-	if (dc_cb->state != CONNECT_REQUEST) {
+	if (child_dc_cb->state != CONNECT_REQUEST) {
 		fprintf(stderr, "wait for CONNECT_REQUEST state %d\n",
 			dc_cb->state);
 		return;
 	}
+
+	/* rdma_accept */
+	DPRINTF(("before iperf_accept\n"));
+	ret = iperf_accept(child_dc_cb);
+	if (ret)
+		fprintf(stderr, "accept error %d\n", ret);
+		goto err3;
+	}
+	DPRINTF(("iperf_accept success\n"));
 
 	return;
 	
