@@ -1773,7 +1773,7 @@ rdmadataconn(const char *lmode)
 	}
 	DPRINTF(("ibv_post_recv success\n"));
 
-	ret = pthread_create(child_dc_cb->cqthread, NULL, cq_thread, child_dc_cb);
+	ret = pthread_create(&child_dc_cb->cqthread, NULL, cq_thread, child_dc_cb);
 	if (ret) {
 		fprintf(stderr, "pthread_create cq_thread failed: %d\n", ret);
 		goto err2;
