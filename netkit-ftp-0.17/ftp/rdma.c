@@ -527,6 +527,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 				 IBV_ACCESS_LOCAL_WRITE);
 	if (!cb->recv_mr) {
 		fprintf(stderr, "recv_buf reg_mr failed\n");
+		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr recv_mr");
 		return errno;
 	}
 
@@ -534,6 +535,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 	cb->send_mr = ibv_reg_mr(cb->pd, &cb->send_buf, sizeof cb->send_buf, 0);
 	if (!cb->send_mr) {
 		fprintf(stderr, "send_buf reg_mr failed\n");
+		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr send_mr");
 		ret = errno;
 		goto err1;
 	}
@@ -542,6 +544,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 	cb->rdma_sink_buf = malloc(cb->size + sizeof(rmsgheader));
 	if (!cb->rdma_sink_buf) {
 		fprintf(stderr, "rdma_sink_buf malloc failed\n");
+		syslog(LOG_ERR, "iperf_setup_buffers malloc rdma_sink_buf");
 		ret = -ENOMEM;
 		goto err2;
 	}
@@ -550,6 +553,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 				 IBV_ACCESS_REMOTE_WRITE);
 	if (!cb->rdma_sink_mr) {
 		fprintf(stderr, "rdma_sink_mr reg_mr failed\n");
+		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr rdma_sink_buf");
 		ret = errno;
 		goto err3;
 	}
@@ -558,6 +562,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 	cb->rdma_source_buf = malloc(cb->size + sizeof(rmsgheader));
 	if (!cb->rdma_source_buf) {
 		fprintf(stderr, "rdma_source_buf malloc failed\n");
+		syslog(LOG_ERR, "iperf_setup_buffers malloc rdma_source_buf");
 		ret = -ENOMEM;
 		goto err4;
 	}
@@ -567,6 +572,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 				 IBV_ACCESS_REMOTE_READ);
 	if (!cb->rdma_source_mr) {
 		fprintf(stderr, "rdma_source_mr reg_mr failed\n");
+		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr rdma_source_mr");
 		ret = errno;
 		goto err5;
 	}

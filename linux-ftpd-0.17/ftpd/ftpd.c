@@ -1521,6 +1521,7 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	
 	dc_cb->size = 1024 * 1024 * 10;
 	syslog(LOG_ERR, "buffer size is %d\n", dc_cb->size);
+	dc_cb->server = 0;
 	
 	/*
 	 * attempt to connect to reserved port on client machine;
@@ -1547,7 +1548,8 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		syslog(LOG_ERR, "rdma_resolve_addr: %m");
 		return;
 	}
-
+	
+	syslog(LOG_ERR, "sem_wait ROUTE_RESOLVED start");
 	sem_wait(&dc_cb->sem);
 	if (dc_cb->state != ROUTE_RESOLVED) {
 		syslog(LOG_ERR, "waiting for addr/route resolution state %d\n", 
