@@ -921,10 +921,14 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			/* start data transfer using RDMA_WRITE */
 			DPRINTF(("start data transfer using RDMA_WRITE\n"));
 			child_dc_cb->rdma_source_sq_wr.opcode = IBV_WR_RDMA_WRITE;
+			DPRINTF(("start data transfer using RDMA_WRITE 1\n"));
 			child_dc_cb->rdma_source_sq_wr.wr.rdma.rkey = child_dc_cb->remote_rkey;
+			DPRINTF(("start data transfer using RDMA_WRITE 2\n"));
 			child_dc_cb->rdma_source_sq_wr.wr.rdma.remote_addr = child_dc_cb->remote_addr;
+			DPRINTF(("start data transfer using RDMA_WRITE 3\n"));
 /*			dc_cb->rdma_sq_wr.sg_list->length = dc_cb->remote_len;
 */			child_dc_cb->rdma_source_sq_wr.sg_list->length = c + sizeof(rmsgheader);
+			DPRINTF(("start data transfer using RDMA_WRITE 4\n"));
 			DEBUG_LOG("rdma write from lkey %x laddr %x len %d\n",
 				  child_dc_cb->rdma_source_sq_wr.sg_list->lkey,
 				  child_dc_cb->rdma_source_sq_wr.sg_list->addr,

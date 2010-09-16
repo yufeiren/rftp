@@ -669,6 +669,12 @@ void iperf_setup_wr(struct rdma_cb *cb)
 	cb->rdma_sink_sq_wr.send_flags = IBV_SEND_SIGNALED;
 	cb->rdma_sink_sq_wr.sg_list = &cb->rdma_sink_sgl;
 	cb->rdma_sink_sq_wr.num_sge = 1;
+	
+	cb->rdma_source_sgl.addr = (uint64_t) (unsigned long) cb->rdma_source_buf;
+	cb->rdma_source_sgl.lkey = cb->rdma_source_mr->lkey;
+	cb->rdma_source_sq_wr.send_flags = IBV_SEND_SIGNALED;
+	cb->rdma_source_sq_wr.sg_list = &cb->rdma_source_sgl;
+	cb->rdma_source_sq_wr.num_sge = 1;
 }
 
 
