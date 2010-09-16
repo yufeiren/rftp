@@ -160,7 +160,7 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 	}
 	
 	if (cb->recv_buf.mode == kRdmaTrans_ActWrte) {
-		switch (cb->recv_buf.stat)
+		switch (cb->recv_buf.stat) {
 		case ACTIVE_WRITE_ADV:
 			DPRINTF(("get ACTIVE_WRITE_ADV\n"));
 			iperf_format_send(cb, cb->rdma_sink_buf, cb->rdma_sink_mr);
@@ -179,7 +179,7 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 		default:
 			fprintf(stderr, "unrecognized stat");
 			break;
-		
+		}
 	}
 
 	DEBUG_LOG("Received rkey %x addr %" PRIx64 " len %d from peer\n",
