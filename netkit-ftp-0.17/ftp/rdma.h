@@ -142,7 +142,6 @@ extern pthread_mutex_t PseudoSockCond;
 typedef struct rdma_cb {
 	int server;			/* 0 iff client */
 	pthread_t cqthread;
-	pthread_t persistent_server_thread;
 	struct ibv_comp_channel *channel;
 	struct ibv_cq *cq;
 	struct ibv_pd *pd;

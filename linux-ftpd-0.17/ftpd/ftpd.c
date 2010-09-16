@@ -1576,7 +1576,7 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		goto err2;
 	}
 	syslog(LOG_ERR, "pthread_create start");
-	ret = pthread_create(dc_cb->cqthread, NULL, cq_thread, dc_cb);
+	ret = pthread_create(&dc_cb->cqthread, NULL, cq_thread, dc_cb);
 	if (ret) {
 		syslog(LOG_ERR, "pthread_create: %m");
 		goto err2;
