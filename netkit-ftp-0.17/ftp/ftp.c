@@ -1786,11 +1786,11 @@ rdmadataconn(const char *lmode)
 	/* rdma_accept */
 	DPRINTF(("before iperf_accept\n"));
 	ret = iperf_accept(child_dc_cb);
-	if (ret)
+	if (ret) {
 		fprintf(stderr, "accept error %d\n", ret);
 		goto err3;
 	}
-/*	DPRINTF(("iperf_accept success\n")); */
+	DPRINTF(("iperf_accept success\n"));
 
 	return;
 
