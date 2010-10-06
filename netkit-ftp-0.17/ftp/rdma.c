@@ -901,7 +901,7 @@ recver(void *arg)
 void *
 reader(void *arg)
 {
-	int totallen = (int) *arg;
+	int totallen;
 	int currlen;
 	int thislen;
 	BUFDATBLK *bufblk;
@@ -969,7 +969,7 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	memcpy(&rhdr, bufblk->rdma_buf, sizeof(rmsgheader));
 	
 	/* setup wr */
-	tsf_setup_wr(dc_cb, bufblk);
+	tsf_setup_wr(bufblk);
 	
 	/* talk to peer what type of transfer to use */
 	dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
@@ -991,23 +991,23 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	} */
 	
 	/* start data transfer using RDMA_WRITE */
-	dc_cb->rdma_sq_wr.opcode = IBV_WR_RDMA_WRITE;
-	dc_cb->rdma_sq_wr.wr.rdma.rkey = dc_cb->remote_rkey;
-	dc_cb->rdma_sq_wr.wr.rdma.remote_addr = dc_cb->remote_addr;
-	dc_cb->rdma_sq_wr.sg_list->length = rhdr.dlen + sizeof(rmsgheader);
+	bufblk->rdma_sq_wr.opcode = IBV_WR_RDMA_WRITE;
+	bufblk->rdma_sq_wr.wr.rdma.rkey = dc_cb->remote_rkey;
+	bufblk->rdma_sq_wr.wr.rdma.remote_addr = dc_cb->remote_addr;
+	bufblk->rdma_sq_wr.sg_list->length = rhdr.dlen + sizeof(rmsgheader);
 	
 	DPRINTF(("start data transfer using RDMA_WRITE\n"));
 	DEBUG_LOG("rdma write from lkey %x laddr %x len %d\n",
-		  dc_cb->rdma_sq_wr.sg_list->lkey,
-		  dc_cb->rdma_sq_wr.sg_list->addr,
-		  dc_cb->rdma_sq_wr.sg_list->length);
+		  bufblk->rdma_sq_wr.sg_list->lkey,
+		  bufblk->rdma_sq_wr.sg_list->addr,
+		  bufblk->rdma_sq_wr.sg_list->length);
 	
-	ret = ibv_post_send(dc_cb->qp, &dc_cb->rdma_sq_wr, &bad_wr);
+	ret = ibv_post_send(dc_cb->qp, &bufblk->rdma_sq_wr, &bad_wr);
 	if (ret) {
 		fprintf(stderr, "post send error %d\n", ret);
 		return;
 	}
-	child_dc_cb->state != ACTIVE_WRITE_POST;
+	dc_cb->state != ACTIVE_WRITE_POST;
 	
 	/* wait the finish of RDMA_WRITE */
 	sem_wait(&dc_cb->sem);
@@ -1027,12 +1027,12 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 		break;
 	}
 	
-	if (tick && (bytes >= hashbytes)) {
+/*	if (tick && (bytes >= hashbytes)) {
 		printf("\rBytes transferred: %ld", bytes);
 		(void) fflush(stdout);
 		while (bytes >= hashbytes)
 			hashbytes += TICKBYTES;
-	}
+	} */
 	
 	/* wait the client to notify next round data transfer */
 	sem_wait(&dc_cb->sem);
