@@ -642,7 +642,7 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 	BUFDATBLK *item;
 	
 	for (i = 0; i < 10; i++) {
-		if ( (item = (EVINFO *) malloc(sizeof(BUFDATBLK))) == NULL) {
+		if ( (item = (BUFDATBLK *) malloc(sizeof(BUFDATBLK))) == NULL) {
 			perror("tsf_setup_buf_list: malloc");
 			exit(EXIT_FAILURE);
 		}
@@ -656,7 +656,7 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 		
 		memset(item->rdma_buf, '\0', cb->size + sizeof(rmsgheader));
 		
-		item->rdma_mr = ibv_reg_mr(cb->pd, cb->rdma_buf, \
+		item->rdma_mr = ibv_reg_mr(cb->pd, item->rdma_buf, \
 				cb->size + sizeof(rmsgheader), \
 				IBV_ACCESS_LOCAL_WRITE
 				| IBV_ACCESS_REMOTE_READ
@@ -712,13 +712,13 @@ void iperf_setup_wr(struct rdma_cb *cb)
 	cb->rdma_source_sq_wr.num_sge = 1; */
 }
 
-void tsf_setup_wr(struct rdma_cb *cb, BUFDATBLK *bufblk)
+void tsf_setup_wr(BUFDATBLK *bufblk)
 {
-	cb->rdma_sgl.addr = (uint64_t) (unsigned long) bufblk->rdma_buf;
-	cb->rdma_sgl.lkey = bufblk->rdma_mr->lkey;
-	cb->rdma_sq_wr.send_flags = IBV_SEND_SIGNALED;
-	cb->rdma_sq_wr.sg_list = &cb->rdma_sgl;
-	cb->rdma_sq_wr.num_sge = 1;
+	bufblk->rdma_sgl.addr = (uint64_t) (unsigned long) bufblk->rdma_buf;
+	bufblk->rdma_sgl.lkey = bufblk->rdma_mr->lkey;
+	bufblk->rdma_sq_wr.send_flags = IBV_SEND_SIGNALED;
+	bufblk->rdma_sq_wr.sg_list = &bufblk->rdma_sgl;
+	bufblk->rdma_sq_wr.num_sge = 1;
 }
 
 int rdma_connect_client(struct rdma_cb *cb)

@@ -142,6 +142,8 @@ struct Bufdatblk {
 	struct ibv_sge		rdma_sgl;	/* rdma single SGE */
 	char			*rdma_buf;	/* used as rdma sink or source*/
 	struct ibv_mr 		*rdma_mr;
+	
+	TAILQ_ENTRY(Bufdatblk) entries;
 };
 typedef struct Bufdatblk BUFDATBLK;
 
@@ -248,7 +250,7 @@ void iperf_free_buffers(struct rdma_cb *cb);
 
 void iperf_setup_wr(struct rdma_cb *cb);
 
-void tsf_setup_wr(struct rdma_cb *cb, BUFDATBLK *bufblk);
+void tsf_setup_wr(BUFDATBLK *bufblk);
 
 int rdma_connect_client(struct rdma_cb *cb);
 
