@@ -879,7 +879,11 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		goto abort; */
 	(void) gettimeofday(&start, (struct timezone *)0);
 	oldintp = signal(SIGPIPE, SIG_IGN);
-
+	
+	TAILQ_INIT(&free_tqh);
+	TAILQ_INIT(&sender_tqh);
+	TAILQ_INIT(&writer_tqh);
+	
 	child_dc_cb->fd = fileno(fin);
 	child_dc_cb->filesize = st.st_size;
 	DPRINTF(("file size is %ld\n", child_dc_cb->filesize));
