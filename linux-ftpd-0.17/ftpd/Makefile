@@ -19,7 +19,7 @@ OBJS=ftpd.o ftpcmd.o logutmp.o logwtmp.o popen.o rdma.o
 all: ftpd
 
 %.o: %.c
-	$(CC) $(CFLAGS) -DHASSETPROCTITLE -DDEBUG $< -c
+	$(CC) $(CFLAGS) -DHASSETPROCTITLE $< -c
 
 ftpcmd.c: %.c: %.y
 	$(YACC) $<

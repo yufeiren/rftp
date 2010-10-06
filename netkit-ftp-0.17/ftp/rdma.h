@@ -136,6 +136,22 @@ struct rdma_info_blk {
 extern int PseudoSock;
 extern pthread_mutex_t PseudoSockCond;
 
+struct Bufdatblk {
+	int			buflen;
+	struct ibv_send_wr	rdma_sq_wr;	/* rdma work request record */
+	struct ibv_sge		rdma_sgl;	/* rdma single SGE */
+	char			*rdma_buf;	/* used as rdma sink or source*/
+	struct ibv_mr 		*rdma_mr;
+};
+typedef struct Bufdatblk BUFDATBLK;
+
+/* res */
+	/* free list, sender list, and writer list */
+TAILQ_HEAD(, Bufdatblk) 	free_tqh;
+TAILQ_HEAD(, Bufdatblk) 	sender_tqh;
+TAILQ_HEAD(, Bufdatblk) 	writer_tqh;
+
+
 /*
  * RDMA Control block struct.
  */
@@ -226,9 +242,13 @@ void iperf_free_qp(struct rdma_cb *cb);
 
 int iperf_setup_buffers(struct rdma_cb *cb);
 
+int tsf_setup_buf_list(struct rdma_cb *cb);
+
 void iperf_free_buffers(struct rdma_cb *cb);
 
 void iperf_setup_wr(struct rdma_cb *cb);
+
+void tsf_setup_wr(struct rdma_cb *cb, BUFDATBLK *bufblk);
 
 int rdma_connect_client(struct rdma_cb *cb);
 
@@ -250,6 +270,17 @@ int svr_pas_rdma_wr(struct rdma_cb *cb); */
 
 ssize_t	 readn(int, void *, size_t);		/* from APUE2e */
 ssize_t	 writen(int, const void *, size_t);	/* from APUE2e */
+
+/* start_routine for thread */
+
+void	*sender(void *);
+void	*recver(void *);
+void	*reader(void *);
+void	*writer(void *);
+
+int load_dat_blk(BUFDATBLK *);
+
+int send_dat_blk(BUFDATBLK *, struct rdma_cb *);
 
 #ifdef __cplusplus
 } /* end extern "C" */

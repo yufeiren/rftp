@@ -885,89 +885,34 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	case TYPE_L:
 		errno = d = 0;
 		
-		/* default use RDMA_WRITE write data to peer */
-		
-		/* read data to the data source buffer */
-		rmsgheader rhdr;
-		DPRINTF(("data transfer start\n"));
-		
-		while ((c = readn(fileno(fin), child_dc_cb->rdma_source_buf + sizeof(rmsgheader), child_dc_cb->size)) > 0) {
-			bytes += c;
+		/* create sender and reader */
+		pthread_t sender_tid;
+		pthread_t reader_tid;
+		void        *tret;
 
-			/* take care of the message header */
-			DPRINTF(("read %d bytes this time\n", c));			
-			rhdr.dlen = c;
-			memcpy(child_dc_cb->rdma_source_buf, &rhdr, sizeof(rmsgheader));
-			
-			/* talk to peer what type of transfer to use */
-			child_dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
-			child_dc_cb->send_buf.stat = ACTIVE_WRITE_ADV;
-			ret = ibv_post_send(child_dc_cb->qp, &child_dc_cb->sq_wr, &bad_wr);
-			if (ret) {
-				fprintf(stderr, "post send error %d\n", ret);
-				break;
-			}
-			child_dc_cb->state = ACTIVE_WRITE_ADV;
-			
-			/* wait the peer tell me where should i write to */
-			sem_wait(&child_dc_cb->sem);
-/*			if (child_dc_cb->state != ACTIVE_WRITE_RESP) {
-				fprintf(stderr, \
-					"wait for ACTIVE_WRITE_RESP state %d\n", \
-					child_dc_cb->state);
-				return;
-			} */
-			
-			/* start data transfer using RDMA_WRITE */
-			DPRINTF(("start data transfer using RDMA_WRITE\n"));
-			child_dc_cb->rdma_source_sq_wr.opcode = IBV_WR_RDMA_WRITE;
-			DPRINTF(("start data transfer using RDMA_WRITE 1\n"));
-			child_dc_cb->rdma_source_sq_wr.wr.rdma.rkey = child_dc_cb->remote_rkey;
-			DPRINTF(("start data transfer using RDMA_WRITE 2\n"));
-			child_dc_cb->rdma_source_sq_wr.wr.rdma.remote_addr = child_dc_cb->remote_addr;
-			DPRINTF(("start data transfer using RDMA_WRITE 3\n"));
-/*			dc_cb->rdma_sq_wr.sg_list->length = dc_cb->remote_len;
-*/			child_dc_cb->rdma_source_sq_wr.sg_list->length = c + sizeof(rmsgheader);
-			DPRINTF(("start data transfer using RDMA_WRITE 4\n"));
-			DEBUG_LOG("rdma write from lkey %x laddr %x len %d\n",
-				  child_dc_cb->rdma_source_sq_wr.sg_list->lkey,
-				  child_dc_cb->rdma_source_sq_wr.sg_list->addr,
-				  child_dc_cb->rdma_source_sq_wr.sg_list->length);
-			
-			ret = ibv_post_send(child_dc_cb->qp, &child_dc_cb->rdma_source_sq_wr, &bad_wr);
-			if (ret) {
-				fprintf(stderr, "post send error %d\n", ret);
-				return;
-			}
-			child_dc_cb->state != ACTIVE_WRITE_POST;
-			
-			/* wait the finish of RDMA_WRITE */
-			sem_wait(&child_dc_cb->sem);
-/*			if (child_dc_cb->state != ACTIVE_WRITE_FIN) {
-				fprintf(stderr, \
-					"wait for ACTIVE_WRITE_FIN state %d\n", \
-					child_dc_cb->state);
-				return;
-			} */
-			
-			/* tell the peer transfer finished */
-			child_dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
-			child_dc_cb->send_buf.stat = ACTIVE_WRITE_FIN;
-			ret = ibv_post_send(child_dc_cb->qp, &child_dc_cb->sq_wr, &bad_wr);
-			if (ret) {
-				fprintf(stderr, "post send error %d\n", ret);
-				break;
-			}
-			
-			if (tick && (bytes >= hashbytes)) {
-				printf("\rBytes transferred: %ld", bytes);
-				(void) fflush(stdout);
-				while (bytes >= hashbytes)
-					hashbytes += TICKBYTES;
-			}
-			
-			/* wait the client to notify next round data transfer */
-			sem_wait(&child_dc_cb->sem);
+		ret = pthread_create(&sender_tid, NULL, sender, NULL);
+		if (ret != 0) {
+			perror("pthread_create sender:");
+			exit(EXIT_FAILURE);
+		}
+		
+		ret = pthread_create(&reader_tid, NULL, reader, NULL);
+		if (ret != 0) {
+			perror("pthread_create reader:");
+			exit(EXIT_FAILURE);
+		}
+		
+		/* wait for sender and reader finish */
+		ret = pthread_join(reader_tid, &tret);
+		if (ret != 0) {
+			perror("pthread_join reader:");
+			exit(EXIT_FAILURE);
+		}
+
+		ret = pthread_join(sender_tid, &tret);
+		if (ret != 0) {
+			perror("pthread_join sender:");
+			exit(EXIT_FAILURE);
 		}
 		
 		DPRINTF(("data transfer finished\n"));
@@ -1043,7 +988,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	(void) gettimeofday(&stop, (struct timezone *)0);
 	if (closefunc != NULL)
 		(*closefunc)(fin);
-	(void) fclose(dout);
+/*	(void) fclose(dout); no dout in rdma mode */
 	/* closes data as well, so discard it */
 	data = -1;
 	(void) getreply(0);

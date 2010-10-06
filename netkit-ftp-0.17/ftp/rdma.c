@@ -635,6 +635,41 @@ err1:
 }
 
 
+int tsf_setup_buf_list(struct rdma_cb *cb)
+{
+/* init rdma_mr and insert into the free list */
+	int i;
+	BUFDATBLK *item;
+	
+	for (i = 0; i < 10; i++) {
+		if ( (item = (EVINFO *) malloc(sizeof(BUFDATBLK))) == NULL) {
+			perror("tsf_setup_buf_list: malloc");
+			exit(EXIT_FAILURE);
+		}
+		
+		memset(item, '\0', sizeof(BUFDATBLK));
+		
+		if ( (item->rdma_buf = (char *) malloc(cb->size + sizeof(rmsgheader))) == NULL) {
+			perror("tsf_setup_buf_list: malloc 2");
+			exit(EXIT_FAILURE);
+		}
+		
+		memset(item->rdma_buf, '\0', cb->size + sizeof(rmsgheader));
+		
+		item->rdma_mr = ibv_reg_mr(cb->pd, cb->rdma_buf, \
+				cb->size + sizeof(rmsgheader), \
+				IBV_ACCESS_LOCAL_WRITE
+				| IBV_ACCESS_REMOTE_READ
+				| IBV_ACCESS_REMOTE_WRITE);
+		if (!item->rdma_mr) {
+			perror("tsf_setup_buf_list: ibv_reg_mr");
+			exit(EXIT_FAILURE);
+		}
+		
+		TAILQ_INSERT_TAIL(&free_tqh, item, entries);
+	}
+}
+
 void iperf_free_buffers(struct rdma_cb *cb)
 {
 	DEBUG_LOG("rping_free_buffers called on cb %p\n", cb);
@@ -663,7 +698,7 @@ void iperf_setup_wr(struct rdma_cb *cb)
 	cb->sq_wr.send_flags = IBV_SEND_SIGNALED;
 	cb->sq_wr.sg_list = &cb->send_sgl;
 	cb->sq_wr.num_sge = 1;
-
+/*
 	cb->rdma_sink_sgl.addr = (uint64_t) (unsigned long) cb->rdma_sink_buf;
 	cb->rdma_sink_sgl.lkey = cb->rdma_sink_mr->lkey;
 	cb->rdma_sink_sq_wr.send_flags = IBV_SEND_SIGNALED;
@@ -674,9 +709,17 @@ void iperf_setup_wr(struct rdma_cb *cb)
 	cb->rdma_source_sgl.lkey = cb->rdma_source_mr->lkey;
 	cb->rdma_source_sq_wr.send_flags = IBV_SEND_SIGNALED;
 	cb->rdma_source_sq_wr.sg_list = &cb->rdma_source_sgl;
-	cb->rdma_source_sq_wr.num_sge = 1;
+	cb->rdma_source_sq_wr.num_sge = 1; */
 }
 
+void tsf_setup_wr(struct rdma_cb *cb, BUFDATBLK *bufblk)
+{
+	cb->rdma_sgl.addr = (uint64_t) (unsigned long) bufblk->rdma_buf;
+	cb->rdma_sgl.lkey = bufblk->rdma_mr->lkey;
+	cb->rdma_sq_wr.send_flags = IBV_SEND_SIGNALED;
+	cb->rdma_sq_wr.sg_list = &cb->rdma_sgl;
+	cb->rdma_sq_wr.num_sge = 1;
+}
 
 int rdma_connect_client(struct rdma_cb *cb)
 {
@@ -808,5 +851,185 @@ writen(int fd, const void *ptr, size_t n)
 		ptr   += nwritten;
 	}
 	return(n - nleft);      /* return >= 0 */
+}
+
+
+
+void *
+sender(void *arg)
+{
+	int totallen = (int) *arg;
+	int currlen;
+	int thislen;
+	BUFDATBLK *bufblk;
+	
+	for (currlen = 0; currlen < totallen; currlen += thislen) {
+		/* get send block */
+		TAILQ_LOCK(&sender_tqh);
+		while (TAILQ_EMPTY(&sender_tqh))
+			if (TAILQ_WAIT(&sender_tqh) != 0)
+				continue;	/* goto while */
+		
+		bufblk = TAILQ_FIRST(&sender_tqh);
+		TAILQ_REMOVE(&sender_tqh, bufblk, entries);
+		
+		TAILQ_UNLOCK(&sender_tqh);
+		
+		/* send data */
+		thislen = send_dat_blk(bufblk, dc_cb);
+		
+		/* insert to free list */
+		TAILQ_LOCK(&free_tqh);
+		TAILQ_INSERT_TAIL(&free_tqh, bufblk, entries);
+		TAILQ_UNLOCK(&free_tqh);
+		
+		TAILQ_SIGNAL(&free_tqh);
+	}
+	
+	pthread_exit(NULL);
+}
+
+void *
+recver(void *arg)
+{
+
+	pthread_exit(NULL);
+}
+
+void *
+reader(void *arg)
+{
+	int totallen = (int) *arg;
+	int currlen;
+	int thislen;
+	BUFDATBLK *bufblk;
+	rmsgheader rhdr;
+	
+	for (currlen = 0; currlen < totallen; currlen += thislen) {
+		/* get free block */
+		TAILQ_LOCK(&free_tqh);
+		while (TAILQ_EMPTY(&free_tqh))
+			if (TAILQ_WAIT(&free_tqh) != 0)
+				continue;	/* goto while */
+		
+		bufblk = TAILQ_FIRST(&free_tqh);
+		TAILQ_REMOVE(&free_tqh, bufblk, entries);
+		
+		TAILQ_UNLOCK(&free_tqh);
+		
+		/* load data */
+		thislen = load_dat_blk(bufblk);
+		
+		if (thislen <= 0) {
+			TAILQ_LOCK(&free_tqh);
+			TAILQ_INSERT_TAIL(&free_tqh, bufblk, entries);
+			TAILQ_UNLOCK(&free_tqh);
+		}
+		
+		rhdr.dlen = thislen;
+		memcpy(bufblk->rdma_buf, &rhdr, sizeof(rmsgheader));
+		
+		/* insert to sender list */
+		TAILQ_LOCK(&sender_tqh);
+		TAILQ_INSERT_TAIL(&sender_tqh, bufblk, entries);
+		TAILQ_UNLOCK(&sender_tqh);
+		
+		TAILQ_SIGNAL(&sender_tqh);
+	}
+	
+	/* data read finished */
+	pthread_exit(NULL);	
+}
+
+void *
+writer(void *arg)
+{
+
+	pthread_exit(NULL);
+}
+
+int
+load_dat_blk(BUFDATBLK *bufblk)
+{
+	return readn(fileno(fin), bufblk->rdma_buf + sizeof(rmsgheader), bufblk->buflen - sizeof(rmsgheader));
+}
+
+int
+send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
+{
+	struct ibv_send_wr *bad_wr;
+	int ret;
+	rmsgheader rhdr;
+	
+	memcpy(&rhdr, bufblk->rdma_buf, sizeof(rmsgheader));
+	
+	/* setup wr */
+	tsf_setup_wr(dc_cb, bufblk);
+	
+	/* talk to peer what type of transfer to use */
+	dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
+	dc_cb->send_buf.stat = ACTIVE_WRITE_ADV;
+	ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
+	if (ret) {
+		fprintf(stderr, "post send error %d\n", ret);
+		break;
+	}
+	dc_cb->state = ACTIVE_WRITE_ADV;
+	
+	/* wait the peer tell me where should i write to */
+	sem_wait(&dc_cb->sem);
+/*	if (child_dc_cb->state != ACTIVE_WRITE_RESP) {
+		fprintf(stderr, \
+			"wait for ACTIVE_WRITE_RESP state %d\n", \
+			child_dc_cb->state);
+		return;
+	} */
+	
+	/* start data transfer using RDMA_WRITE */
+	dc_cb->rdma_sq_wr.opcode = IBV_WR_RDMA_WRITE;
+	dc_cb->rdma_sq_wr.wr.rdma.rkey = dc_cb->remote_rkey;
+	dc_cb->rdma_sq_wr.wr.rdma.remote_addr = dc_cb->remote_addr;
+	dc_cb->rdma_sq_wr.sg_list->length = rhdr.dlen + sizeof(rmsgheader);
+	
+	DPRINTF(("start data transfer using RDMA_WRITE\n"));
+	DEBUG_LOG("rdma write from lkey %x laddr %x len %d\n",
+		  dc_cb->rdma_sq_wr.sg_list->lkey,
+		  dc_cb->rdma_sq_wr.sg_list->addr,
+		  dc_cb->rdma_sq_wr.sg_list->length);
+	
+	ret = ibv_post_send(dc_cb->qp, &dc_cb->rdma_sq_wr, &bad_wr);
+	if (ret) {
+		fprintf(stderr, "post send error %d\n", ret);
+		return;
+	}
+	child_dc_cb->state != ACTIVE_WRITE_POST;
+	
+	/* wait the finish of RDMA_WRITE */
+	sem_wait(&dc_cb->sem);
+/*			if (child_dc_cb->state != ACTIVE_WRITE_FIN) {
+		fprintf(stderr, \
+			"wait for ACTIVE_WRITE_FIN state %d\n", \
+			child_dc_cb->state);
+		return;
+	} */
+	
+	/* tell the peer transfer finished */
+	dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
+	dc_cb->send_buf.stat = ACTIVE_WRITE_FIN;
+	ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
+	if (ret) {
+		fprintf(stderr, "post send error %d\n", ret);
+		break;
+	}
+	
+	if (tick && (bytes >= hashbytes)) {
+		printf("\rBytes transferred: %ld", bytes);
+		(void) fflush(stdout);
+		while (bytes >= hashbytes)
+			hashbytes += TICKBYTES;
+	}
+	
+	/* wait the client to notify next round data transfer */
+	sem_wait(&dc_cb->sem);
 }
 
