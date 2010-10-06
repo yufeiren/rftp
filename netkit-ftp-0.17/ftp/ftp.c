@@ -879,6 +879,9 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		goto abort; */
 	(void) gettimeofday(&start, (struct timezone *)0);
 	oldintp = signal(SIGPIPE, SIG_IGN);
+
+	child_dc_cb->fd = fileno(fin);
+	
 	switch (curtype) {
 
 	case TYPE_I:
@@ -896,7 +899,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			exit(EXIT_FAILURE);
 		}
 		
-		ret = pthread_create(&reader_tid, NULL, reader, NULL);
+		ret = pthread_create(&reader_tid, NULL, reader, child_dc_cb);
 		if (ret != 0) {
 			perror("pthread_create reader:");
 			exit(EXIT_FAILURE);

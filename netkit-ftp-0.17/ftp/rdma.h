@@ -69,6 +69,8 @@ extern int rdma_debug;
 #define DEBUG_LOG if (rdma_debug) printf
 // #define DEBUG_LOG printf
 
+extern FILE *fin;
+
 // rdma_listen backlog
 #define RLISTENBACKLOG		32
 
@@ -142,6 +144,7 @@ struct Bufdatblk {
 	struct ibv_sge		rdma_sgl;	/* rdma single SGE */
 	char			*rdma_buf;	/* used as rdma sink or source*/
 	struct ibv_mr 		*rdma_mr;
+	int			fd;		/* in and out fd */
 	
 	TAILQ_ENTRY(Bufdatblk) entries;
 };
@@ -206,6 +209,8 @@ typedef struct rdma_cb {
 	struct rdma_cm_id *cm_id;	/* connection on client side,*/
 					/* listener on server side. */
 	struct rdma_cm_id *child_cm_id;	/* connection on server side */
+	
+	int	fd;			/* in and out fd */
 } rdma_cb;
 
 

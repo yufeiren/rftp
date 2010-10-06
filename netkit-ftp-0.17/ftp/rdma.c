@@ -907,6 +907,9 @@ reader(void *arg)
 	BUFDATBLK *bufblk;
 	rmsgheader rhdr;
 	
+	struct rdma_cb *cb = (struct rdma_cb *) arg;
+	bufblk->fd = cb->fd;
+	
 	for (currlen = 0; currlen < totallen; currlen += thislen) {
 		/* get free block */
 		TAILQ_LOCK(&free_tqh);
@@ -953,7 +956,7 @@ writer(void *arg)
 int
 load_dat_blk(BUFDATBLK *bufblk)
 {
-	return readn(fileno(fin), bufblk->rdma_buf + sizeof(rmsgheader), bufblk->buflen - sizeof(rmsgheader));
+	return readn(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), bufblk->buflen - sizeof(rmsgheader));
 }
 
 int
