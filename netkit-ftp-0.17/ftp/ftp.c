@@ -881,7 +881,8 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	oldintp = signal(SIGPIPE, SIG_IGN);
 
 	child_dc_cb->fd = fileno(fin);
-	
+	child_dc_cb->filesize = st.st_size;
+	DPRINTF(("file size is %ld\n", child_dc_cb->filesize));
 	tsf_setup_buf_list(child_dc_cb);
 	
 	switch (curtype) {
@@ -894,18 +895,20 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		pthread_t sender_tid;
 		pthread_t reader_tid;
 		void      *tret;
-
+		
 		ret = pthread_create(&sender_tid, NULL, sender, child_dc_cb);
 		if (ret != 0) {
 			perror("pthread_create sender:");
 			exit(EXIT_FAILURE);
 		}
+		DPRINTF(("sender create successful\n"));
 		
 		ret = pthread_create(&reader_tid, NULL, reader, child_dc_cb);
 		if (ret != 0) {
 			perror("pthread_create reader:");
 			exit(EXIT_FAILURE);
 		}
+		DPRINTF(("reader create successful\n"));
 		
 		/* wait for sender and reader finish */
 		ret = pthread_join(reader_tid, &tret);
@@ -913,12 +916,14 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			perror("pthread_join reader:");
 			exit(EXIT_FAILURE);
 		}
+		DPRINTF(("reader join successful\n"));
 
 		ret = pthread_join(sender_tid, &tret);
 		if (ret != 0) {
 			perror("pthread_join sender:");
 			exit(EXIT_FAILURE);
 		}
+		DPRINTF(("sender join successful\n"));
 		
 		DPRINTF(("data transfer finished\n"));
 		

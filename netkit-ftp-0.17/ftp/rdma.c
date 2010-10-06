@@ -668,6 +668,8 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 		
 		TAILQ_INSERT_TAIL(&free_tqh, item, entries);
 	}
+	
+	return 0;
 }
 
 void iperf_free_buffers(struct rdma_cb *cb)
@@ -864,6 +866,7 @@ sender(void *arg)
 	BUFDATBLK *bufblk;
 	
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
+	totallen = cb->filesize;
 	
 	for (currlen = 0; currlen < totallen; currlen += thislen) {
 		/* get send block */
@@ -909,6 +912,7 @@ reader(void *arg)
 	
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	bufblk->fd = cb->fd;
+	totallen = cb->filesize;
 	
 	for (currlen = 0; currlen < totallen; currlen += thislen) {
 		/* get free block */
