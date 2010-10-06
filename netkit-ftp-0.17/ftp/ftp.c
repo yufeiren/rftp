@@ -932,7 +932,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		
 		DPRINTF(("data transfer finished\n"));
 		
-		bytes = (int) *tret;
+		bytes = (int) tret;
 		
 		if (hash && (bytes > 0)) {
 			if (bytes < HASHBYTES)
