@@ -892,8 +892,6 @@ sender(void *arg)
 		TAILQ_UNLOCK(&free_tqh);
 		
 		TAILQ_SIGNAL(&free_tqh);
-		
-		pthread_exit(NULL);
 	}
 	
 	pthread_exit(NULL);
@@ -952,7 +950,6 @@ reader(void *arg)
 		
 		TAILQ_SIGNAL(&sender_tqh);
 		
-		pthread_exit(NULL);
 	}
 	
 	/* data read finished */
