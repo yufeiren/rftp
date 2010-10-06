@@ -894,7 +894,7 @@ sender(void *arg)
 		TAILQ_SIGNAL(&free_tqh);
 	}
 	
-	pthread_exit(NULL);
+	pthread_exit((void *) &currlen);
 }
 
 void *
