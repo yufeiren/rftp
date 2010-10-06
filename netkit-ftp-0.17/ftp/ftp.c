@@ -884,6 +884,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	child_dc_cb->filesize = st.st_size;
 	DPRINTF(("file size is %ld\n", child_dc_cb->filesize));
 	tsf_setup_buf_list(child_dc_cb);
+	DPRINTF(("tsf_setup_buf_list success\n"));
 	
 	switch (curtype) {
 

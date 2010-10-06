@@ -4,7 +4,7 @@ include ../MCONFIG
 include ../MRULES
 
 ifeq ($(USE_READLINE),1)
-CFLAGS += -D__USE_READLINE__
+CFLAGS += -D__USE_READLINE__ -DDEBUG
 LIBS += -lreadline $(LIBTERMCAP) -libverbs -lrdmacm -lpthread
 endif
 
