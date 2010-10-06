@@ -858,10 +858,12 @@ writen(int fd, const void *ptr, size_t n)
 void *
 sender(void *arg)
 {
-	int totallen = (int) *arg;
+	int totallen;
 	int currlen;
 	int thislen;
 	BUFDATBLK *bufblk;
+	
+	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	
 	for (currlen = 0; currlen < totallen; currlen += thislen) {
 		/* get send block */
@@ -876,7 +878,7 @@ sender(void *arg)
 		TAILQ_UNLOCK(&sender_tqh);
 		
 		/* send data */
-		thislen = send_dat_blk(bufblk, dc_cb);
+		thislen = send_dat_blk(bufblk, cb);
 		
 		/* insert to free list */
 		TAILQ_LOCK(&free_tqh);

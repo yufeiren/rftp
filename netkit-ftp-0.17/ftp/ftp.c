@@ -888,9 +888,9 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		/* create sender and reader */
 		pthread_t sender_tid;
 		pthread_t reader_tid;
-		void        *tret;
+		void      *tret;
 
-		ret = pthread_create(&sender_tid, NULL, sender, NULL);
+		ret = pthread_create(&sender_tid, NULL, sender, child_dc_cb);
 		if (ret != 0) {
 			perror("pthread_create sender:");
 			exit(EXIT_FAILURE);
