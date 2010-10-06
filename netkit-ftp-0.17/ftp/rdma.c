@@ -977,7 +977,7 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
 	if (ret) {
 		fprintf(stderr, "post send error %d\n", ret);
-		break;
+		return 0;
 	}
 	dc_cb->state = ACTIVE_WRITE_ADV;
 	
@@ -1005,7 +1005,7 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	ret = ibv_post_send(dc_cb->qp, &bufblk->rdma_sq_wr, &bad_wr);
 	if (ret) {
 		fprintf(stderr, "post send error %d\n", ret);
-		return;
+		return 0;
 	}
 	dc_cb->state != ACTIVE_WRITE_POST;
 	
@@ -1024,7 +1024,7 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
 	if (ret) {
 		fprintf(stderr, "post send error %d\n", ret);
-		break;
+		return 0;
 	}
 	
 /*	if (tick && (bytes >= hashbytes)) {
@@ -1036,5 +1036,6 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	
 	/* wait the client to notify next round data transfer */
 	sem_wait(&dc_cb->sem);
+	
+	return rhdr.dlen;
 }
-

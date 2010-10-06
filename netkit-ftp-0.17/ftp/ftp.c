@@ -882,6 +882,8 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 
 	child_dc_cb->fd = fileno(fin);
 	
+	tsf_setup_buf_list(child_dc_cb);
+	
 	switch (curtype) {
 
 	case TYPE_I:
