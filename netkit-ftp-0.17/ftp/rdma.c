@@ -911,7 +911,6 @@ reader(void *arg)
 	rmsgheader rhdr;
 	
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
-	bufblk->fd = cb->fd;
 	totallen = cb->filesize;
 	
 	for (currlen = 0; currlen < totallen; currlen += thislen) {
@@ -927,6 +926,7 @@ reader(void *arg)
 		TAILQ_UNLOCK(&free_tqh);
 		
 		/* load data */
+		bufblk->fd = cb->fd;
 		thislen = load_dat_blk(bufblk);
 		
 		if (thislen <= 0) {
