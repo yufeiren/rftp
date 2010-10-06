@@ -666,6 +666,8 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 			exit(EXIT_FAILURE);
 		}
 		
+		item->buflen = cb->size + sizeof(rmsgheader);
+		
 		TAILQ_INSERT_TAIL(&free_tqh, item, entries);
 	}
 	
@@ -882,6 +884,7 @@ sender(void *arg)
 		
 		/* send data */
 		thislen = send_dat_blk(bufblk, cb);
+		DPRINTF(("send %d bytes\n", thislen));
 		
 		/* insert to free list */
 		TAILQ_LOCK(&free_tqh);
@@ -889,6 +892,8 @@ sender(void *arg)
 		TAILQ_UNLOCK(&free_tqh);
 		
 		TAILQ_SIGNAL(&free_tqh);
+		
+		pthread_exit(NULL);
 	}
 	
 	pthread_exit(NULL);
@@ -929,6 +934,8 @@ reader(void *arg)
 		bufblk->fd = cb->fd;
 		thislen = load_dat_blk(bufblk);
 		
+		DPRINTF(("load %d bytes\n", thislen));
+		
 		if (thislen <= 0) {
 			TAILQ_LOCK(&free_tqh);
 			TAILQ_INSERT_TAIL(&free_tqh, bufblk, entries);
@@ -944,6 +951,8 @@ reader(void *arg)
 		TAILQ_UNLOCK(&sender_tqh);
 		
 		TAILQ_SIGNAL(&sender_tqh);
+		
+		pthread_exit(NULL);
 	}
 	
 	/* data read finished */
