@@ -310,7 +310,7 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 	
 	DPRINTF(("2 cq_handler cb @ %x\n", (unsigned long)cb));
 	DPRINTF(("cq_handler sem_post @ %x\n", (unsigned long)&cb->sem));
-
+	
 	while ((ret = ibv_poll_cq(cb->cq, 1, &wc)) == 1) {
 		ret = 0;
 
@@ -357,7 +357,9 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 				fprintf(stderr, "post recv error: %d\n", ret);
 				goto error;
 			}
+
 			sem_post(&cb->sem);
+syslog(LOG_ERR, "IBV_WC_RECV: sem_post @ %x", (unsigned long) &cb->sem);
 			DPRINTF(("IBV_WC_RECV success\n"));
 			break;
 
@@ -908,7 +910,7 @@ recver(void *arg)
 	for ( ; ; ) {
 	
 	/* wait for the client send ADV - READ? WRITE? */
-	syslog(LOG_ERR, "before sem_wait(&cb->sem) 1");
+	syslog(LOG_ERR, "before sem_wait(&cb->sem) 1 @ %x", (unsigned long) &cb->sem);
 	sem_wait(&cb->sem);
 	syslog(LOG_ERR, "after sem_wait(&cb->sem) 1");
 	
