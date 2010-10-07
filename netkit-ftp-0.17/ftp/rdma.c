@@ -945,6 +945,14 @@ recver(void *arg)
 	sem_wait(&cb->sem);
 	syslog(LOG_ERR, "after sem_wait(&cb->sem) 2");
 	
+	/* notify the client to go on */
+	cb->send_buf.mode = kRdmaTrans_ActWrte;
+	cb->send_buf.stat = ACTIVE_WRITE_FIN;
+	ret = ibv_post_send(cb->qp, &cb->sq_wr, &bad_wr);
+	if (ret) {
+		syslog(LOG_ERR, "ibv_post_send: %m");
+		return -1;
+	}
 		/* recv data
 		recv_dat_blk(bufblk, cb); */
 		
@@ -1178,6 +1186,15 @@ recv_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *cb)
 	syslog(LOG_ERR, "before sem_wait(&cb->sem) 2");
 	sem_wait(&cb->sem);
 	syslog(LOG_ERR, "after sem_wait(&cb->sem) 2");
+	
+	/* notify the client to go on */
+	cb->send_buf.mode = kRdmaTrans_ActWrte;
+	cb->send_buf.stat = ACTIVE_WRITE_FIN;
+	ret = ibv_post_send(cb->qp, &cb->sq_wr, &bad_wr);
+	if (ret) {
+		syslog(LOG_ERR, "ibv_post_send: %m");
+		return -1;
+	}
 	
 	return 0;
 }
