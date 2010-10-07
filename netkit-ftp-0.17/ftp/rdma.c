@@ -914,10 +914,12 @@ recver(void *arg)
 		TAILQ_REMOVE(&free_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&free_tqh);
+		syslog(LOG_ERR, "get a free block success");
 		
 		/* recv data */
 		recv_dat_blk(bufblk, cb);
 		
+		syslog(LOG_ERR, "recv data success");
 		/* insert into writer list */
 		TAILQ_LOCK(&writer_tqh);
 		TAILQ_INSERT_TAIL(&writer_tqh, bufblk, entries);
@@ -1000,6 +1002,7 @@ writer(void *arg)
 		TAILQ_REMOVE(&writer_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&writer_tqh);
+		syslog(LOG_ERR, "get write block success");
 		
 		/* offload data */
 		bufblk->fd = cb->fd;
@@ -1007,6 +1010,7 @@ writer(void *arg)
 		bufblk->buflen = rhdr.dlen + sizeof(rmsgheader);
 
 		offload_dat_blk(bufblk);
+		syslog(LOG_ERR, "offload data success");
 		
 		/* insert to free list */
 		TAILQ_LOCK(&free_tqh);
@@ -1120,22 +1124,28 @@ recv_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *cb)
 	struct ibv_send_wr *bad_wr;
 	
 	/* wait for the client send ADV - READ? WRITE? */
+	syslog(LOG_ERR, "before sem_wait(&cb->sem) 1");
 	sem_wait(&cb->sem);
+	syslog(LOG_ERR, "after sem_wait(&cb->sem) 1");
 	
 	/* tell the peer where to write */
 	iperf_format_send(cb, bufblk->rdma_buf, bufblk->rdma_mr);
 	cb->send_buf.mode = kRdmaTrans_ActWrte;
 	cb->send_buf.stat = ACTIVE_WRITE_RESP;
 	tsf_setup_wr(bufblk);
+	syslog(LOG_ERR, "tsf_setup_wr success");
 	
 	ret = ibv_post_send(cb->qp, &cb->sq_wr, &bad_wr);
 	if (ret) {
 		syslog(LOG_ERR, "ibv_post_send: %m");
 		return -1;
 	}
+	syslog(LOG_ERR, "ibv_post_send success");
 	
 	/* wait the finish of rdma write */
+	syslog(LOG_ERR, "before sem_wait(&cb->sem) 2");
 	sem_wait(&cb->sem);
+	syslog(LOG_ERR, "after sem_wait(&cb->sem) 2");
 	
 	return 0;
 }
