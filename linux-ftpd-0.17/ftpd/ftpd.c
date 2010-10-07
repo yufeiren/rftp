@@ -1508,6 +1508,9 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	}
 	data = fileno(file);
 */
+	reply(150, "Opening %s mode data connection for '%s'%s.",
+	     type == TYPE_A ? "ASCII" : "BINARY", name, sizebuf);
+	
 	dc_cb = (rdma_cb *) malloc(sizeof(rdma_cb));
 	if (dc_cb == NULL) {
 		syslog(LOG_ERR, "malloc: %m");
@@ -1592,8 +1595,6 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		goto err3;
 	}
 	
-	reply(150, "Opening %s mode data connection for '%s'%s.",
-	     type == TYPE_A ? "ASCII" : "BINARY", name, sizebuf);
 	return (0);
 	
 err3:
