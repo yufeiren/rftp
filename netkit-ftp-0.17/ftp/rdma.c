@@ -130,7 +130,6 @@ static int server_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 		cb->state = RDMA_READ_ADV;
 	else
 		cb->state = RDMA_WRITE_ADV; */
-	DPRINTF(("server_recv success\n"));
 	
 	return 0;
 }
@@ -162,19 +161,16 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 	if (cb->recv_buf.mode == kRdmaTrans_ActWrte) {
 		switch (cb->recv_buf.stat) {
 		case ACTIVE_WRITE_ADV:
-			DPRINTF(("get ACTIVE_WRITE_ADV\n"));
 			iperf_format_send(cb, cb->rdma_sink_buf, cb->rdma_sink_mr);
 			cb->send_buf.stat = ACTIVE_WRITE_RESP;
 			/* ibv_post_send(cb->qp, &cb->sq_wr, &bad_wr); */
 			break;
 		case ACTIVE_WRITE_RESP:
-			DPRINTF(("get ACTIVE_WRITE_RESP\n"));
 			cb->remote_rkey = ntohl(cb->recv_buf.rkey);
 			cb->remote_addr = ntohll(cb->recv_buf.buf);
 			cb->remote_len  = ntohl(cb->recv_buf.size);
 			break;
 		case ACTIVE_WRITE_FIN:
-			DPRINTF(("get ACTIVE_WRITE_FIN\n"));
 			break;
 		default:
 			fprintf(stderr, "unrecognized stat %d\n", cb->recv_buf.stat);
@@ -198,8 +194,6 @@ int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 	DEBUG_LOG("cma_event type %s cma_id %p (%s)\n",
 		  rdma_event_str(event->event), cma_id,
 		  (cma_id == cb->cm_id) ? "parent" : "child");
-		  
-	DPRINTF(("1 cq_handler cb @ %x\n", (unsigned long)cb));
 
 	switch (event->event) {
 	case RDMA_CM_EVENT_ADDR_RESOLVED:
@@ -308,9 +302,9 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 	struct ibv_recv_wr *bad_wr;
 	int ret;
 	
-	DPRINTF(("2 cq_handler cb @ %x\n", (unsigned long)cb));
+/*	DPRINTF(("2 cq_handler cb @ %x\n", (unsigned long)cb));
 	DPRINTF(("cq_handler sem_post @ %x\n", (unsigned long)&cb->sem));
-	
+*/	
 	while ((ret = ibv_poll_cq(cb->cq, 1, &wc)) == 1) {
 		ret = 0;
 
@@ -342,7 +336,7 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 
 		case IBV_WC_RECV:
 			DEBUG_LOG("recv completion\n");
-			DPRINTF(("IBV_WC_RECV cb->server %d\n", cb->server));
+/*			DPRINTF(("IBV_WC_RECV cb->server %d\n", cb->server));*/
 /*			ret = cb->server ? server_recv(cb, &wc) :
 					   client_recv(cb, &wc);
 */
@@ -359,7 +353,7 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 			}
 
 			sem_post(&cb->sem);
-			DPRINTF(("IBV_WC_RECV success\n"));
+/*			DPRINTF(("IBV_WC_RECV success\n"));*/
 			break;
 
 		default:
@@ -500,7 +494,7 @@ int iperf_setup_qp(struct rdma_cb *cb, struct rdma_cm_id *cm_id)
 		goto err3;
 	}
 
-	DPRINTF(("before iperf_create_qp\n"));
+/*	DPRINTF(("before iperf_create_qp\n"));*/
 	ret = iperf_create_qp(cb);
 	if (ret) {
 		perror("rdma_create_qp");
@@ -533,8 +527,8 @@ int iperf_create_qp(struct rdma_cb *cb)
 	init_attr.send_cq = cb->cq;
 	init_attr.recv_cq = cb->cq;
 
-	DPRINTF(("before rdma_create_qp\n"));
-	DPRINTF(("cb->server: %d\n", cb->server));
+/*	DPRINTF(("before rdma_create_qp\n"));
+	DPRINTF(("cb->server: %d\n", cb->server)); */
 	if (cb->server) {
 		ret = rdma_create_qp(cb->child_cm_id, cb->pd, &init_attr);
 		if (!ret)
@@ -544,7 +538,7 @@ int iperf_create_qp(struct rdma_cb *cb)
 		if (!ret)
 			cb->qp = cb->cm_id->qp;
 	}
-	DPRINTF(("after rdma_create_qp, ret = %d\n", ret));
+/*	DPRINTF(("after rdma_create_qp, ret = %d\n", ret)); */
 
 	return ret;
 }
@@ -764,8 +758,8 @@ int iperf_accept(struct rdma_cb *cb)
 	conn_param.responder_resources = 1;
 	conn_param.initiator_depth = 1;
 
-	DPRINTF(("tid %ld, child_cm_id %p\n", pthread_self(), cb->child_cm_id));
-
+/*	DPRINTF(("tid %ld, child_cm_id %p\n", pthread_self(), cb->child_cm_id));
+*/
 	ret = rdma_accept(cb->child_cm_id, &conn_param);
 	if (ret) {
 		perror("rdma_accept");
@@ -777,7 +771,7 @@ int iperf_accept(struct rdma_cb *cb)
 		fprintf(stderr, "wait for CONNECTED state %d\n", cb->state);
 		return -1;
 	}
-	DPRINTF(("iperf_accept finish with state %d\n", cb->state));
+/*	DPRINTF(("iperf_accept finish with state %d\n", cb->state));*/
 	return 0;
 }
 
@@ -885,7 +879,7 @@ sender(void *arg)
 		
 		/* send data */
 		thislen = send_dat_blk(bufblk, cb);
-		DPRINTF(("send %d bytes\n", thislen));
+/*		DPRINTF(("send %d bytes\n", thislen)); */
 		
 		/* insert to free list */
 		TAILQ_LOCK(&free_tqh);
@@ -961,7 +955,7 @@ reader(void *arg)
 		bufblk->fd = cb->fd;
 		thislen = load_dat_blk(bufblk);
 		
-		DPRINTF(("load %d bytes\n", thislen));
+		/*DPRINTF(("load %d bytes\n", thislen));*/
 		
 		if (thislen <= 0) {
 			TAILQ_LOCK(&free_tqh);
@@ -1074,7 +1068,7 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	bufblk->rdma_sq_wr.wr.rdma.remote_addr = dc_cb->remote_addr;
 	bufblk->rdma_sq_wr.sg_list->length = rhdr.dlen + sizeof(rmsgheader);
 	
-	DPRINTF(("start data transfer using RDMA_WRITE\n"));
+/*	DPRINTF(("start data transfer using RDMA_WRITE\n"));*/
 	DEBUG_LOG("rdma write from lkey %x laddr %x len %d\n",
 		  bufblk->rdma_sq_wr.sg_list->lkey,
 		  bufblk->rdma_sq_wr.sg_list->addr,
@@ -1086,11 +1080,11 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 		return 0;
 	}
 	dc_cb->state != ACTIVE_WRITE_POST;
-	DPRINTF(("send_dat_blk: ibv_post_send finish\n"));
+/*	DPRINTF(("send_dat_blk: ibv_post_send finish\n"));*/
 	/* wait the finish of RDMA_WRITE */
 	sem_wait(&dc_cb->sem);
-	DPRINTF(("sem_wait finish of RDMA_WRITE success\n"));
-/*			if (child_dc_cb->state != ACTIVE_WRITE_FIN) {
+/*	DPRINTF(("sem_wait finish of RDMA_WRITE success\n"));
+			if (child_dc_cb->state != ACTIVE_WRITE_FIN) {
 		fprintf(stderr, \
 			"wait for ACTIVE_WRITE_FIN state %d\n", \
 			child_dc_cb->state);
@@ -1105,9 +1099,9 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 		fprintf(stderr, "post send error %d\n", ret);
 		return 0;
 	}
-	DPRINTF(("send_dat_blk: ibv_post_send finish 2\n"));
+/*	DPRINTF(("send_dat_blk: ibv_post_send finish 2\n"));
 	
-/*	if (tick && (bytes >= hashbytes)) {
+	if (tick && (bytes >= hashbytes)) {
 		printf("\rBytes transferred: %ld", bytes);
 		(void) fflush(stdout);
 		while (bytes >= hashbytes)
@@ -1116,7 +1110,7 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	
 	/* wait the client to notify next round data transfer */
 	sem_wait(&dc_cb->sem);
-	DPRINTF(("wait notify next round data transfer success\n"));
+/*	DPRINTF(("wait notify next round data transfer success\n"));*/
 	
 	return rhdr.dlen;
 }
