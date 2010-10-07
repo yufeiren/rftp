@@ -917,7 +917,6 @@ recver(void *arg)
 		TAILQ_REMOVE(&free_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&free_tqh);
-		syslog(LOG_ERR, "get a free block success");
 	
 		/* recv data */
 		thislen = recv_dat_blk(bufblk, cb);
@@ -1031,7 +1030,6 @@ writer(void *arg)
 		TAILQ_REMOVE(&writer_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&writer_tqh);
-		syslog(LOG_ERR, "get write block success");
 		
 		/* offload data */
 		bufblk->fd = cb->fd;
