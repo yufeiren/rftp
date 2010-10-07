@@ -1852,9 +1852,9 @@ static int rreceive_data(FILE *outstr)
 	TAILQ_INIT(&writer_tqh);
 	
 	dc_cb->fd = fileno(outstr);
-	DPRINTF(("file size is %ld\n", dc_cb->filesize));
+	syslog(LOG_ERR, "before tsf_setup_buf_list");
 	tsf_setup_buf_list(dc_cb);
-	DPRINTF(("tsf_setup_buf_list success\n"));
+	syslog(LOG_ERR, "after tsf_setup_buf_list");
 
 	transflag++;
 	if (setjmp(urgcatch)) {
@@ -1879,6 +1879,7 @@ static int rreceive_data(FILE *outstr)
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("recver create successful\n"));
+		syslog(LOG_ERR, "recver create successful");
 		
 		ret = pthread_create(&writer_tid, NULL, writer, dc_cb);
 		if (ret != 0) {
@@ -1886,6 +1887,7 @@ static int rreceive_data(FILE *outstr)
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("writer create successful\n"));
+		syslog(LOG_ERR, "writer create successful");
 		
 		/* wait for sender and reader finish */
 		ret = pthread_join(recver_tid, &tret);
@@ -1894,6 +1896,7 @@ static int rreceive_data(FILE *outstr)
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("recver join successful\n"));
+		syslog(LOG_ERR, "recver join successful");
 
 		ret = pthread_join(writer_tid, &tret);
 		if (ret != 0) {
@@ -1901,6 +1904,7 @@ static int rreceive_data(FILE *outstr)
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("writer join successful\n"));
+		syslog(LOG_ERR, "writer join successful");
 		
 		/* receive data via rdma connection
 		rmsgheader hdr;
