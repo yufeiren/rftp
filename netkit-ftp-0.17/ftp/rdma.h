@@ -288,7 +288,11 @@ void	*writer(void *);
 
 int load_dat_blk(BUFDATBLK *);
 
+int offload_dat_blk(BUFDATBLK *);
+
 int send_dat_blk(BUFDATBLK *, struct rdma_cb *);
+
+int recv_dat_blk(BUFDATBLK *, struct rdma_cb *);
 
 #ifdef __cplusplus
 } /* end extern "C" */

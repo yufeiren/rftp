@@ -900,7 +900,32 @@ sender(void *arg)
 void *
 recver(void *arg)
 {
-
+	BUFDATBLK *bufblk;
+	struct rdma_cb *cb = (struct rdma_cb *) arg;
+	
+	for ( ; ; ) {
+		/* get a free block */
+		TAILQ_LOCK(&free_tqh);
+		while (TAILQ_EMPTY(&free_tqh))
+			if (TAILQ_WAIT(&free_tqh) != 0)
+				continue;	/* goto while */
+		
+		bufblk = TAILQ_FIRST(&free_tqh);
+		TAILQ_REMOVE(&free_tqh, bufblk, entries);
+		
+		TAILQ_UNLOCK(&free_tqh);
+		
+		/* recv data */
+		recv_dat_blk(bufblk, cb);
+		
+		/* insert into writer list */
+		TAILQ_LOCK(&writer_tqh);
+		TAILQ_INSERT_TAIL(&writer_tqh, bufblk, entries);
+		TAILQ_UNLOCK(&writer_tqh);
+		
+		TAILQ_SIGNAL(&writer_tqh);
+	}
+	
 	pthread_exit(NULL);
 }
 
@@ -959,7 +984,38 @@ reader(void *arg)
 void *
 writer(void *arg)
 {
+	BUFDATBLK *bufblk;
+	rmsgheader rhdr;
+	
+	struct rdma_cb *cb = (struct rdma_cb *) arg;
 
+	for ( ; ; ) {
+		/* get write block */
+		TAILQ_LOCK(&writer_tqh);
+		while (TAILQ_EMPTY(&writer_tqh))
+			if (TAILQ_WAIT(&writer_tqh) != 0)
+				continue;	/* goto while */
+		
+		bufblk = TAILQ_FIRST(&writer_tqh);
+		TAILQ_REMOVE(&writer_tqh, bufblk, entries);
+		
+		TAILQ_UNLOCK(&writer_tqh);
+		
+		/* offload data */
+		bufblk->fd = cb->fd;
+		memcpy(&rhdr, bufblk->rdma_buf, sizeof(rmsgheader));
+		bufblk->buflen = rhdr.dlen + sizeof(rmsgheader);
+
+		offload_dat_blk(bufblk);
+		
+		/* insert to free list */
+		TAILQ_LOCK(&free_tqh);
+		TAILQ_INSERT_TAIL(&free_tqh, bufblk, entries);
+		TAILQ_UNLOCK(&free_tqh);
+		
+		TAILQ_SIGNAL(&free_tqh);
+	}
+	
 	pthread_exit(NULL);
 }
 
@@ -968,6 +1024,13 @@ load_dat_blk(BUFDATBLK *bufblk)
 {
 	return readn(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), bufblk->buflen - sizeof(rmsgheader));
 }
+
+int
+offload_dat_blk(BUFDATBLK *bufblk)
+{
+	return writen(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), bufblk->buflen - sizeof(rmsgheader));
+}
+
 
 int
 send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
@@ -1048,4 +1111,30 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	sem_wait(&dc_cb->sem);
 	
 	return rhdr.dlen;
+}
+
+int
+recv_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *cb)
+{
+	int ret;
+	
+	/* wait for the client send ADV - READ? WRITE? */
+	sem_wait(&cb->sem);
+	
+	/* tell the peer where to write */
+	iperf_format_send(cb, bufblk->rdma_buf, bufblk->rdma_mr);
+	cb->send_buf.mode = kRdmaTrans_ActWrte;
+	cb->send_buf.stat = ACTIVE_WRITE_RESP;
+	tsf_setup_wr(bufblk);
+	
+	ret = ibv_post_send(cb->qp, &cb->sq_wr, &bad_wr);
+	if (ret) {
+		syslog(LOG_ERR, "ibv_post_send: %m");
+		return -1;
+	}
+	
+	/* wait the finish of rdma write */
+	sem_wait(&cb->sem);
+	
+	return 0;
 }

@@ -1847,6 +1847,15 @@ static int rreceive_data(FILE *outstr)
 	struct ibv_send_wr *bad_wr;
 	int ret;
 
+	TAILQ_INIT(&free_tqh);
+	TAILQ_INIT(&sender_tqh);
+	TAILQ_INIT(&writer_tqh);
+	
+	dc_cb->fd = fileno(fout);
+	DPRINTF(("file size is %ld\n", dc_cb->filesize));
+	tsf_setup_buf_list(dc_cb);
+	DPRINTF(("tsf_setup_buf_list success\n"));
+
 	transflag++;
 	if (setjmp(urgcatch)) {
 		transflag = 0;
@@ -1858,33 +1867,68 @@ static int rreceive_data(FILE *outstr)
 	case TYPE_L:
 		signal (SIGALRM, lostconn);
 		
-		/* receive data via rdma connection */
+		/* create recver and writer */
+		
+		pthread_t recver_tid;
+		pthread_t writer_tid;
+		void      *tret;
+		
+		ret = pthread_create(&recver_tid, NULL, recver, dc_cb);
+		if (ret != 0) {
+			perror("pthread_create recver:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("recver create successful\n"));
+		
+		ret = pthread_create(&writer_tid, NULL, writer, dc_cb);
+		if (ret != 0) {
+			perror("pthread_create writer:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("writer create successful\n"));
+		
+		/* wait for sender and reader finish */
+		ret = pthread_join(recver_tid, &tret);
+		if (ret != 0) {
+			perror("pthread_join recver:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("recver join successful\n"));
+
+		ret = pthread_join(writer_tid, &tret);
+		if (ret != 0) {
+			perror("pthread_join writer:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("writer join successful\n"));
+		
+		/* receive data via rdma connection
 		rmsgheader hdr;
 		
-		for ( ; ; ) {
-			/* wait for the client send ADV - READ? WRITE? */
-			sem_wait(&dc_cb->sem);
+		for ( ; ; ) { */
+			/* wait for the client send ADV - READ? WRITE?
+			sem_wait(&dc_cb->sem); */
 		
-			/* tell the peer where to write */
+			/* tell the peer where to write
 			dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
 			dc_cb->send_buf.stat = ACTIVE_WRITE_RESP;
 			ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
 			if (ret) {
 				syslog(LOG_ERR, "ibv_post_send: %m");
 				break;
-			}
+			} */
 			
-			/* wait the finish of rdma write */
-			sem_wait(&dc_cb->sem);
+			/* wait the finish of rdma write
+			sem_wait(&dc_cb->sem); */
 			
-			/* write the data to the file */
+			/* write the data to the file
 			memcpy(&hdr, dc_cb->rdma_sink_buf, sizeof(rmsgheader));
 			cnt = hdr.dlen;
 			
 			writen(fileno(outstr), \
 				dc_cb->rdma_sink_buf + sizeof(rmsgheader), cnt);
-				
-			/* notify the client to go on */
+				 */
+			/* notify the client to go on
 			dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
 			dc_cb->send_buf.stat = ACTIVE_WRITE_FIN;
 			ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
@@ -1892,7 +1936,7 @@ static int rreceive_data(FILE *outstr)
 				syslog(LOG_ERR, "ibv_post_send: %m");
 				break;
 			}
-		}
+		} */
 		
 		return (0);
 
