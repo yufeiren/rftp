@@ -1117,6 +1117,7 @@ int
 recv_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *cb)
 {
 	int ret;
+	struct ibv_send_wr *bad_wr;
 	
 	/* wait for the client send ADV - READ? WRITE? */
 	sem_wait(&cb->sem);
