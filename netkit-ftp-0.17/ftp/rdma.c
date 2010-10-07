@@ -1012,7 +1012,6 @@ writer(void *arg)
 		bufblk->buflen = rhdr.dlen + sizeof(rmsgheader);
 
 		offload_dat_blk(bufblk);
-		syslog(LOG_ERR, "offload data success");
 		
 		/* insert to free list */
 		TAILQ_LOCK(&free_tqh);

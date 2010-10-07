@@ -84,7 +84,7 @@ void help(int argc, char *argv[]);
 static void cmdscanner(int top);
 static char *slurpstring(void);
 
-int rdma_debug = 1;
+int rdma_debug = 0;
 struct acptq acceptedTqh;
 
 static
