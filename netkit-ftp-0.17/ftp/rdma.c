@@ -643,7 +643,7 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 	int i;
 	BUFDATBLK *item;
 	
-	for (i = 0; i < 30; i++) {
+	for (i = 0; i < 50; i++) {
 		if ( (item = (BUFDATBLK *) malloc(sizeof(BUFDATBLK))) == NULL) {
 			perror("tsf_setup_buf_list: malloc");
 			exit(EXIT_FAILURE);
@@ -864,8 +864,8 @@ writen(int fd, const void *ptr, size_t n)
 void *
 sender(void *arg)
 {
-	int totallen;
-	int currlen;
+	off_t totallen;
+	off_t currlen;
 	int thislen;
 	BUFDATBLK *bufblk;
 	
@@ -970,8 +970,8 @@ recver(void *arg)
 void *
 reader(void *arg)
 {
-	int totallen;
-	int currlen;
+	off_t totallen;
+	off_t currlen;
 	int thislen;
 	BUFDATBLK *bufblk;
 	rmsgheader rhdr;

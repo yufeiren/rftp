@@ -211,7 +211,7 @@ typedef struct rdma_cb {
 	struct rdma_cm_id *child_cm_id;	/* connection on server side */
 	
 	int	fd;			/* in and out fd */
-	int	filesize;		/* filesize */
+	off_t	filesize;		/* filesize */
 } rdma_cb;
 
 
