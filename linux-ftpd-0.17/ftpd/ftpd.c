@@ -1851,7 +1851,7 @@ static int rreceive_data(FILE *outstr)
 	TAILQ_INIT(&sender_tqh);
 	TAILQ_INIT(&writer_tqh);
 	
-	dc_cb->fd = fileno(fout);
+	dc_cb->fd = fileno(outstr);
 	DPRINTF(("file size is %ld\n", dc_cb->filesize));
 	tsf_setup_buf_list(dc_cb);
 	DPRINTF(("tsf_setup_buf_list success\n"));
