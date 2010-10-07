@@ -903,6 +903,7 @@ recver(void *arg)
 	BUFDATBLK *bufblk;
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	struct ibv_send_wr *bad_wr;
+	int ret;
 	
 	for ( ; ; ) {
 	
