@@ -1890,14 +1890,14 @@ static int rreceive_data(FILE *outstr)
 		DPRINTF(("writer create successful\n"));
 		syslog(LOG_ERR, "writer create successful");
 		
-		/* wait for sender and reader finish */
+		/* wait for recver and writer finish */
 		ret = pthread_join(recver_tid, &tret);
 		if (ret != 0) {
 			perror("pthread_join recver:");
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("recver join successful\n"));
-		syslog(LOG_ERR, "recver join successful");
+		syslog(LOG_ERR, "recver join success: %ld bytes", (long) tret);
 
 		ret = pthread_join(writer_tid, &tret);
 		if (ret != 0) {
@@ -1905,7 +1905,7 @@ static int rreceive_data(FILE *outstr)
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("writer join successful\n"));
-		syslog(LOG_ERR, "writer join successful");
+		syslog(LOG_ERR, "writer join success: %ld bytes", (long) tret);
 		
 		/* receive data via rdma connection
 		rmsgheader hdr;

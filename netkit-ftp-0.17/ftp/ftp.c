@@ -921,18 +921,18 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			perror("pthread_join reader:");
 			exit(EXIT_FAILURE);
 		}
-		DPRINTF(("reader join successful\n"));
+		DPRINTF(("reader join successful: %ld bytes\n", (long) tret));
 
 		ret = pthread_join(sender_tid, &tret);
 		if (ret != 0) {
 			perror("pthread_join sender:");
 			exit(EXIT_FAILURE);
 		}
-		DPRINTF(("sender join successful\n"));
+		DPRINTF(("sender join successful: %ld bytes\n", (long) tret));
 		
 		DPRINTF(("data transfer finished\n"));
 		
-		bytes = (int) tret;
+		bytes = (long) tret;
 		
 		if (hash && (bytes > 0)) {
 			if (bytes < HASHBYTES)
@@ -1008,6 +1008,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 /*	(void) fclose(dout); no dout in rdma mode */
 	/* closes data as well, so discard it */
 	data = -1;
+	DPRINTF(("getreply"));
 	(void) getreply(0);
 	(void) signal(SIGINT, oldintr);
 	if (oldintp)

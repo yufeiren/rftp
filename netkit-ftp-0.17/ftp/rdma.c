@@ -865,7 +865,8 @@ sender(void *arg)
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	totallen = cb->filesize;
 	
-	for (currlen = 0; currlen < totallen; currlen += thislen) {
+/*	for (currlen = 0; currlen < totallen; currlen += thislen) { */
+	for (currlen = 0; ; currlen += thislen) {
 		/* get send block */
 		TAILQ_LOCK(&sender_tqh);
 		while (TAILQ_EMPTY(&sender_tqh))
@@ -887,6 +888,9 @@ sender(void *arg)
 		TAILQ_UNLOCK(&free_tqh);
 		
 		TAILQ_SIGNAL(&free_tqh);
+		
+		if (thislen == 0)
+			break;
 	}
 	
 	pthread_exit((void *) currlen);
@@ -899,8 +903,10 @@ recver(void *arg)
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	struct ibv_send_wr *bad_wr;
 	int ret;
+	off_t currlen;
+	int thislen;
 	
-	for ( ; ; ) {
+	for (currlen = 0; ; currlen += thislen) {
 		/* get a free block */
 		TAILQ_LOCK(&free_tqh);
 		while (TAILQ_EMPTY(&free_tqh))
@@ -914,7 +920,7 @@ recver(void *arg)
 		syslog(LOG_ERR, "get a free block success");
 	
 		/* recv data */
-		recv_dat_blk(bufblk, cb);
+		thislen = recv_dat_blk(bufblk, cb);
 
 		/* insert into writer list */
 		TAILQ_LOCK(&writer_tqh);
@@ -922,9 +928,12 @@ recver(void *arg)
 		TAILQ_UNLOCK(&writer_tqh);
 		
 		TAILQ_SIGNAL(&writer_tqh);
+		
+		if (thislen == 0)
+			break;
 	}
 	
-	pthread_exit(NULL);
+	pthread_exit((void *) currlen);
 }
 
 void *
@@ -961,6 +970,7 @@ reader(void *arg)
 			TAILQ_LOCK(&free_tqh);
 			TAILQ_INSERT_TAIL(&free_tqh, bufblk, entries);
 			TAILQ_UNLOCK(&free_tqh);
+			break;
 		}
 		
 		rhdr.dlen = thislen;
@@ -972,11 +982,32 @@ reader(void *arg)
 		TAILQ_UNLOCK(&sender_tqh);
 		
 		TAILQ_SIGNAL(&sender_tqh);
-		
 	}
 	
+	/* generate a zero package */
+	/* get free block */
+	TAILQ_LOCK(&free_tqh);
+	while (TAILQ_EMPTY(&free_tqh))
+		if (TAILQ_WAIT(&free_tqh) != 0)
+			continue;	/* goto while */
+	
+	bufblk = TAILQ_FIRST(&free_tqh);
+	TAILQ_REMOVE(&free_tqh, bufblk, entries);
+	
+	TAILQ_UNLOCK(&free_tqh);
+	
+	rhdr.dlen = 0;
+	memcpy(bufblk->rdma_buf, &rhdr, sizeof(rmsgheader));
+	
+	/* insert to sender list */
+	TAILQ_LOCK(&sender_tqh);
+	TAILQ_INSERT_TAIL(&sender_tqh, bufblk, entries);
+	TAILQ_UNLOCK(&sender_tqh);
+	
+	TAILQ_SIGNAL(&sender_tqh);
+	
 	/* data read finished */
-	pthread_exit(NULL);	
+	pthread_exit((void *) currlen);
 }
 
 void *
@@ -984,10 +1015,12 @@ writer(void *arg)
 {
 	BUFDATBLK *bufblk;
 	rmsgheader rhdr;
+	off_t currlen;
+	int thislen;
 	
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 
-	for ( ; ; ) {
+	for (currlen = 0 ; ; currlen += thislen) {
 		/* get write block */
 		TAILQ_LOCK(&writer_tqh);
 		while (TAILQ_EMPTY(&writer_tqh))
@@ -1004,7 +1037,8 @@ writer(void *arg)
 		bufblk->fd = cb->fd;
 		memcpy(&rhdr, bufblk->rdma_buf, sizeof(rmsgheader));
 		bufblk->buflen = rhdr.dlen + sizeof(rmsgheader);
-
+		thislen = rhdr.dlen;
+		
 		offload_dat_blk(bufblk);
 		
 		/* insert to free list */
@@ -1013,9 +1047,12 @@ writer(void *arg)
 		TAILQ_UNLOCK(&free_tqh);
 		
 		TAILQ_SIGNAL(&free_tqh);
+		
+		if (thislen == 0)
+			break;
 	}
 	
-	pthread_exit(NULL);
+	pthread_exit((void *) currlen);
 }
 
 int
@@ -1120,6 +1157,7 @@ recv_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *cb)
 {
 	int ret;
 	struct ibv_send_wr *bad_wr;
+	rmsgheader rhdr;
 	
 	/* wait for the client send ADV - READ? WRITE? */
 	sem_wait(&cb->sem);
@@ -1139,6 +1177,9 @@ recv_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *cb)
 	/* wait the finish of rdma write */
 	sem_wait(&cb->sem);
 	
+	/* get package data len */
+	memcpy(&rhdr, bufblk->rdma_buf, sizeof(rmsgheader));
+	
 	/* notify the client to go on */
 	cb->send_buf.mode = kRdmaTrans_ActWrte;
 	cb->send_buf.stat = ACTIVE_WRITE_FIN;
@@ -1148,5 +1189,5 @@ recv_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *cb)
 		return -1;
 	}
 	
-	return 0;
+	return rhdr.dlen;
 }
