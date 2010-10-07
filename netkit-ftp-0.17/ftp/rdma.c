@@ -1114,9 +1114,10 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 		return 0;
 	}
 	dc_cb->state != ACTIVE_WRITE_POST;
-	
+	DPRINTF(("send_dat_blk: ibv_post_send finish\n"));
 	/* wait the finish of RDMA_WRITE */
 	sem_wait(&dc_cb->sem);
+	DPRINTF(("sem_wait finish of RDMA_WRITE success\n"));
 /*			if (child_dc_cb->state != ACTIVE_WRITE_FIN) {
 		fprintf(stderr, \
 			"wait for ACTIVE_WRITE_FIN state %d\n", \
@@ -1132,6 +1133,7 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 		fprintf(stderr, "post send error %d\n", ret);
 		return 0;
 	}
+	DPRINTF(("send_dat_blk: ibv_post_send finish 2\n"));
 	
 /*	if (tick && (bytes >= hashbytes)) {
 		printf("\rBytes transferred: %ld", bytes);
@@ -1142,6 +1144,7 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	
 	/* wait the client to notify next round data transfer */
 	sem_wait(&dc_cb->sem);
+	DPRINTF(("wait notify next round data transfer success\n"));
 	
 	return rhdr.dlen;
 }
