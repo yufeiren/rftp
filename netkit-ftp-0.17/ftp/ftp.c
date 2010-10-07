@@ -1717,7 +1717,7 @@ rdmadataconn(const char *lmode)
 	
 	rdma_cb_init(child_dc_cb);
 	
-	child_dc_cb->size = 1024 * 1024 * 10;
+	child_dc_cb->size = 1024 * 1024 * 50;
 	child_dc_cb->server = 1;
 	
 	child_dc_cb->child_cm_id = dc_cb->child_cm_id;

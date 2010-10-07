@@ -1519,7 +1519,7 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	rdma_cb_init(dc_cb);
 	syslog(LOG_ERR, "rdma_cb_init finish");
 	
-	dc_cb->size = 1024 * 1024 * 10;
+	dc_cb->size = 1024 * 1024 * 50;
 	syslog(LOG_ERR, "buffer size is %d\n", dc_cb->size);
 	dc_cb->server = 0;
 	
