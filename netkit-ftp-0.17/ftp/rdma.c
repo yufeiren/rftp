@@ -682,7 +682,7 @@ tsf_free_buf_list(void)
 		item = TAILQ_FIRST(&free_tqh);
 		TAILQ_REMOVE(&free_tqh, item, entries);
 		
-		ibv_dereg_mr(item->rdma_buf);
+		ibv_dereg_mr(item->rdma_mr);
 		
 		free(item->rdma_buf);
 	}
