@@ -1794,7 +1794,7 @@ rdmadataconn(const char *lmode)
 	DPRINTF(("iperf_accept success\n"));
 
 	/* release the listening rdma_cm_id */
-	/* cq_thread - cm_thread */
+	/* cq_thread - cm_thread
 DPRINTF(("before: release the listening rdma_cm_id\n"));
 	iperf_free_qp(dc_cb);
 DPRINTF(("before: release the listening rdma_cm_id 1\n"));
@@ -1808,7 +1808,7 @@ DPRINTF(("before: release the listening rdma_cm_id 3\n"));
 DPRINTF(("before: release the listening rdma_cm_id 4\n"));
 	sem_destroy(&dc_cb->sem);
 DPRINTF(("before: release the listening rdma_cm_id 5\n"));
-	free(dc_cb);
+	free(dc_cb); */
 DPRINTF(("after: release the listening rdma_cm_id\n"));
 	return;
 
