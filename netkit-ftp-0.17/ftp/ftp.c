@@ -1797,16 +1797,17 @@ rdmadataconn(const char *lmode)
 	/* cq_thread - cm_thread */
 DPRINTF(("before: release the listening rdma_cm_id\n"));
 	iperf_free_qp(dc_cb);
+DPRINTF(("before: release the listening rdma_cm_id 1\n"));
 	pthread_cancel(dc_cb->cqthread);
 	pthread_join(dc_cb->cqthread, NULL);
-	
+DPRINTF(("before: release the listening rdma_cm_id 2\n"));
 	pthread_cancel(dc_cb->cmthread);
 	pthread_join(dc_cb->cqthread, NULL);
-	
+DPRINTF(("before: release the listening rdma_cm_id 3\n"));
 	rdma_destroy_id(dc_cb->cm_id);
-	
+DPRINTF(("before: release the listening rdma_cm_id 4\n"));
 	sem_destroy(&dc_cb->sem);
-	
+DPRINTF(("before: release the listening rdma_cm_id 5\n"));
 	free(dc_cb);
 DPRINTF(("after: release the listening rdma_cm_id\n"));
 	return;
