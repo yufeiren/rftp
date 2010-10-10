@@ -1008,6 +1008,27 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 /*	(void) fclose(dout); no dout in rdma mode */
 	/* closes data as well, so discard it */
 	data = -1;
+	
+	tsf_free_buf_list();
+	
+	/* release the connected rdma_cm_id */
+	/* cq_thread - cm_thread */
+	rdma_disconnect(child_dc_cb->child_cm_id);
+	iperf_free_buffers(child_dc_cb);
+	iperf_free_qp(child_dc_cb);
+	
+	pthread_cancel(child_dc_cb->cqthread);
+	pthread_join(child_dc_cb->cqthread, NULL);
+	
+	pthread_cancel(child_dc_cb->cmthread);
+	pthread_join(child_dc_cb->cqthread, NULL);
+	
+	rdma_destroy_id(child_dc_cb->child_cm_id);
+	
+	sem_destroy(&child_dc_cb->sem);
+	
+	free(child_dc_cb);
+	
 	DPRINTF(("getreply"));
 	(void) getreply(0);
 	(void) signal(SIGINT, oldintr);
@@ -1771,6 +1792,21 @@ rdmadataconn(const char *lmode)
 		goto err3;
 	}
 	DPRINTF(("iperf_accept success\n"));
+
+	/* release the listening rdma_cm_id */
+	/* cq_thread - cm_thread */
+	iperf_free_qp(dc_cb);
+	pthread_cancel(dc_cb->cqthread);
+	pthread_join(dc_cb->cqthread, NULL);
+	
+	pthread_cancel(dc_cb->cmthread);
+	pthread_join(dc_cb->cqthread, NULL);
+	
+	rdma_destroy_id(dc_cb->cm_id);
+	
+	sem_destroy(&dc_cb->sem);
+	
+	free(dc_cb);
 
 	return;
 

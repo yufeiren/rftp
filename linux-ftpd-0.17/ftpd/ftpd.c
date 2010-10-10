@@ -1907,6 +1907,24 @@ static int rreceive_data(FILE *outstr)
 		DPRINTF(("writer join successful\n"));
 		syslog(LOG_ERR, "writer join success: %ld bytes", (long) tret);
 		
+		/* release the connected rdma_cm_id */
+		/* cq_thread - cm_thread */
+		rdma_disconnect(dc_cb->child_cm_id);
+		iperf_free_buffers(dc_cb);
+		iperf_free_qp(dc_cb);
+		
+		pthread_cancel(dc_cb->cqthread);
+		pthread_join(dc_cb->cqthread, NULL);
+		
+		pthread_cancel(dc_cb->cmthread);
+		pthread_join(dc_cb->cqthread, NULL);
+		
+		rdma_destroy_id(dc_cb->child_cm_id);
+		
+		sem_destroy(&dc_cb->sem);
+		
+		free(dc_cb);
+		
 		/* receive data via rdma connection
 		rmsgheader hdr;
 		
@@ -1985,6 +2003,8 @@ static int rreceive_data(FILE *outstr)
 		transflag = 0;
 		return (-1);
 	}
+	
+	tsf_free_buf_list();
 
 data_err:
 	transflag = 0;

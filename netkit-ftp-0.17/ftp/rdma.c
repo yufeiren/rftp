@@ -669,6 +669,27 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 	return 0;
 }
 
+void
+tsf_free_buf_list(void)
+{
+	BUFDATBLK *item;
+	
+	/* free free list - not thread safe */
+	for ( ; ; ) {
+		if (TAILQ_EMPTY(&free_tqh))
+			break;
+		
+		item = TAILQ_FIRST(&free_tqh);
+		TAILQ_REMOVE(&free_tqh, item, entries);
+		
+		ibv_dereg_mr(item->rdma_buf);
+		
+		free(item->rdma_buf);
+	}
+	
+	return;
+}
+
 void iperf_free_buffers(struct rdma_cb *cb)
 {
 	DEBUG_LOG("rping_free_buffers called on cb %p\n", cb);

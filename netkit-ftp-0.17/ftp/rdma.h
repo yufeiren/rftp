@@ -252,6 +252,8 @@ int iperf_setup_buffers(struct rdma_cb *cb);
 
 int tsf_setup_buf_list(struct rdma_cb *cb);
 
+void tsf_free_buf_list(void);
+
 void iperf_free_buffers(struct rdma_cb *cb);
 
 void iperf_setup_wr(struct rdma_cb *cb);
