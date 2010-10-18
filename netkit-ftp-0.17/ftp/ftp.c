@@ -1769,7 +1769,8 @@ rdmadataconn(const char *lmode)
 	DPRINTF(("before ibv_post_recv\n"));
 	ret = ibv_post_recv(child_dc_cb->qp, &child_dc_cb->rq_wr, &bad_recv_wr);
 	if (ret) {
-		fprintf(stderr, "ibv_post_recv failed: %d\n", ret);
+		fprintf(stderr, "ibv_post_recv failed: %d (%d, %s)\n", \
+			ret, errno, strerror(errno));
 		goto err2;
 	}
 	DPRINTF(("ibv_post_recv success\n"));
