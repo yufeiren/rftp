@@ -870,10 +870,10 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			return;
 		}
 	DPRINTF(("%s %s successful\n", cmd, remote));
-/*	dout = dataconn(lmode);
+/*	dout = dataconn(lmode); */
 	DPRINTF(("rdmadataconn start\n"));
 	rdmadataconn(lmode);
-	DPRINTF(("rdmadataconn successful\n")); */
+	DPRINTF(("rdmadataconn successful\n"));
 	
 /*	if (dout == NULL)
 		goto abort; */
@@ -1649,10 +1649,6 @@ noport:
 		return(1);
 	}
 	DPRINTF(("rdma_listen successful\n"));
-	
-	DPRINTF(("rdmadataconn start\n"));
-	rdmadataconn("w"); /* rdmadataconn(lmode); */
-	DPRINTF(("rdmadataconn successful\n"));
 	
 	if (sendport) {
 		a = (char *)&data_addr.sin_addr;
