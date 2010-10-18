@@ -576,7 +576,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 		goto err1;
 	}
 
-/* rdma_sink_mr */
+/* rdma_sink_mr
 	cb->rdma_sink_buf = malloc(cb->size + sizeof(rmsgheader));
 	if (!cb->rdma_sink_buf) {
 		fprintf(stderr, "rdma_sink_buf malloc failed\n");
@@ -591,9 +591,9 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr rdma_sink_buf");
 		ret = errno;
 		goto err3;
-	}
+	} */
 
-/* rdma_source_mr */
+/* rdma_source_mr
 	cb->rdma_source_buf = malloc(cb->size + sizeof(rmsgheader));
 	if (!cb->rdma_source_buf) {
 		fprintf(stderr, "rdma_source_buf malloc failed\n");
@@ -610,7 +610,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr rdma_source_mr");
 		ret = errno;
 		goto err5;
-	}
+	} */
 
 	iperf_setup_wr(cb);
 	DEBUG_LOG("allocated & registered buffers...\n");
@@ -692,13 +692,13 @@ tsf_free_buf_list(void)
 
 void iperf_free_buffers(struct rdma_cb *cb)
 {
-	DEBUG_LOG("rping_free_buffers called on cb %p\n", cb);
+	DEBUG_LOG("free_buffers called on cb %p\n", cb);
 	ibv_dereg_mr(cb->recv_mr);
 	ibv_dereg_mr(cb->send_mr);
-	ibv_dereg_mr(cb->rdma_sink_mr);
+/*	ibv_dereg_mr(cb->rdma_sink_mr);
 	ibv_dereg_mr(cb->rdma_source_mr);
 	free(cb->rdma_sink_buf);
-	free(cb->rdma_source_buf);
+	free(cb->rdma_source_buf); */
 }
 
 

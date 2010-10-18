@@ -1908,22 +1908,27 @@ static int rreceive_data(FILE *outstr)
 		syslog(LOG_ERR, "writer join success: %ld bytes", (long) tret);
 		
 		/* release the connected rdma_cm_id */
-		/* cq_thread - cm_thread
+		/* cq_thread - cm_thread */
+		tsf_free_buf_list();
+		
 		rdma_disconnect(dc_cb->child_cm_id);
 		iperf_free_buffers(dc_cb);
 		iperf_free_qp(dc_cb);
+		syslog(LOG_ERR, "free buffers and qp success");
 		
 		pthread_cancel(dc_cb->cqthread);
 		pthread_join(dc_cb->cqthread, NULL);
+		syslog(LOG_ERR, "pthread_join cqthread success");
 		
 		pthread_cancel(dc_cb->cmthread);
-		pthread_join(dc_cb->cqthread, NULL);
+		pthread_join(dc_cb->cmthread, NULL);
+		syslog(LOG_ERR, "pthread_join cmthread success");
 		
 		rdma_destroy_id(dc_cb->child_cm_id);
 		
 		sem_destroy(&dc_cb->sem);
 		
-		free(dc_cb); */
+		free(dc_cb);
 		
 		/* receive data via rdma connection
 		rmsgheader hdr;

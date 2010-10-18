@@ -1010,18 +1010,21 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	data = -1;
 	
 	tsf_free_buf_list();
-	
+	DPRINTF(("tsf_free_buf_list success\n"));
 	/* release the connected rdma_cm_id */
 	/* cq_thread - cm_thread */
 	rdma_disconnect(child_dc_cb->child_cm_id);
 	iperf_free_buffers(child_dc_cb);
 	iperf_free_qp(child_dc_cb);
+	DPRINTF(("free buffers and qp success\n"));
 	
 	pthread_cancel(child_dc_cb->cqthread);
 	pthread_join(child_dc_cb->cqthread, NULL);
+	DPRINTF(("pthread_join cqthread success\n"));
 	
 	pthread_cancel(child_dc_cb->cmthread);
-	pthread_join(child_dc_cb->cqthread, NULL);
+	pthread_join(child_dc_cb->cmthread, NULL);
+	DPRINTF(("pthread_join cmthread success\n"));
 	
 	rdma_destroy_id(child_dc_cb->child_cm_id);
 	
