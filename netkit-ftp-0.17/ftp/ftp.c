@@ -1651,7 +1651,7 @@ noport:
 	DPRINTF(("rdma_listen successful\n"));
 	
 	DPRINTF(("rdmadataconn start\n"));
-	rdmadataconn(lmode);
+	rdmadataconn("w"); /* rdmadataconn(lmode); */
 	DPRINTF(("rdmadataconn successful\n"));
 	
 	if (sendport) {
