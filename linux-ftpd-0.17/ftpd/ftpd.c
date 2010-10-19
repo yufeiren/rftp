@@ -1891,7 +1891,7 @@ static int rreceive_data(FILE *outstr)
 		syslog(LOG_ERR, "writer create successful");*/
 		
 		syslog(LOG_ERR, "start sleep");
-		sleep(2);
+		sleep(5);
 		syslog(LOG_ERR, "finish sleep");
 		
 		/* wait for recver and writer finish */
