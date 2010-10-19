@@ -938,9 +938,12 @@ recver(void *arg)
 		TAILQ_REMOVE(&free_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&free_tqh);
+		
+		syslog(LOG_ERR, "recver: get a free block");
 	
 		/* recv data */
 		thislen = recv_dat_blk(bufblk, cb);
+		syslog(LOG_ERR, "recver: recv data");
 
 		/* insert into writer list */
 		TAILQ_LOCK(&writer_tqh);
@@ -948,6 +951,7 @@ recver(void *arg)
 		TAILQ_UNLOCK(&writer_tqh);
 		
 		TAILQ_SIGNAL(&writer_tqh);
+		syslog(LOG_ERR, "recver: insert into writer list");
 		
 		if (thislen == 0)
 			break;
@@ -1051,6 +1055,7 @@ writer(void *arg)
 		TAILQ_REMOVE(&writer_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&writer_tqh);
+		syslog(LOG_ERR, "writer: get write block");
 		
 		/* offload data */
 		bufblk->fd = cb->fd;
@@ -1059,14 +1064,14 @@ writer(void *arg)
 		thislen = rhdr.dlen;
 		
 		offload_dat_blk(bufblk);
-		
+		syslog(LOG_ERR, "writer: offload data");
 		/* insert to free list */
 		TAILQ_LOCK(&free_tqh);
 		TAILQ_INSERT_TAIL(&free_tqh, bufblk, entries);
 		TAILQ_UNLOCK(&free_tqh);
 		
 		TAILQ_SIGNAL(&free_tqh);
-		
+		syslog(LOG_ERR, "writer: insert to free list");
 		if (thislen == 0)
 			break;
 	}
