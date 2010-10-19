@@ -1882,13 +1882,13 @@ static int rreceive_data(FILE *outstr)
 		DPRINTF(("recver create successful\n"));
 		syslog(LOG_ERR, "recver create successful");
 		
-		ret = pthread_create(&writer_tid, NULL, writer, dc_cb);
+/*		ret = pthread_create(&writer_tid, NULL, writer, dc_cb);
 		if (ret != 0) {
 			perror("pthread_create writer:");
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("writer create successful\n"));
-		syslog(LOG_ERR, "writer create successful");
+		syslog(LOG_ERR, "writer create successful");*/
 		
 		syslog(LOG_ERR, "start sleep");
 		sleep(2);
