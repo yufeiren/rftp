@@ -1591,10 +1591,10 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	syslog(LOG_ERR, "rdma_connect_client start");
 	ret = rdma_connect_client(dc_cb);
 	if (ret) {
-		syslog(LOG_ERR, "iperf_connect_client: %m");
+		syslog(LOG_ERR, "rdma_connect_client: %m");
 		goto err3;
 	}
-	
+	syslog(LOG_ERR, "rdma_connect_client success");
 	return (0);
 	
 err3:
@@ -1889,6 +1889,10 @@ static int rreceive_data(FILE *outstr)
 		}
 		DPRINTF(("writer create successful\n"));
 		syslog(LOG_ERR, "writer create successful");
+		
+		syslog(LOG_ERR, "start sleep");
+		sleep(2);
+		syslog(LOG_ERR, "finish sleep");
 		
 		/* wait for recver and writer finish */
 		ret = pthread_join(recver_tid, &tret);
