@@ -1912,7 +1912,7 @@ static int rreceive_data(FILE *outstr)
 		tsf_free_buf_list();
 		syslog(LOG_ERR, "tsf_free_buf_list finished");
 		
-		rdma_disconnect(dc_cb->child_cm_id);
+		rdma_disconnect(dc_cb->cm_id);
 		syslog(LOG_ERR, "rdma_disconnect finished");
 		iperf_free_buffers(dc_cb);
 		syslog(LOG_ERR, "iperf_free_buffers finished");
