@@ -1927,7 +1927,7 @@ static int rreceive_data(FILE *outstr)
 		pthread_join(dc_cb->cmthread, NULL);
 		syslog(LOG_ERR, "pthread_join cmthread success");
 		
-		rdma_destroy_id(dc_cb->child_cm_id);
+		rdma_destroy_id(dc_cb->cm_id);
 		
 		sem_destroy(&dc_cb->sem);
 		
