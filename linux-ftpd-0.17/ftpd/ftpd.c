@@ -1874,21 +1874,21 @@ static int rreceive_data(FILE *outstr)
 		pthread_t writer_tid;
 		void      *tret;
 		
-/*		ret = pthread_create(&recver_tid, NULL, recver, dc_cb);
+		ret = pthread_create(&recver_tid, NULL, recver, dc_cb);
 		if (ret != 0) {
 			perror("pthread_create recver:");
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("recver create successful\n"));
-		syslog(LOG_ERR, "recver create successful"); */
+		syslog(LOG_ERR, "recver create successful");
 		
-/*		ret = pthread_create(&writer_tid, NULL, writer, dc_cb);
+		ret = pthread_create(&writer_tid, NULL, writer, dc_cb);
 		if (ret != 0) {
 			perror("pthread_create writer:");
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("writer create successful\n"));
-		syslog(LOG_ERR, "writer create successful");*/
+		syslog(LOG_ERR, "writer create successful");
 		
 		syslog(LOG_ERR, "start sleep");
 		sleep(5);

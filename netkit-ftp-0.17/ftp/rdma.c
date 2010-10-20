@@ -161,7 +161,7 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 	if (cb->recv_buf.mode == kRdmaTrans_ActWrte) {
 		switch (cb->recv_buf.stat) {
 		case ACTIVE_WRITE_ADV:
-			iperf_format_send(cb, cb->rdma_sink_buf, cb->rdma_sink_mr);
+/*			iperf_format_send(cb, cb->rdma_sink_buf, cb->rdma_sink_mr); */
 			cb->send_buf.stat = ACTIVE_WRITE_RESP;
 			/* ibv_post_send(cb->qp, &cb->sq_wr, &bad_wr); */
 			break;
@@ -311,6 +311,7 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 		if (wc.status) {
 			fprintf(stderr, "cq completion failed status %d\n",
 				wc.status);
+syslog(LOG_ERR, "cq completion failed status %d", wc.status);
 			// IBV_WC_WR_FLUSH_ERR == 5
 			if (wc.status != IBV_WC_WR_FLUSH_ERR)
 				ret = -1;
