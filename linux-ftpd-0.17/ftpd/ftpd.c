@@ -1890,10 +1890,6 @@ static int rreceive_data(FILE *outstr)
 		DPRINTF(("writer create successful\n"));
 		syslog(LOG_ERR, "writer create successful");
 		
-		syslog(LOG_ERR, "start sleep");
-		sleep(5);
-		syslog(LOG_ERR, "finish sleep");
-		
 		/* wait for recver and writer finish */
 		ret = pthread_join(recver_tid, &tret);
 		if (ret != 0) {
@@ -1914,9 +1910,12 @@ static int rreceive_data(FILE *outstr)
 		/* release the connected rdma_cm_id */
 		/* cq_thread - cm_thread */
 		tsf_free_buf_list();
+		syslog(LOG_ERR, "tsf_free_buf_list finished");
 		
 		rdma_disconnect(dc_cb->child_cm_id);
+		syslog(LOG_ERR, "rdma_disconnect finished");
 		iperf_free_buffers(dc_cb);
+		syslog(LOG_ERR, "iperf_free_buffers finished");
 		iperf_free_qp(dc_cb);
 		syslog(LOG_ERR, "free buffers and qp success");
 		
