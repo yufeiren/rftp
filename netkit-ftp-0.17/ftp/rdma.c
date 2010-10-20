@@ -383,26 +383,33 @@ void *cq_thread(void *arg)
 	int ret;
 	
 	DEBUG_LOG("cq_thread started\n");
-
-	while (1) {	
+syslog(LOG_ERR, "cq_thread: start");
+	while (1) {
+syslog(LOG_ERR, "cq_thread: before pthread_testcancel");
 		pthread_testcancel();
-
+syslog(LOG_ERR, "cq_thread: after pthread_testcancel");
 		ret = ibv_get_cq_event(cb->channel, &ev_cq, &ev_ctx);
 		if (ret) {
 			fprintf(stderr, "Failed to get cq event!\n");
+syslog(LOG_ERR, "cq_thread: Failed to get cq event!");
 			pthread_exit(NULL);
 		}
 		if (ev_cq != cb->cq) {
 			fprintf(stderr, "Unknown CQ!\n");
+syslog(LOG_ERR, "cq_thread: Unknown CQ!");
 			pthread_exit(NULL);
 		}
 		ret = ibv_req_notify_cq(cb->cq, 0);
 		if (ret) {
 			fprintf(stderr, "Failed to set notify!\n");
+syslog(LOG_ERR, "Failed to set notify!");
 			pthread_exit(NULL);
 		}
+syslog(LOG_ERR, "before iperf_cq_event_handler");
 		ret = iperf_cq_event_handler(cb);
+syslog(LOG_ERR, "after iperf_cq_event_handler %d", ret);
 		ibv_ack_cq_events(cb->cq, 1);
+syslog(LOG_ERR, "after ibv_ack_cq_events");
 		if (ret)
 			pthread_exit(NULL);
 	}
