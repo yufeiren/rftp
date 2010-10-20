@@ -1817,15 +1817,15 @@ DPRINTF(("after: release the listening rdma_cm_id\n"));
 	return;
 
 err3:
-	pthread_cancel(dc_cb->cqthread);
-	pthread_join(dc_cb->cqthread, NULL);
+	pthread_cancel(child_dc_cb->cqthread);
+	pthread_join(child_dc_cb->cqthread, NULL);
 err2:
-	iperf_free_buffers(dc_cb);
+	iperf_free_buffers(child_dc_cb);
 err1:
-	iperf_free_qp(dc_cb);
+	iperf_free_qp(child_dc_cb);
 err0:
 	printf("rdmadataconn error\n");
-	return;
+	exit(EXIT_FAILURE);
 }
 
 static void
