@@ -1518,12 +1518,9 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	}
 	
 	memset(dc_cb, '\0', sizeof(rdma_cb));
-	syslog(LOG_ERR, "rdma_cb_init start");
 	rdma_cb_init(dc_cb);
-	syslog(LOG_ERR, "rdma_cb_init finish");
 	
 	dc_cb->size = 1024 * 1024 * 50;
-	syslog(LOG_ERR, "buffer size is %d\n", dc_cb->size);
 	dc_cb->server = 0;
 	
 	sem_init(&dc_cb->sem, 0, 0);
@@ -1546,7 +1543,6 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		return NULL;
 	}
 	
-	syslog(LOG_ERR, "rdma_resolve_addr start");
 	ret = rdma_resolve_addr(dc_cb->cm_id, NULL, \
 		(struct sockaddr *) &data_dest, 2000);
 	if (ret) {
@@ -1554,7 +1550,6 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		return;
 	}
 	
-	syslog(LOG_ERR, "sem_wait ROUTE_RESOLVED start");
 	sem_wait(&dc_cb->sem);
 	if (dc_cb->state != ROUTE_RESOLVED) {
 		syslog(LOG_ERR, "waiting for addr/route resolution state %d\n", 
@@ -1562,25 +1557,24 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		return;
 	}
 	
-	syslog(LOG_ERR, "iperf_setup_qp start");
 	ret = iperf_setup_qp(dc_cb, dc_cb->cm_id);
 	if (ret) {
 		syslog(LOG_ERR, "iperf_setup_qp: %m");
 		goto err0;
 	}
-	syslog(LOG_ERR, "iperf_setup_buffers start");
+	
 	ret = iperf_setup_buffers(dc_cb);
 	if (ret) {
 		syslog(LOG_ERR, "iperf_setup_buffers: %m");
 		goto err1;
 	}
-	syslog(LOG_ERR, "ibv_post_recv start");
+	
 	ret = ibv_post_recv(dc_cb->qp, &dc_cb->rq_wr, &bad_recv_wr);
 	if (ret) {
 		syslog(LOG_ERR, "ibv_post_recv: %m");
 		goto err2;
 	}
-	syslog(LOG_ERR, "pthread_create cq_thread start");
+	
 	ret = pthread_create(&dc_cb->cqthread, NULL, cq_thread, dc_cb);
 	if (ret) {
 		syslog(LOG_ERR, "pthread_create: %m");
@@ -1588,13 +1582,12 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	}
 	
 	/* rdma connect */
-	syslog(LOG_ERR, "rdma_connect_client start");
 	ret = rdma_connect_client(dc_cb);
 	if (ret) {
 		syslog(LOG_ERR, "rdma_connect_client: %m");
 		goto err3;
 	}
-	syslog(LOG_ERR, "rdma_connect_client success");
+	
 	return (0);
 	
 err3:
@@ -1853,9 +1846,7 @@ static int rreceive_data(FILE *outstr)
 	TAILQ_INIT(&writer_tqh);
 	
 	dc_cb->fd = fileno(outstr);
-	syslog(LOG_ERR, "before tsf_setup_buf_list");
 	tsf_setup_buf_list(dc_cb);
-	syslog(LOG_ERR, "after tsf_setup_buf_list");
 
 	transflag++;
 	if (setjmp(urgcatch)) {
@@ -1880,7 +1871,6 @@ static int rreceive_data(FILE *outstr)
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("recver create successful\n"));
-		syslog(LOG_ERR, "recver create successful");
 		
 		ret = pthread_create(&writer_tid, NULL, writer, dc_cb);
 		if (ret != 0) {
@@ -1888,7 +1878,6 @@ static int rreceive_data(FILE *outstr)
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("writer create successful\n"));
-		syslog(LOG_ERR, "writer create successful");
 		
 		/* wait for recver and writer finish */
 		ret = pthread_join(recver_tid, &tret);
@@ -1910,12 +1899,9 @@ static int rreceive_data(FILE *outstr)
 		/* release the connected rdma_cm_id */
 		/* cq_thread - cm_thread */
 		tsf_free_buf_list();
-		syslog(LOG_ERR, "tsf_free_buf_list finished");
 		
 		rdma_disconnect(dc_cb->cm_id);
-		syslog(LOG_ERR, "rdma_disconnect finished");
 		iperf_free_buffers(dc_cb);
-		syslog(LOG_ERR, "iperf_free_buffers finished");
 		iperf_free_qp(dc_cb);
 		syslog(LOG_ERR, "free buffers and qp success");
 		

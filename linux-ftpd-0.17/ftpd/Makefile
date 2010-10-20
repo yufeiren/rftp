@@ -1,6 +1,6 @@
 include ../MCONFIG
 
-CFLAGS+=-I../support -I.. -g
+CFLAGS+=-I../support -I..
 LIBS+=-L../support -lsupport  -libverbs -lrdmacm -lpthread
 
 

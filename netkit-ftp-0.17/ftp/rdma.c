@@ -235,7 +235,6 @@ int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 
 	case RDMA_CM_EVENT_ESTABLISHED:
 		DEBUG_LOG("ESTABLISHED\n");
-syslog(LOG_ERR, "connection ESTABLISHED");
 		/*
 		 * Server will wake up when first RECV completes.
 		 */
@@ -311,7 +310,7 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 		if (wc.status) {
 			fprintf(stderr, "cq completion failed status %d\n",
 				wc.status);
-syslog(LOG_ERR, "cq completion failed status %d", wc.status);
+			syslog(LOG_ERR, "cq completion failed status %d", wc.status);
 			// IBV_WC_WR_FLUSH_ERR == 5
 			if (wc.status != IBV_WC_WR_FLUSH_ERR)
 				ret = -1;
@@ -384,33 +383,30 @@ void *cq_thread(void *arg)
 	int ret;
 	
 	DEBUG_LOG("cq_thread started\n");
-syslog(LOG_ERR, "cq_thread: start");
+
 	while (1) {
-syslog(LOG_ERR, "cq_thread: before pthread_testcancel");
 		pthread_testcancel();
-syslog(LOG_ERR, "cq_thread: after pthread_testcancel");
+
 		ret = ibv_get_cq_event(cb->channel, &ev_cq, &ev_ctx);
 		if (ret) {
 			fprintf(stderr, "Failed to get cq event!\n");
-syslog(LOG_ERR, "cq_thread: Failed to get cq event!");
+			syslog(LOG_ERR, "cq_thread: Failed to get cq event!");
 			pthread_exit(NULL);
 		}
 		if (ev_cq != cb->cq) {
 			fprintf(stderr, "Unknown CQ!\n");
-syslog(LOG_ERR, "cq_thread: Unknown CQ!");
+			syslog(LOG_ERR, "cq_thread: Unknown CQ!");
 			pthread_exit(NULL);
 		}
 		ret = ibv_req_notify_cq(cb->cq, 0);
 		if (ret) {
 			fprintf(stderr, "Failed to set notify!\n");
-syslog(LOG_ERR, "Failed to set notify!");
+			syslog(LOG_ERR, "Failed to set notify!");
 			pthread_exit(NULL);
 		}
-syslog(LOG_ERR, "before iperf_cq_event_handler");
+
 		ret = iperf_cq_event_handler(cb);
-syslog(LOG_ERR, "after iperf_cq_event_handler %d", ret);
 		ibv_ack_cq_events(cb->cq, 1);
-syslog(LOG_ERR, "after ibv_ack_cq_events");
 		if (ret)
 			pthread_exit(NULL);
 	}
@@ -946,12 +942,9 @@ recver(void *arg)
 		TAILQ_REMOVE(&free_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&free_tqh);
-		
-		syslog(LOG_ERR, "recver: get a free block");
 	
 		/* recv data */
 		thislen = recv_dat_blk(bufblk, cb);
-		syslog(LOG_ERR, "recver: recv data");
 
 		/* insert into writer list */
 		TAILQ_LOCK(&writer_tqh);
@@ -959,7 +952,6 @@ recver(void *arg)
 		TAILQ_UNLOCK(&writer_tqh);
 		
 		TAILQ_SIGNAL(&writer_tqh);
-		syslog(LOG_ERR, "recver: insert into writer list");
 		
 		if (thislen == 0)
 			break;
@@ -1063,7 +1055,6 @@ writer(void *arg)
 		TAILQ_REMOVE(&writer_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&writer_tqh);
-		syslog(LOG_ERR, "writer: get write block");
 		
 		/* offload data */
 		bufblk->fd = cb->fd;
@@ -1072,14 +1063,14 @@ writer(void *arg)
 		thislen = rhdr.dlen;
 		
 		offload_dat_blk(bufblk);
-		syslog(LOG_ERR, "writer: offload data");
+		
 		/* insert to free list */
 		TAILQ_LOCK(&free_tqh);
 		TAILQ_INSERT_TAIL(&free_tqh, bufblk, entries);
 		TAILQ_UNLOCK(&free_tqh);
 		
 		TAILQ_SIGNAL(&free_tqh);
-		syslog(LOG_ERR, "writer: insert to free list");
+		
 		if (thislen == 0)
 			break;
 	}
