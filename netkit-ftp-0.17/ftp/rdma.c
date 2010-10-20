@@ -235,7 +235,7 @@ int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 
 	case RDMA_CM_EVENT_ESTABLISHED:
 		DEBUG_LOG("ESTABLISHED\n");
-
+syslog(LOG_ERR, "connection ESTABLISHED");
 		/*
 		 * Server will wake up when first RECV completes.
 		 */
