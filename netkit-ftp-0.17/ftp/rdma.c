@@ -308,9 +308,8 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 		ret = 0;
 
 		if (wc.status) {
-			fprintf(stderr, "cq completion failed status %d\n",
+			syslog(LOG_ERR, "cq completion failed status %d", \
 				wc.status);
-			syslog(LOG_ERR, "cq completion failed status %d", wc.status);
 			// IBV_WC_WR_FLUSH_ERR == 5
 			if (wc.status != IBV_WC_WR_FLUSH_ERR)
 				ret = -1;
