@@ -1740,6 +1740,8 @@ rdmadataconn(const char *lmode)
 		goto err0;
 	}
 	
+	memset(child_dc_cb, '\0', sizeof(rdma_cb));
+	
 	rdma_cb_init(child_dc_cb);
 	
 	child_dc_cb->size = 1024 * 1024 * 50;
