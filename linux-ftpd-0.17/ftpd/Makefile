@@ -29,7 +29,7 @@ rftpd: $(OBJS)
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@
 
 install: rftpd
-	install -s -m$(DAEMONMODE) rftpd $(INSTALLROOT)$(BINDIR)/rftpd
+	install -s -m$(DAEMONMODE) rftpd $(INSTALLROOT)$(SBINDIR)/rftpd
 
 clean:
 	rm -f *.o ftpcmd.c y.tab.h rftpd

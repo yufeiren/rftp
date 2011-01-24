@@ -33,4 +33,4 @@ make install prefix=$RPM_BUILD_ROOT/usr
 
 %files
 %defattr(-,root,root)
-/usr/bin/rftpd
+/usr/sbin/rftpd
