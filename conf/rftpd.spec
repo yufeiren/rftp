@@ -28,7 +28,7 @@ chmod +x ./configure
 make
 
 %install
-test -z "$RPM_BUILD_ROOT/usr/bin" || /bin/mkdir -p $RPM_BUILD_ROOT/usr/bin
+test -z "$RPM_BUILD_ROOT/usr/bin" || /bin/mkdir -p $RPM_BUILD_ROOT/usr/sbin
 make install prefix=$RPM_BUILD_ROOT/usr
 
 %files
