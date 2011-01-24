@@ -20,5 +20,5 @@ install: rftp
 	install -s -m$(BINMODE) rftp $(INSTALLROOT)$(BINDIR)
 
 clean:
-	rm -f *.o rftp
+	rm -f rftp *.o
 
