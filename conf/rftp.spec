@@ -23,6 +23,7 @@ RDMA FTP client application. Based on OFED librdmacm and libibverbs.
 %setup -q
 
 %build
+chmod +x ./configure
 ./configure --exec-prefix=$RPM_BUILD_ROOT/usr
 make
 
