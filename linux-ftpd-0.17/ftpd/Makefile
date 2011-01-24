@@ -16,7 +16,7 @@ OBJS=ftpd.o ftpcmd.o logutmp.o logwtmp.o popen.o rdma.o
 # CFLAGS+=-DTCPWRAPPERS
 # LDADD+=	-lwrap
 
-all: ftpd
+all: rftpd
 
 %.o: %.c
 	$(CC) $(CFLAGS) -DHASSETPROCTITLE $< -c
@@ -25,17 +25,14 @@ ftpcmd.c: %.c: %.y
 	$(YACC) $<
 	-mv -f y.tab.c $@
 
-ftpd: $(OBJS)
+rftpd: $(OBJS)
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@
 
-install: ftpd
-	install -s -m$(DAEMONMODE) ftpd $(INSTALLROOT)$(SBINDIR)/in.ftpd
-	install -m$(MANMODE) ftpusers.5 $(INSTALLROOT)$(MANDIR)/man5/ftpusers.5
-	install -m$(MANMODE) ftpd.8 $(INSTALLROOT)$(MANDIR)/man8/in.ftpd.8
-	ln -sf in.ftpd.8 $(INSTALLROOT)$(MANDIR)/man8/ftpd.8
+install: rftpd
+	install -s -m$(DAEMONMODE) rftpd $(INSTALLROOT)$(SBINDIR)/in.rftpd
 
 clean:
-	rm -f *.o ftpcmd.c y.tab.h ftpd
+	rm -f *.o ftpcmd.c y.tab.h rftpd
 
 
 ftpd.o: pathnames.h ../version.h
