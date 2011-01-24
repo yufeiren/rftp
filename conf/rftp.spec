@@ -27,6 +27,7 @@ RDMA FTP client application. Based on OFED librdmacm and libibverbs.
 make
 
 %install
+test -z "$RPM_BUILD_ROOT/usr/bin" || /bin/mkdir -p $RPM_BUILD_ROOT/usr/bin
 make install prefix=$RPM_BUILD_ROOT/usr
 
 %files
