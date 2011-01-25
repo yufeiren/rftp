@@ -36,5 +36,5 @@ make install prefix=$RPM_BUILD_ROOT/usr
 /usr/bin/rftp
 
 %changelog
-*Sun Jan 25 2011 <renyufei83@gmail.com> 1
+*Tue Jan 25 2011 <renyufei83@gmail.com>
 --Initial RPM Build.
