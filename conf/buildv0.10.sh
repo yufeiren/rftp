@@ -8,11 +8,11 @@ rm -rf $RPMDIR/BUILD/*
 
 # cp configuration file
 cp $GITSRCDIR/conf/rftp.spec $RPMDIR/SPECS/
-cp $GITSRCDIR/conf/rftpd.spec $RPMDIR/SPECS
+cp $GITSRCDIR/conf/rftpd.spec $RPMDIR/SPECS/
 
 # client: git archive
 cd $GITSRCDIR/netkit-ftp-0.17
-git archive --format=tar --prefix=rftp-0.10/ v0.10 | gzip -9 > $RPMDIR/SOURCES/rftp-0.10.tar.gz
+git archive --format=tar --prefix=rcftp-0.10/ HEAD | gzip -9 > $RPMDIR/SOURCES/rcftp-0.10.tar.gz
 
 # build client
 cd $RPMDIR/SPECS/

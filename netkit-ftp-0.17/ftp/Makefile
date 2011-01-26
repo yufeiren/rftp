@@ -1,4 +1,4 @@
-all: rftp
+all: rcftp
 
 include ../MCONFIG
 include ../MRULES
@@ -8,7 +8,7 @@ CFLAGS += -D__USE_READLINE__
 LIBS += -lreadline $(LIBTERMCAP) -libverbs -lrdmacm -lpthread
 endif
 
-rftp: cmds.o cmdtab.o domacro.o ftp.o glob.o main.o ruserpass.o rdma.o
+rcftp: cmds.o cmdtab.o domacro.o ftp.o glob.o main.o ruserpass.o rdma.o
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@
 
 domacro.o ftp.o glob.o main.o ruserpass.o: ftp_var.h pathnames.h
@@ -16,9 +16,9 @@ cmds.o cmdtab.o: ftp_var.h pathnames.h cmds.h
 cmds.o glob.o: glob.h
 rdma.o: rdma.h
 
-install: rftp
-	install -s -m$(BINMODE) rftp $(INSTALLROOT)$(BINDIR)
+install: rcftp
+	install -s -m$(BINMODE) rcftp $(INSTALLROOT)$(BINDIR)
 
 clean:
-	rm -f rftp *.o
+	rm -f rcftp *.o
 

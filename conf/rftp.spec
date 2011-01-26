@@ -1,13 +1,13 @@
 # This is a sample spec file for rftp
 
 %define _topdir         /home/ren/rftp
-%define name                    rftp
+%define name                    rcftp
 %define release         1
 %define version         0.10
 %define buildroot %{_topdir}/%{name}-%{version}-root
 
 BuildRoot:      %{buildroot}
-Summary:                GPL rftp
+Summary:                GPL rcftp
 License:                GPL
 Name:                   %{name}
 Version:                %{version}
@@ -28,13 +28,21 @@ chmod +x ./configure
 make
 
 %install
+rm -rf %{buildroot}
 test -z "$RPM_BUILD_ROOT/usr/bin" || /bin/mkdir -p $RPM_BUILD_ROOT/usr/bin
 make install prefix=$RPM_BUILD_ROOT/usr
 
+%clean
+rm -rf %{buildroot}
+
 %files
 %defattr(-,root,root)
-/usr/bin/rftp
+/usr/bin/rcftp
 
 %changelog
+*Wen Jan 26 2011 <renyufei83@gmail.com>
+--Change clinet 'rftp' to 'rcftp' because of conflict.
+--Add %clean section
+
 *Tue Jan 25 2011 <renyufei83@gmail.com>
 --Initial RPM Build.

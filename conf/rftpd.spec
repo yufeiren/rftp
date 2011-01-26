@@ -28,9 +28,20 @@ chmod +x ./configure
 make
 
 %install
+rm -rf %{buildroot}
 test -z "$RPM_BUILD_ROOT/usr/bin" || /bin/mkdir -p $RPM_BUILD_ROOT/usr/sbin
 make install prefix=$RPM_BUILD_ROOT/usr
+
+%clean
+rm -rf %{buildroot}
 
 %files
 %defattr(-,root,root)
 /usr/sbin/rftpd
+
+%changelog
+*Wen Jan 26 2011 <renyufei83@gmail.com>
+--Add %clean section
+
+*Tue Jan 25 2011 <renyufei83@gmail.com>
+--Initial RPM Build.
