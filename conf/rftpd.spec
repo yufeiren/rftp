@@ -40,7 +40,7 @@ rm -rf %{buildroot}
 /usr/sbin/rftpd
 
 %changelog
-*Wen Jan 26 2011 <renyufei83@gmail.com>
+*Wed Jan 26 2011 <renyufei83@gmail.com>
 --Add %clean section
 
 *Tue Jan 25 2011 <renyufei83@gmail.com>

@@ -40,7 +40,7 @@ rm -rf %{buildroot}
 /usr/bin/rcftp
 
 %changelog
-*Wen Jan 26 2011 <renyufei83@gmail.com>
+*Wed Jan 26 2011 <renyufei83@gmail.com>
 --Change clinet 'rftp' to 'rcftp' because of conflict.
 --Add %clean section
 
