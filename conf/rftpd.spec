@@ -16,6 +16,9 @@ Source:                 %{name}-%{version}.tar.gz
 Prefix:                 /usr
 Group:                  Development/Tools
 
+BuildRequires: librdmacm >= 1.0
+BuildRequires: libibverbs >= 1.1
+
 %description
 RDMA FTP server application. Based on OFED librdmacm and libibverbs.
 
