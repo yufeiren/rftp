@@ -1,0 +1,44 @@
+RDMA FTP client (rcftp) and server (rftpd) is a set of tools for high performance data transfer using RDMA technology based on ftp protocol.
+
+Usage
+=====
+
+1. Startup server manually
+ # /usr/sbin/rftpd -D &
+
+2. Check the network status
+ # netstat -an | grep 9987
+ tcp    0   0  0.0.0.0:9987           0.0.0.0:*             LISTEN
+ 
+To distingwish between traditional ftp service and RDMA ftp, the rftpd chose port 9987 for listening.
+
+3. Startup client and login to the server
+ # /usr/bin/rcftp [serv addr] 9987
+ ...
+ Name: ftp
+ Password: ftp
+
+ftp/ftp is a kind of anonymous user/passwd pair.
+
+4. Change directories
+ ftp> lcd [local working directory]
+ ftp> cd [remote working directory]
+
+5. Transfer data via RDMA
+ ftp> rput [file]
+
+6. Close the connection
+ ftp> by
+ 221 Goodbye.
+
+
+Issues
+======
+
+Version 0.11
+1. We only support RDMA put (rput) to transfer data in this version.
+2. Because of circular buffer introduced, each connection for one file will allocate 50 MB * 30 = 1.5 GB main memory for cache data on both client and server side. So, please be sure the number of files to be parallel transfered at the same time, and make sure the memory is enough to hold such amount of buffer. Otherwise, the linux swap should be very busy so that there would be unbearable performance. The memory will be released after you close the connection.
+
+
+This doc is also available at:
+http://hpdtl.cewit.stonybrook.edu/mediawiki/index.php/Rftp_Usage
