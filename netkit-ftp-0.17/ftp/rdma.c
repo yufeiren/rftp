@@ -1182,9 +1182,9 @@ recv_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *cb)
 	rmsgheader rhdr;
 	
 	/* wait for the client send ADV - READ? WRITE? */
-	DPRINTF(("recv_dat_blk start sem_wait"));
+	DPRINTF(("recv_dat_blk start sem_wait @ %x\n",(unsigned long)&cb->sem));
 	sem_wait(&cb->sem);
-	DPRINTF(("recv_dat_blk finish sem_wait"));
+	DPRINTF(("recv_dat_blk finish sem_wait\n"));
 	
 	/* tell the peer where to write */
 	iperf_format_send(cb, bufblk->rdma_buf, bufblk->rdma_mr);
