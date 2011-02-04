@@ -1827,6 +1827,10 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 	struct ibv_send_wr *bad_wr;
 	int ret;
 
+	pthread_t reader_tid;
+	pthread_t sender_tid;
+	void      *tret;
+
 	TAILQ_INIT(&free_tqh);
 	TAILQ_INIT(&sender_tqh);
 	TAILQ_INIT(&writer_tqh);
@@ -1863,10 +1867,6 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 	case TYPE_I:
 	case TYPE_L:
 	
-		pthread_t reader_tid;
-		pthread_t sender_tid;
-
-		void      *tret;
 		
 		ret = pthread_create(&sender_tid, NULL, sender, dc_cb);
 		if (ret != 0) {
