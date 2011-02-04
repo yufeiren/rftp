@@ -260,6 +260,7 @@ static int	 receive_data __P((FILE *, FILE *));
 static int	 rreceive_data __P((FILE *));
 static void	 replydirname __P((const char *, const char *));
 static void	 send_data __P((FILE *, FILE *, off_t, off_t, int));
+static void	 rsend_data __P((FILE *, FILE *, off_t, off_t, int));
 static struct passwd *
 		 sgetpwnam __P((const char *));
 static char	*sgetsave __P((char *));
@@ -1101,6 +1102,78 @@ done:
 	(*closefunc)(fin);
 }
 
+void rretrieve(const char *cmd, const char *name)
+{
+	FILE *fin, *dout;
+	struct stat st;
+	int (*closefunc) __P((FILE *));
+	time_t start;
+
+	if (cmd == 0) {
+		fin = fopen(name, "r"), closefunc = fclose;
+		st.st_size = 0;
+	} else {
+		char line[BUFSIZ];
+
+		(void) snprintf(line, sizeof(line), cmd, name);
+		name = line;
+		fin = ftpd_popen(line, "r"), closefunc = ftpd_pclose;
+		st.st_size = -1;
+		st.st_blksize = BUFSIZ;
+	}
+	if (fin == NULL) {
+		if (errno != 0) {
+			perror_reply(550, name);
+			if (cmd == 0) {
+				LOGCMD("get", name);
+			}
+		}
+		return;
+	}
+	byte_count = -1;
+	if (cmd == 0 && (fstat(fileno(fin), &st) < 0 || !S_ISREG(st.st_mode))) {
+		reply(550, "%s: not a plain file.", name);
+		goto done;
+	}
+	if (restart_point) {
+		if (type == TYPE_A) {
+			off_t i, n;
+			int c;
+
+			n = restart_point;
+			i = 0;
+			while (i++ < n) {
+				if ((c=getc(fin)) == EOF) {
+					perror_reply(550, name);
+					goto done;
+				}
+				if (c == '\n')
+					i++;
+			}
+		} else if (lseek(fileno(fin), restart_point, SEEK_SET) < 0) {
+			perror_reply(550, name);
+			goto done;
+		}
+	}
+	
+/*	dout = dataconn(name, st.st_size, "w"); */
+	ret = rdmadataconn(name, st.st_size, "w");
+	if (ret != 0)
+		goto done;
+	time(&start);
+	rsend_data(fin, dout, st.st_blksize, st.st_size,
+		  (restart_point == 0 && cmd == 0 && S_ISREG(st.st_mode)));
+	if ((cmd == 0) && stats)
+		logxfer(name, st.st_size, start);
+/*	(void) fclose(dout); */
+	data = -1;
+	pdata = -1;
+done:
+	if (cmd == 0)
+		LOGBYTES("get", name, byte_count);
+	(*closefunc)(fin);
+}
+
 void store(const char *name, const char *mode, int unique)
 {
 	FILE *fout, *din;
@@ -1727,6 +1800,202 @@ oldway:
 		return;
 	}
 
+data_err:
+	transflag = 0;
+	perror_reply(426, "Data connection");
+	return;
+
+file_err:
+	transflag = 0;
+	perror_reply(551, "Error on input file");
+}
+
+/*
+ * Tranfer the contents of "instr" to "outstr" peer using the appropriate
+ * encapsulation of the data subject to Mode, Structure, and Type.
+ * RDMA channel
+ * NB: Form isn't handled.
+ */
+static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize, int isreg)
+{
+	int c, cnt, filefd, netfd;
+	char *buf, *bp;
+	size_t len,size;
+	
+	/* for rdma */
+	struct ibv_send_wr *bad_wr;
+	int ret;
+
+	TAILQ_INIT(&free_tqh);
+	TAILQ_INIT(&sender_tqh);
+	TAILQ_INIT(&writer_tqh);
+	
+	dc_cb->fd = fileno(instr);
+	tsf_setup_buf_list(dc_cb);
+
+	transflag++;
+	if (setjmp(urgcatch)) {
+		transflag = 0;
+		return;
+	}
+	switch (type) {
+
+	case TYPE_A:
+		while ((c = getc(instr)) != EOF) {
+			byte_count++;
+			if (c == '\n') {
+				if (ferror(outstr))
+					goto data_err;
+				(void) putc('\r', outstr);
+			}
+			(void) putc(c, outstr);
+		}
+		fflush(outstr);
+		transflag = 0;
+		if (ferror(instr))
+			goto file_err;
+		if (ferror(outstr))
+			goto data_err;
+		reply(226, "Transfer complete.");
+		return;
+
+	case TYPE_I:
+	case TYPE_L:
+	
+		/* create recver and writer */
+		
+		pthread_t sender_tid;
+		pthread_t reader_tid;
+		void      *tret;
+		
+		ret = pthread_create(&sender_tid, NULL, sender, dc_cb);
+		if (ret != 0) {
+			perror("pthread_create sender:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("sender create successful\n"));
+		
+		ret = pthread_create(&reader_tid, NULL, reader, dc_cb);
+		if (ret != 0) {
+			perror("pthread_create reader:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("reader create successful\n"));
+		
+		/* wait for recver and writer finish */
+		ret = pthread_join(reader_tid, &tret);
+		if (ret != 0) {
+			perror("pthread_join reader:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("reader join successful\n"));
+		syslog(LOG_ERR, "reader join success: %ld bytes", (long) tret);
+
+		ret = pthread_join(sender_tid, &tret);
+		if (ret != 0) {
+			perror("pthread_join sender:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("sender join successful\n"));
+		syslog(LOG_ERR, "sender join success: %ld bytes", (long) tret);
+		
+		/* release the connected rdma_cm_id */
+		/* cq_thread - cm_thread */
+		tsf_free_buf_list();
+		
+		rdma_disconnect(dc_cb->cm_id);
+		iperf_free_buffers(dc_cb);
+		iperf_free_qp(dc_cb);
+		syslog(LOG_ERR, "free buffers and qp success");
+		
+		pthread_cancel(dc_cb->cqthread);
+		pthread_join(dc_cb->cqthread, NULL);
+		syslog(LOG_ERR, "pthread_join cqthread success");
+		
+		pthread_cancel(dc_cb->cmthread);
+		pthread_join(dc_cb->cmthread, NULL);
+		syslog(LOG_ERR, "pthread_join cmthread success");
+		
+		rdma_destroy_id(dc_cb->cm_id);
+		
+		sem_destroy(&dc_cb->sem);
+		
+		free(dc_cb);
+		
+		/*
+		 * isreg is only set if we are not doing restart and we
+		 * are sending a regular file
+		 */
+/*		netfd = fileno(outstr);
+		filefd = fileno(instr);
+
+		if (isreg && filesize < (off_t)16 * 1024 * 1024) {
+			buf = mmap(0, filesize, PROT_READ, MAP_SHARED, filefd,
+				   (off_t)0);
+			if (buf==MAP_FAILED || buf==NULL) {
+				syslog(LOG_WARNING, "mmap(%lu): %m",
+				       (unsigned long)filesize);
+				goto oldway;
+			}
+			bp = buf;
+			len = filesize;
+			do {
+				cnt = write(netfd, bp, len);
+				len -= cnt;
+				bp += cnt;
+				if (cnt > 0) byte_count += cnt;
+			} while(cnt > 0 && len > 0);
+
+			transflag = 0;
+			munmap(buf, (size_t)filesize);
+			if (cnt < 0)
+				goto data_err;
+			reply(226, "Transfer complete.");
+			return;
+		}
+
+oldway:
+		size = blksize * 16; 
+	
+		if ((buf = malloc(size)) == NULL) {
+			transflag = 0;
+			perror_reply(451, "Local resource failure: malloc");
+			return;
+		}
+
+#ifdef TCP_CORK
+		{
+		int on = 1;
+		setsockopt(netfd, SOL_TCP, TCP_CORK, &on, sizeof on); */
+		/* failure is harmless */ 
+/*		}
+#endif	
+		while ((cnt = read(filefd, buf, size)) > 0 &&
+		    write(netfd, buf, cnt) == cnt)
+			byte_count += cnt;
+#ifdef TCP_CORK
+		{
+		int off = 0;
+		setsockopt(netfd, SOL_TCP, TCP_CORK, &off, sizeof off); 
+		}
+#endif	
+		transflag = 0;
+		(void)free(buf);
+		if (cnt != 0) {
+			if (cnt < 0)
+				goto file_err;
+			goto data_err;
+		}
+*/		reply(226, "Transfer complete.");
+		return;
+	default:
+		transflag = 0;
+		reply(550, "Unimplemented TYPE %d in send_data", type);
+		return;
+	}
+	
+	tsf_free_buf_list();
+	
 data_err:
 	transflag = 0;
 	perror_reply(426, "Data connection");

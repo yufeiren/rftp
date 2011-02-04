@@ -88,6 +88,7 @@ static char *domap(char *name);
 static char *globulize(char *str);
 static int confirm(const char *cmd, const char *file);
 static int getit(int argc, char *argv[], int restartit, const char *modestr);
+static int rgetit(int argc, char *argv[], int restartit, const char *modestr);
 static void quote1(const char *initial, int argc, char **argv);
 
 
@@ -697,7 +698,7 @@ get(int argc, char *argv[])
 void
 rget(int argc, char *argv[])
 {
-	(void) getit(argc, argv, 0, restart_point ? "r+w" : "w" );
+	(void) rgetit(argc, argv, 0, restart_point ? "r+w" : "w" );
 }
 
 
@@ -826,6 +827,136 @@ usage:
 	}
 
 	recvrequest("RETR", argv[2], argv[1], modestr,
+		    argv[1] != oldargv1 || argv[2] != oldargv2);
+	restart_point = 0;
+	return (0);
+}
+
+/*
+ * Receive one file via RDMA channel
+ */
+static int
+rgetit(int argc, char *argv[], int restartit, const char *modestr)
+{
+	int loc = 0;
+	char *oldargv1, *oldargv2;
+
+	if (argc == 2) {
+		argc++;
+		/* 
+		 * Protect the user from accidentally retrieving special
+		 * local names.
+		 */
+		argv[2] = pipeprotect(argv[1]);
+		if (!argv[2]) {
+			code = -1;
+			return 0;
+		}
+		loc++;
+	}
+	if (argc < 2 && !another(&argc, &argv, "remote-file"))
+		goto usage;
+	if (argc < 3 && !another(&argc, &argv, "local-file")) {
+usage:
+		printf("usage: %s remote-file [ local-file ]\n", argv[0]);
+		code = -1;
+		return (0);
+	}
+	oldargv1 = argv[1];
+	oldargv2 = argv[2];
+	argv[2] = globulize(argv[2]);
+	if (!argv[2]) {
+		code = -1;
+		return (0);
+	}
+	if (loc && mcase) {
+		char *tp = argv[1], *tp2, tmpbuf[PATH_MAX];
+
+		while (*tp && !islower(*tp)) {
+			tp++;
+		}
+		if (!*tp) {
+			tp = argv[2];
+			tp2 = tmpbuf;
+			while ((*tp2 = *tp) != '\0') {
+				if (isupper(*tp2)) {
+					*tp2 = 'a' + *tp2 - 'A';
+				}
+				tp++;
+				tp2++;
+			}
+			argv[2] = tmpbuf;
+		}
+	}
+	if (loc && ntflag)
+		argv[2] = dotrans(argv[2]);
+	if (loc && mapflag)
+		argv[2] = domap(argv[2]);
+	if (restartit) {
+		struct stat stbuf;
+		int ret;
+
+		ret = stat(argv[2], &stbuf);
+		if (restartit == 1) {
+			if (ret < 0) {
+				fprintf(stderr, "local: %s: %s\n", argv[2],
+					strerror(errno));
+				return (0);
+			}
+			restart_point = stbuf.st_size;
+		} else {
+			if (ret == 0) {
+				int overbose;
+
+				overbose = verbose;
+				if (debug == 0)
+					verbose = -1;
+				if (command("MDTM %s", argv[1]) == COMPLETE) {
+					int yy, mo, day, hour, min, sec;
+					struct tm *tm;
+					verbose = overbose;
+					sscanf(reply_string,
+					    "%*s %04d%02d%02d%02d%02d%02d",
+					    &yy, &mo, &day, &hour, &min, &sec);
+					tm = gmtime(&stbuf.st_mtime);
+					tm->tm_mon++;
+/* Indentation is misleading, but changes keep small. */
+/* 
+ * I think the indentation and braces are now correct. Whoever put this
+ * in the way it was originally should be prohibited by law.
+ */
+					if (tm->tm_year+1900 > yy)
+					    	return (1);
+					if (tm->tm_year+1900 == yy) {
+					   if (tm->tm_mon > mo)
+					      return (1);
+					   if (tm->tm_mon == mo) {
+					      if (tm->tm_mday > day)
+						 return (1);
+					      if (tm->tm_mday == day) {
+						 if (tm->tm_hour > hour)
+							return (1);
+						 if (tm->tm_hour == hour) {
+						    if (tm->tm_min > min)
+						       return (1);
+						    if (tm->tm_min == min) {
+						       if (tm->tm_sec > sec)
+							  return (1);
+						    }
+						 }
+					      }
+					   }
+					}
+				} else {
+					printf("%s\n", reply_string);
+					verbose = overbose;
+					return (0);
+				}
+			}
+		}
+	}
+
+	rdmarecvrequest("RRTR", argv[2], argv[1], modestr,
 		    argv[1] != oldargv1 || argv[2] != oldargv2);
 	restart_point = 0;
 	return (0);

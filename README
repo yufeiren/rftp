@@ -25,8 +25,9 @@ ftp/ftp is a kind of anonymous user/passwd pair.
  ftp> cd [remote working directory]
 
 5. Transfer data via RDMA
- ftp> rput [file]
-
+ ftp> rput local-file
+ ftp> rget remote-file [ local-file ]
+ 
 6. Close the connection
  ftp> by
  221 Goodbye.

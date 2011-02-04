@@ -1419,6 +1419,419 @@ abort:
 	(void) signal(SIGINT, oldintr);
 }
 
+void
+rdmarecvrequest(const char *cmd, 
+	    char *volatile local, char *remote, 
+	    const char *lmode, int printnames)
+{
+	FILE *volatile fout, *volatile din = 0;
+	int (*volatile closefunc)(FILE *);
+	void (*volatile oldintp)(int);
+	void (*volatile oldintr)(int);
+	volatile int is_retr, tcrflag, bare_lfs = 0;
+	static unsigned bufsize;
+	static char *buf;
+	volatile long bytes = 0, hashbytes = HASHBYTES;
+	register int c, d;
+	struct timeval start, stop;
+	struct stat st;
+
+	is_retr = strcmp(cmd, "RRTR") == 0;
+	if (is_retr && verbose && printnames) {
+		if (local && *local != '-')
+			printf("local: %s ", local);
+		if (remote)
+			printf("remote: %s\n", remote);
+	}
+	if (proxy && is_retr) {
+		proxtrans(cmd, local, remote);
+		return;
+	}
+	closefunc = NULL;
+	oldintr = NULL;
+	oldintp = NULL;
+	tcrflag = !crflag && is_retr;
+	if (sigsetjmp(recvabort, 1)) {
+		while (cpend) {
+			(void) getreply(0);
+		}
+		if (data >= 0) {
+			(void) close(data);
+			data = -1;
+		}
+		if (oldintr)
+			(void) signal(SIGINT, oldintr);
+		code = -1;
+		return;
+	}
+	oldintr = signal(SIGINT, abortrecv);
+	if (strcmp(local, "-") && *local != '|') {
+		if (access(local, W_OK) < 0) {
+			char *dir = rindex(local, '/');
+
+			if (errno != ENOENT && errno != EACCES) {
+				fprintf(stderr, "local: %s: %s\n", local,
+					strerror(errno));
+				(void) signal(SIGINT, oldintr);
+				code = -1;
+				return;
+			}
+			if (dir != NULL)
+				*dir = 0;
+			d = access(dir ? local : ".", W_OK);
+			if (dir != NULL)
+				*dir = '/';
+			if (d < 0) {
+				fprintf(stderr, "local: %s: %s\n", local,
+					strerror(errno));
+				(void) signal(SIGINT, oldintr);
+				code = -1;
+				return;
+			}
+			if (!runique && errno == EACCES &&
+			    chmod(local, 0600) < 0) {
+				fprintf(stderr, "local: %s: %s\n", local,
+					strerror(errno));
+				/*
+				 * Believe it or not, this was actually
+				 * repeated in the original source.
+				 */
+				(void) signal(SIGINT, oldintr);
+				/*(void) signal(SIGINT, oldintr);*/
+				code = -1;
+				return;
+			}
+			if (runique && errno == EACCES &&
+			   (local = gunique(local)) == NULL) {
+				(void) signal(SIGINT, oldintr);
+				code = -1;
+				return;
+			}
+		}
+		else if (runique && (local = gunique(local)) == NULL) {
+			(void) signal(SIGINT, oldintr);
+			code = -1;
+			return;
+		}
+	}
+	if (!is_retr) {
+		if (curtype != TYPE_A)
+			changetype(TYPE_A, 0);
+	} 
+	else if (curtype != type) {
+		changetype(type, 0);
+	}
+	
+	if (rdmainitconn()) {
+		(void) signal(SIGINT, oldintr);
+		code = -1;
+		return;
+	}
+	
+	if (sigsetjmp(recvabort, 1))
+		goto abort;
+	if (is_retr && restart_point &&
+	    command("REST %ld", (long) restart_point) != CONTINUE)
+		return;
+	if (remote) {
+		if (command("%s %s", cmd, remote) != PRELIM) {
+			(void) signal(SIGINT, oldintr);
+			return;
+		}
+	} 
+	else {
+		if (command("%s", cmd) != PRELIM) {
+			(void) signal(SIGINT, oldintr);
+			return;
+		}
+	}
+	
+	DPRINTF(("rdmadataconn start\n"));
+	rdmadataconn("r");
+	DPRINTF(("rdmadataconn successful\n"));
+	
+/*	if (din == NULL)
+		goto abort; */
+	if (strcmp(local, "-") == 0)
+		fout = stdout;
+	else if (*local == '|') {
+		oldintp = signal(SIGPIPE, SIG_IGN);
+		fout = popen(local + 1, "w");
+		if (fout == NULL) {
+			perror(local+1);
+			goto abort;
+		}
+		closefunc = pclose;
+	} 
+	else {
+		fout = fopen(local, lmode);
+		if (fout == NULL) {
+			fprintf(stderr, "local: %s: %s\n", local,
+				strerror(errno));
+			goto abort;
+		}
+		closefunc = fclose;
+	}
+	if (fstat(fileno(fout), &st) < 0 || st.st_blksize == 0)
+		st.st_blksize = BUFSIZ;
+	if (st.st_blksize > bufsize) {
+		if (buf)
+			(void) free(buf);
+		buf = malloc((unsigned)st.st_blksize);
+		if (buf == NULL) {
+			perror("malloc");
+			bufsize = 0;
+			goto abort;
+		}
+		bufsize = st.st_blksize;
+	}
+	(void) gettimeofday(&start, (struct timezone *)0);
+	
+	TAILQ_INIT(&free_tqh);
+	TAILQ_INIT(&sender_tqh);
+	TAILQ_INIT(&writer_tqh);
+	
+	child_dc_cb->fd = fileno(fout);
+	tsf_setup_buf_list(child_dc_cb);
+	DPRINTF(("tsf_setup_buf_list success\n"));
+	
+	switch (curtype) {
+
+	case TYPE_I:
+	case TYPE_L:
+		errno = d = 0;
+		
+		/* create recver and writer */
+		pthread_t recver_tid;
+		pthread_t writer_tid;
+		void      *tret;
+		
+		ret = pthread_create(&recver_tid, NULL, recver, dc_cb);
+		if (ret != 0) {
+			perror("pthread_create recver:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("recver create successful\n"));
+		
+		ret = pthread_create(&writer_tid, NULL, writer, dc_cb);
+		if (ret != 0) {
+			perror("pthread_create writer:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("writer create successful\n"));
+		
+		/* wait for recver and writer finish */
+		ret = pthread_join(recver_tid, &tret);
+		if (ret != 0) {
+			perror("pthread_join recver:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("recver join successful\n"));
+		syslog(LOG_ERR, "recver join success: %ld bytes", (long) tret);
+
+		ret = pthread_join(writer_tid, &tret);
+		if (ret != 0) {
+			perror("pthread_join writer:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("writer join successful\n"));
+		syslog(LOG_ERR, "writer join success: %ld bytes", (long) tret);
+		
+/*		while ((c = read(fileno(din), buf, bufsize)) > 0) {
+			if ((d = write(fileno(fout), buf, c)) != c)
+				break;
+			bytes += c;
+			if (hash && is_retr) {
+				while (bytes >= hashbytes) {
+					(void) putchar('#');
+					hashbytes += HASHBYTES;
+				}
+				(void) fflush(stdout);
+			}
+			if (tick && (bytes >= hashbytes) && is_retr) {
+				(void) printf("\rBytes transferred: %ld",
+					bytes);
+				(void) fflush(stdout);
+				while (bytes >= hashbytes)
+					hashbytes += TICKBYTES;
+			}
+		} */
+		
+		bytes = (long) tret;
+		
+		if (hash && bytes > 0) {
+			if (bytes < HASHBYTES)
+				(void) putchar('#');
+			(void) putchar('\n');
+			(void) fflush(stdout);
+		}
+		if (tick && is_retr) {
+			(void) printf("\rBytes transferred: %ld\n", bytes);
+			(void) fflush(stdout);
+		}
+		if (c < 0) {
+			if (errno != EPIPE)
+				perror("netin");
+			bytes = -1;
+		}
+		if (d < c) {
+			if (d < 0)
+				fprintf(stderr, "local: %s: %s\n", local,
+					strerror(errno));
+			else
+				fprintf(stderr, "%s: short write\n", local);
+		}
+		break;
+
+	case TYPE_A:
+		if (restart_point) {
+			register int i, n, ch;
+
+			if (fseek(fout, 0L, L_SET) < 0)
+				goto done;
+			n = restart_point;
+			for (i = 0; i++ < n;) {
+				if ((ch = getc(fout)) == EOF)
+					goto done;
+				if (ch == '\n')
+					i++;
+			}
+			if (fseek(fout, 0L, L_INCR) < 0) {
+done:
+				fprintf(stderr, "local: %s: %s\n", local,
+					strerror(errno));
+				if (closefunc != NULL)
+					(*closefunc)(fout);
+				return;
+			}
+		}
+		while ((c = getc(din)) != EOF) {
+			if (c == '\n')
+				bare_lfs++;
+			while (c == '\r') {
+				while (hash && (bytes >= hashbytes)
+					&& is_retr) {
+					(void) putchar('#');
+					(void) fflush(stdout);
+					hashbytes += HASHBYTES;
+				}
+				if (tick && (bytes >= hashbytes) && is_retr) {
+					printf("\rBytes transferred: %ld",
+						bytes);
+					fflush(stdout);
+					while (bytes >= hashbytes)
+						hashbytes += TICKBYTES;
+				}
+				bytes++;
+				if ((c = getc(din)) != '\n' || tcrflag) {
+					if (ferror(fout))
+						goto break2;
+					(void) putc('\r', fout);
+					if (c == '\0') {
+						bytes++;
+						goto contin2;
+					}
+					if (c == EOF)
+						goto contin2;
+				}
+			}
+			(void) putc(c, fout);
+			bytes++;
+	contin2:	;
+		}
+break2:
+		if (hash && is_retr) {
+			if (bytes < hashbytes)
+				(void) putchar('#');
+			(void) putchar('\n');
+			(void) fflush(stdout);
+		}
+		if (tick && is_retr) {
+			(void) printf("\rBytes transferred: %ld\n", bytes);
+			(void) fflush(stdout);
+		}
+		if (bare_lfs) {
+			printf("WARNING! %d bare linefeeds received in ASCII mode\n", bare_lfs);
+			printf("File may not have transferred correctly.\n");
+		}
+		if (ferror(din)) {
+			if (errno != EPIPE)
+				perror("netin");
+			bytes = -1;
+		}
+		if (ferror(fout))
+			fprintf(stderr, "local: %s: %s\n", local,
+				strerror(errno));
+		break;
+	}
+	if (closefunc != NULL)
+		(*closefunc)(fout);
+	(void) signal(SIGINT, oldintr);
+	if (oldintp)
+		(void) signal(SIGPIPE, oldintp);
+	(void) gettimeofday(&stop, (struct timezone *)0);
+/*	(void) fclose(din); no din in rdma mode */
+	/* closes data as well, so discard it */
+	data = -1;
+	
+	tsf_free_buf_list();
+	DPRINTF(("tsf_free_buf_list success\n"));
+	/* release the connected rdma_cm_id */
+	/* cq_thread - cm_thread */
+	rdma_disconnect(child_dc_cb->child_cm_id);
+	iperf_free_buffers(child_dc_cb);
+	iperf_free_qp(child_dc_cb);
+	DPRINTF(("free buffers and qp success\n"));
+	
+	pthread_cancel(child_dc_cb->cqthread);
+	pthread_join(child_dc_cb->cqthread, NULL);
+	DPRINTF(("pthread_join cqthread success\n"));
+	
+	pthread_cancel(child_dc_cb->cmthread);
+	pthread_join(child_dc_cb->cmthread, NULL);
+	DPRINTF(("pthread_join cmthread success\n"));
+	
+	rdma_destroy_id(child_dc_cb->child_cm_id);
+	
+	sem_destroy(&child_dc_cb->sem);
+	
+	free(child_dc_cb);
+	
+	(void) getreply(0);
+	if (bytes > 0 && is_retr)
+		ptransfer("received", bytes, &start, &stop);
+	return;
+abort:
+
+/* abort using RFC959 recommended IP,SYNC sequence  */
+
+	(void) gettimeofday(&stop, (struct timezone *)0);
+	if (oldintp)
+		(void) signal(SIGPIPE, oldintp);
+	(void) signal(SIGINT, SIG_IGN);
+	if (!cpend) {
+		code = -1;
+		(void) signal(SIGINT, oldintr);
+		return;
+	}
+
+	abort_remote(din);
+	code = -1;
+	if (closefunc != NULL && fout != NULL)
+		(*closefunc)(fout);
+	if (din) {
+		(void) fclose(din);
+	}
+	if (data >= 0) {
+		/* if it just got closed with din, again won't hurt */
+		(void) close(data);
+		data = -1;
+	}
+	if (bytes > 0)
+		ptransfer("received", bytes, &start, &stop);
+	(void) signal(SIGINT, oldintr);
+}
+
 /*
  * Need to start a listen on the data channel before we send the command,
  * otherwise the server's connect may fail.

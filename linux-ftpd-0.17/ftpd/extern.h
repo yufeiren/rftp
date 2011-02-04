@@ -57,6 +57,7 @@ void	renamecmd __P((char *, char *));
 char   *renamefrom __P((char *));
 void	reply __P((int, const char *, ...));
 void	retrieve __P((const char *, const char *));
+void	rretrieve __P((const char *, const char *));
 void	send_file_list __P((const char *));
 void	statcmd __P((void));
 void	statfilecmd __P((char *));

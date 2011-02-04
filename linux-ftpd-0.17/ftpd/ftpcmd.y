@@ -141,6 +141,7 @@ struct tab cmdtab[] = {		/* In order defined in RFC 765 */
 	{ "STRU", STRU, ARGS, 1,	"(specify file structure)" },
 	{ "MODE", MODE, ARGS, 1,	"(specify transfer mode)" },
 	{ "RETR", RETR, STR1, 1,	"<sp> file-name" },
+	{ "RRTR", RRTR, STR1, 1,	"<sp> file-name" },
 	{ "STOR", STOR, STR1, 1,	"<sp> file-name" },
 	{ "RSTR", RSTR, STR1, 1,	"<sp> file-name" },
 	{ "APPE", APPE, STR1, 1,	"<sp> file-name" },
@@ -390,6 +391,13 @@ cmd
 		{
 			if ($2 && $4 != NULL)
 				retrieve((char *) 0, $4);
+			if ($4 != NULL)
+				free($4);
+		}
+	| RRTR check_login SP pathname CRLF
+		{
+			if ($2 && $4 != NULL)
+				rretrieve((char *) 0, $4);
 			if ($4 != NULL)
 				free($4);
 		}

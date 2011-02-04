@@ -146,8 +146,11 @@ char **makeargv(int *pargc, char **parg);
 int dologin(const char *host);
 int command(const char *fmt, ...);
 void sendrequest(const char *cmd, char *local, char *remote, int printnames);
-void rdmasendrequest(const char *cmd, char *local, char *remote, int printnames);
+void rdmasendrequest(const char *cmd, char *local, char *remote,
+		 int printnames);
 void recvrequest(const char *cmd, char *local, char *remote, 
+		 const char *lmode, int printnames);
+void rdmarecvrequest(const char *cmd, char *local, char *remote, 
 		 const char *lmode, int printnames);
 int another(int *pargc, char ***pargv, const char *prompt);
 void blkfree(char **av0);
