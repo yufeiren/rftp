@@ -42,6 +42,11 @@
     #define DPRINTF(arg)
 #endif /* DEBUG */
 
+#ifdef DEBUG
+    #define DSYSLOG(arg)    syslog arg
+#else
+    #define DSYSLOG(arg)
+#endif /* DEBUG */
 
 #ifdef DEBUG
 	#define DDP_HEX(msg,buf,len)       do { \
