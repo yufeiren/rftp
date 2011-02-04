@@ -1863,7 +1863,6 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 	case TYPE_I:
 	case TYPE_L:
 	
-		/* create sender and reader */
 		pthread_t reader_tid;
 		pthread_t sender_tid;
 
