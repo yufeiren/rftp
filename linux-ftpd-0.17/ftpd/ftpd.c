@@ -457,7 +457,7 @@ DPRINTF(("4.2\n"));
 		server_addr.sin_addr.s_addr = INADDR_ANY;
 /*		server_addr.sin_addr.s_addr = inet_addr("192.168.1.2"); */
 		server_addr.sin_port = sv->s_port;
-		server_addr.sin_port = htons(9987);
+		server_addr.sin_port = htons(19987);
 DPRINTF(("4.3\n"));
 DPRINTF(("bind sinport: %d\n", ntohs(server_addr.sin_port)));
 		if (bind(ctl_sock, (struct sockaddr *)&server_addr,
@@ -1836,6 +1836,8 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 	TAILQ_INIT(&writer_tqh);
 	
 	dc_cb->fd = fileno(instr);
+	dc_cb->filesize = filesize;
+	DPRINTF(("filesize is: %d\n", dc_cb->filesize));
 	tsf_setup_buf_list(dc_cb);
 
 	transflag++;
@@ -1866,7 +1868,6 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 
 	case TYPE_I:
 	case TYPE_L:
-	
 		
 		ret = pthread_create(&sender_tid, NULL, sender, dc_cb);
 		if (ret != 0) {
