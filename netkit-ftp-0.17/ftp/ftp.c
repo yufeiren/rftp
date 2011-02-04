@@ -1435,6 +1435,10 @@ rdmarecvrequest(const char *cmd,
 	register int c, d;
 	struct timeval start, stop;
 	struct stat st;
+	
+	/* for rdma */
+	struct ibv_send_wr *bad_wr;
+	int ret;
 
 	is_retr = strcmp(cmd, "RRTR") == 0;
 	if (is_retr && verbose && printnames) {
@@ -1627,7 +1631,6 @@ rdmarecvrequest(const char *cmd,
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("recver join successful\n"));
-		syslog(LOG_ERR, "recver join success: %ld bytes", (long) tret);
 
 		ret = pthread_join(writer_tid, &tret);
 		if (ret != 0) {
@@ -1635,7 +1638,6 @@ rdmarecvrequest(const char *cmd,
 			exit(EXIT_FAILURE);
 		}
 		DPRINTF(("writer join successful\n"));
-		syslog(LOG_ERR, "writer join success: %ld bytes", (long) tret);
 		
 /*		while ((c = read(fileno(din), buf, bufsize)) > 0) {
 			if ((d = write(fileno(fout), buf, c)) != c)

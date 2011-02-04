@@ -1108,6 +1108,7 @@ void rretrieve(const char *cmd, const char *name)
 	struct stat st;
 	int (*closefunc) __P((FILE *));
 	time_t start;
+	int ret;
 
 	if (cmd == 0) {
 		fin = fopen(name, "r"), closefunc = fclose;
@@ -1862,8 +1863,7 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 	case TYPE_I:
 	case TYPE_L:
 	
-		/* create recver and writer */
-		
+		/* create sender and reader */
 		pthread_t sender_tid;
 		pthread_t reader_tid;
 		void      *tret;
