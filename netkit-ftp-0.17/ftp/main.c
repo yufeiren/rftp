@@ -70,6 +70,7 @@ char main_rcsid[] =
 #include "errors.h"
 #include "rdma.h"
 #include "init.h"
+#include "utils.h"
 int traceflag = 0;
 const char *home = "/";
 

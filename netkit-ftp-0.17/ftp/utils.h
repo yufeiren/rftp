@@ -87,6 +87,7 @@ struct options {
 	long   cbufsiz;
 }
 
+
 bool file_exists_p (const char *);
 char *read_whole_line (FILE *);
 char *concat_strings (const char *, ...);
