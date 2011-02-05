@@ -86,6 +86,8 @@ static const struct {
 static bool simple_atoi (const char *, const char *, int *);
 static bool setval_internal (int, const char *, const char *);
 static bool setval_internal_tilde (int, const char *, const char *);
+static enum parse_line
+parse_line (const char *line, char **com, char **val, int *comind);
 
 /* Reset the variables to default values.  */
 static void
