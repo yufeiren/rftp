@@ -69,6 +69,7 @@ char main_rcsid[] =
 #include "ftp_var.h"
 #include "errors.h"
 #include "rdma.h"
+#include "init.h"
 int traceflag = 0;
 const char *home = "/";
 
@@ -86,6 +87,8 @@ static char *slurpstring(void);
 
 int rdma_debug = 0;
 struct acptq acceptedTqh;
+
+struct options opt;
 
 static
 void
@@ -223,6 +226,8 @@ DPRINTF(("before getlogin\n"));
 DPRINTF(("before cmdscanner\n"));
 
 	TAILQ_INIT(&acceptedTqh);
+	
+	initialize();
 	
 	for (;;) {
 		cmdscanner(top);

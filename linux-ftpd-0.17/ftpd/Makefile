@@ -16,6 +16,8 @@ OBJS=ftpd.o ftpcmd.o logutmp.o logwtmp.o popen.o rdma.o
 # CFLAGS+=-DTCPWRAPPERS
 # LDADD+=	-lwrap
 
+CFLAGS+=-DRFTPDRC
+
 all: rftpd
 
 %.o: %.c
