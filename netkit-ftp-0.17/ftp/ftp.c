@@ -1671,7 +1671,7 @@ rdmarecvrequest(const char *cmd,
 			(void) printf("\rBytes transferred: %ld\n", bytes);
 			(void) fflush(stdout);
 		}
-		if (c < 0) {
+/*		if (c < 0) {
 			if (errno != EPIPE)
 				perror("netin");
 			bytes = -1;
@@ -1682,7 +1682,7 @@ rdmarecvrequest(const char *cmd,
 					strerror(errno));
 			else
 				fprintf(stderr, "%s: short write\n", local);
-		}
+		} */
 		break;
 
 	case TYPE_A:
