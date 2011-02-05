@@ -282,10 +282,10 @@ initialize (void)
      variable has been set. For internal testing purposes only!  */
 /* client side */
 #if defined(RCFTPRC)
-  char *env_sysrc = getenv ("SYSTEM_RCFTPRC");
+  env_sysrc = getenv ("SYSTEM_RCFTPRC");
 #elif defined(RFTPDRC)
 /* server side */
-  char *env_sysrc = getenv ("SYSTEM_RFTPDRC");
+  env_sysrc = getenv ("SYSTEM_RFTPDRC");
 #endif
   if (env_sysrc && file_exists_p (env_sysrc))
     ok &= run_rftprc (env_sysrc);
@@ -414,8 +414,8 @@ cmd_number (const char *com, const char *val, void *place)
   if (!simple_atoi (val, val + strlen (val), place)
       || *(int *) place < 0)
     {
-      fprintf (stderr, _("%s: %s: Invalid number %s.\n"),
-               exec_name, com, quote (val));
+      fprintf (stderr, _("%s: Invalid number %s.\n"),
+               com, quote (val));
       return false;
     }
   return true;

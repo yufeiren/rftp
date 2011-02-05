@@ -60,9 +60,8 @@ extern "C" {
 #include <sys/time.h>
 #include <unistd.h>
 #include <sys/mman.h>
-#include <process.h>  /* getpid() */
 #include <utime.h>
-#include <sys/utime.h>
+#include <sys/stat.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <assert.h>
@@ -72,6 +71,8 @@ extern "C" {
 /* Needed for Unix version of run_with_timeout. */
 #include <signal.h>
 #include <setjmp.h>
+
+#include <linux/limits.h>
 
 # ifndef countof
 #  define countof(x) (sizeof (x) / sizeof ((x)[0]))
@@ -104,7 +105,7 @@ extern "C" {
 struct options {
 	int    cbufnum;
 	long   cbufsiz;
-}
+};
 
 
 bool file_exists_p (const char *);

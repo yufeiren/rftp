@@ -63,7 +63,7 @@ file_exists_p (const char *filename)
 #ifdef HAVE_ACCESS
   return access (filename, F_OK) >= 0;
 #else
-  struct_stat buf;
+  struct stat buf;
   return stat (filename, &buf) >= 0;
 #endif
 }
