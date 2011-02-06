@@ -93,6 +93,8 @@
 
 extern struct acptq acceptedTqh;
 
+extern struct options opt;
+
 static int server_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 {
 	if (wc->byte_len != sizeof(cb->recv_buf)) {
@@ -639,7 +641,7 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 	int i;
 	BUFDATBLK *item;
 	
-	for (i = 0; i < 30; i++) {
+	for (i = 0; i < opt.cbufnum; i++) {
 		if ( (item = (BUFDATBLK *) malloc(sizeof(BUFDATBLK))) == NULL) {
 			perror("tsf_setup_buf_list: malloc");
 			exit(EXIT_FAILURE);
