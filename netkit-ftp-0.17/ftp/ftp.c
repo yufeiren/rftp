@@ -68,6 +68,8 @@ char ftp_rcsid[] =
 #include "rdma.h"
 extern struct acptq acceptedTqh;
 
+extern struct options opt;
+
 int data = -1;
 off_t restart_point = 0;
 rdma_cb *dc_cb;		/* data channel rdma control block - for listen */
