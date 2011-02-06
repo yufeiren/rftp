@@ -81,8 +81,9 @@ static const struct {
   /* KEEP THIS LIST ALPHABETICALLY SORTED */
 	{ "cbufnum",       &opt.cbufnum,           cmd_number },
 	{ "cbufsiz",       &opt.cbufsiz,           cmd_number },
+/* srvcommport - server side communication channel listening port */
+	{ "srvcomport",    &opt.srvcomport,        cmd_number },
 /*
-srvcommport - server communication channel listening port
 readernum
 writernum
 sendernum
@@ -110,6 +111,8 @@ defaults (void)
 
   opt.cbufsiz = 5242880; /* default buffer size is 5MB */
   opt.cbufnum = 10;
+  
+  opt.srvcomport = 21;
 }
 
 /* Return the user's home directory (strdup-ed), or NULL if none is
