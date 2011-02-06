@@ -80,7 +80,7 @@ static const struct {
 } commands[] = {
   /* KEEP THIS LIST ALPHABETICALLY SORTED */
 	{ "cbufnum",       &opt.cbufnum,           cmd_number },
-	{ "cbufsiz",       &opt.cbufsiz,           cmd_string },
+	{ "cbufsiz",       &opt.cbufsiz,           cmd_number },
 };
 
 static bool simple_atoi (const char *, const char *, int *);

@@ -228,7 +228,10 @@ DPRINTF(("before cmdscanner\n"));
 
 	TAILQ_INIT(&acceptedTqh);
 	
+	DPRINTF(("before initialize\n"));
 	initialize();
+	DPRINTF(("opt.cbufsiz = %d\n", opt.cbufsiz));
+	DPRINTF(("opt.cbufnum = %d\n", opt.cbufnum));
 	
 	for (;;) {
 		cmdscanner(top);
