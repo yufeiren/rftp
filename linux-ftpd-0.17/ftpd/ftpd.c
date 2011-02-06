@@ -465,7 +465,7 @@ DPRINTF(("4.2\n"));
 		
 		initialize();
 		/* set new listening port */
-		server_addr.sin_port = (short) opt.srvcomport;
+		server_addr.sin_port = htons((short)opt.srvcomport);
 		DPRINTF(("opt.cbufsiz = %d\n", opt.cbufsiz));
 		DPRINTF(("opt.cbufnum = %d\n", opt.cbufnum));
 		DPRINTF(("opt.srvcomport = %d\n", server_addr.sin_port));
