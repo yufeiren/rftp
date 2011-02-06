@@ -4,7 +4,7 @@ CFLAGS+=-I../support -I..
 LIBS+=-L../support -lsupport  -libverbs -lrdmacm -lpthread
 
 
-OBJS=ftpd.o ftpcmd.o logutmp.o logwtmp.o popen.o rdma.o
+OBJS=ftpd.o ftpcmd.o logutmp.o logwtmp.o popen.o rdma.o utils.o init.o
 
 ## our internal version of ls.
 # LSDIR	= ${.CURDIR}/../../bin/ls
@@ -16,7 +16,7 @@ OBJS=ftpd.o ftpcmd.o logutmp.o logwtmp.o popen.o rdma.o
 # CFLAGS+=-DTCPWRAPPERS
 # LDADD+=	-lwrap
 
-CFLAGS+=-DRFTPDRC
+CFLAGS+=-DRFTPDRC -DDEBUG
 
 all: rftpd
 

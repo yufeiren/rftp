@@ -135,6 +135,8 @@ typedef unsigned int useconds_t;
 #endif
 
 #include "rdma.h"
+#include "init.h"
+#include "utils.h"
 
 static char versionpre[] = "Version 6.4/OpenBSD/Linux";
 static char version[sizeof(versionpre)+sizeof(pkg)];
@@ -209,6 +211,8 @@ char	*ident = NULL;
 rdma_cb *dc_cb;
 int rdma_debug = 0;
 struct acptq acceptedTqh;
+
+struct options opt;
 
 /*
  * Timeout intervals for retrying connections
@@ -457,7 +461,15 @@ DPRINTF(("4.2\n"));
 		server_addr.sin_addr.s_addr = INADDR_ANY;
 /*		server_addr.sin_addr.s_addr = inet_addr("192.168.1.2"); */
 		server_addr.sin_port = sv->s_port;
-		server_addr.sin_port = htons(19987);
+/*		server_addr.sin_port = htons(19987); */
+		
+		initialize();
+		/* set new listening port */
+		server_addr.sin_port = (short) opt.srvcomport;
+		DPRINTF(("opt.cbufsiz = %d\n", opt.cbufsiz));
+		DPRINTF(("opt.cbufnum = %d\n", opt.cbufnum));
+		DPRINTF(("opt.srvcomport = %d\n", server_addr.sin_port));
+		
 DPRINTF(("4.3\n"));
 DPRINTF(("bind sinport: %d\n", ntohs(server_addr.sin_port)));
 		if (bind(ctl_sock, (struct sockaddr *)&server_addr,
@@ -1594,7 +1606,7 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	memset(dc_cb, '\0', sizeof(rdma_cb));
 	rdma_cb_init(dc_cb);
 	
-	dc_cb->size = 1024 * 1024 * 50;
+	dc_cb->size = opt.cbufsiz;
 	dc_cb->server = 0;
 	
 	sem_init(&dc_cb->sem, 0, 0);
