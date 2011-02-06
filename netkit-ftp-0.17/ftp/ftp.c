@@ -66,6 +66,8 @@ char ftp_rcsid[] =
 #include "../version.h"
 
 #include "rdma.h"
+#include "utils.h"
+
 extern struct acptq acceptedTqh;
 
 extern struct options opt;
