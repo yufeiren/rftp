@@ -150,7 +150,7 @@ rftprc_env_file_name (void)
     {
       if (!file_exists_p (env))
         {
-          fprintf (stderr, _("RCFTPRC/RFTPDRC points to %s, which doesn't exist.\n"),
+          fprintf (stderr, "RCFTPRC/RFTPDRC points to %s, which doesn't exist.\n",
                    env);
           exit (1);
         }
@@ -222,7 +222,7 @@ run_rftprc (const char *file)
   fp = fopen (file, "r");
   if (!fp)
     {
-      fprintf (stderr, _("Cannot read %s (%s).\n"),
+      fprintf (stderr, "Cannot read %s (%s).\n",
                file, strerror (errno));
       return true;                      /* not a fatal error */
     }
@@ -239,18 +239,18 @@ run_rftprc (const char *file)
           /* If everything is OK, set the value.  */
           if (!setval_internal_tilde (comind, com, val))
             {
-              fprintf (stderr, _("Error in %s at line %d.\n"),
+              fprintf (stderr, "Error in %s at line %d.\n",
                        file, ln);
               ++errcnt;
             }
           break;
         case line_syntax_error:
-          fprintf (stderr, _("Syntax error in %s at line %d.\n"),
+          fprintf (stderr, "Syntax error in %s at line %d.\n",
                    file, ln);
           ++errcnt;
           break;
         case line_unknown_command:
-          fprintf (stderr, _("Unknown command %s in %s at line %d.\n"),
+          fprintf (stderr, "Unknown command %s in %s at line %d.\n",
                    com, file, ln);
           ++errcnt;
           break;
@@ -399,7 +399,7 @@ cmd_boolean (const char *com, const char *val, void *place)
   else
     {
       fprintf (stderr,
-               _("%s: Invalid boolean %s; use `on' or `off'.\n"),
+               "%s: Invalid boolean %s; use `on' or `off'.\n",
                com, val);
       return false;
     }
@@ -416,8 +416,8 @@ cmd_number (const char *com, const char *val, void *place)
   if (!simple_atoi (val, val + strlen (val), place)
       || *(int *) place < 0)
     {
-      fprintf (stderr, _("%s: Invalid number %s.\n"),
-               com, quote (val));
+      fprintf (stderr, "%s: Invalid number %s.\n",
+               com, val);
       return false;
     }
   return true;
