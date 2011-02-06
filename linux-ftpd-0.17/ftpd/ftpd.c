@@ -468,7 +468,7 @@ DPRINTF(("4.2\n"));
 		server_addr.sin_port = htons((short)opt.srvcomport);
 		DPRINTF(("opt.cbufsiz = %d\n", opt.cbufsiz));
 		DPRINTF(("opt.cbufnum = %d\n", opt.cbufnum));
-		DPRINTF(("opt.srvcomport = %d\n", server_addr.sin_port));
+		DPRINTF(("opt.srvcomport = %d\n", ntohs(server_addr.sin_port)));
 		
 DPRINTF(("4.3\n"));
 DPRINTF(("bind sinport: %d\n", ntohs(server_addr.sin_port)));
