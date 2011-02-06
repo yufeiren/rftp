@@ -90,6 +90,7 @@
 
 #include "rdma.h"
 #include "errors.h"
+#include "utils.h"
 
 extern struct acptq acceptedTqh;
 
