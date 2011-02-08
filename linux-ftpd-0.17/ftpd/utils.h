@@ -42,7 +42,9 @@
  * utils.h
  * by Yufei Ren <renyufei83@gmail.com>
  * -------------------------------------------------------------------
- * Utility for development 
+ * Utility for development
+ * 
+ * byte_atoi from iperf source code  
  * ------------------------------------------------------------------- */
 
 #ifndef UTILS_H
@@ -54,6 +56,7 @@ extern "C" {
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 #include <time.h>
@@ -102,11 +105,16 @@ extern "C" {
 } while (0)
 
 
+typedef uint64_t max_size_t;
+
 struct options {
 	int    cbufnum;
 	long   cbufsiz;
 	int    srvcomport;
 };
+
+double byte_atof(const char *);
+max_size_t byte_atoi(const char *);
 
 
 bool file_exists_p (const char *);

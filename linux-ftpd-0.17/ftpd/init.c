@@ -63,6 +63,7 @@ enum parse_line {
 CMD_DECLARE (cmd_boolean);
 CMD_DECLARE (cmd_number);
 CMD_DECLARE (cmd_string);
+CMD_DECLARE (cmd_byte);
 /* CMD_DECLARE (cmd_file);
 CMD_DECLARE (cmd_directory); */
 
@@ -80,7 +81,7 @@ static const struct {
 } commands[] = {
   /* KEEP THIS LIST ALPHABETICALLY SORTED */
 	{ "cbufnum",       &opt.cbufnum,           cmd_number },
-	{ "cbufsiz",       &opt.cbufsiz,           cmd_number },
+	{ "cbufsiz",       &opt.cbufsiz,           cmd_byte },
 /* srvcommport - server side communication channel listening port */
 	{ "srvcomport",    &opt.srvcomport,        cmd_number },
 /*
@@ -442,6 +443,15 @@ cmd_string (const char *com, const char *val, void *place)
 
   free (*pstring);
   *pstring = strdup (val);
+  return true;
+}
+
+/* byte stands for xKB/kB/MB/mB/GB/gB  */
+static bool
+cmd_byte (const char *com, const char *val, void *place)
+{
+  *(long *)place = (long) byte_atoi(val);
+  
   return true;
 }
 

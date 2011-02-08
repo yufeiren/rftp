@@ -49,6 +49,13 @@
 
 #include "utils.h"
 
+const long kKilo_to_Unit = 1024;
+const long kMega_to_Unit = 1024 * 1024;
+const long kGiga_to_Unit = 1024 * 1024 * 1024;
+
+const long kkilo_to_Unit = 1000;
+const long kmega_to_Unit = 1000 * 1000;
+const long kgiga_to_Unit = 1000 * 1000 * 1000;
 
 /* Does FILENAME exist?  This is quite a lousy implementation, since
    it supplies no error codes -- only a yes-or-no answer.  Thus it
@@ -168,3 +175,63 @@ concat_strings (const char *str0, ...)
   return ret;
 }
 
+
+/* -------------------------------------------------------------------
+ * byte_atof
+ *
+ * Given a string of form #x where # is a number and x is a format
+ * character listed below, this returns the interpreted integer.
+ * Gg, Mm, Kk are giga, mega, kilo respectively
+ * ------------------------------------------------------------------- */
+
+double byte_atof( const char *inString ) {
+    double theNum;
+    char suffix = '\0';
+
+    assert( inString != NULL );
+
+    /* scan the number and any suffices */
+    sscanf( inString, "%lf%c", &theNum, &suffix );
+
+    /* convert according to [Gg Mm Kk] */
+    switch ( suffix ) {
+        case 'G':  theNum *= kGiga_to_Unit;  break;
+        case 'M':  theNum *= kMega_to_Unit;  break;
+        case 'K':  theNum *= kKilo_to_Unit;  break;
+        case 'g':  theNum *= kgiga_to_Unit;  break;
+        case 'm':  theNum *= kmega_to_Unit;  break;
+        case 'k':  theNum *= kkilo_to_Unit;  break;
+        default: break;
+    }
+    return theNum;
+} /* end byte_atof */
+
+/* -------------------------------------------------------------------
+ * byte_atoi
+ *
+ * Given a string of form #x where # is a number and x is a format
+ * character listed below, this returns the interpreted integer.
+ * Gg, Mm, Kk are giga, mega, kilo respectively
+ * ------------------------------------------------------------------- */
+
+max_size_t byte_atoi( const char *inString ) {
+    double theNum;
+    char suffix = '\0';
+
+    assert( inString != NULL );
+
+    /* scan the number and any suffices */
+    sscanf( inString, "%lf%c", &theNum, &suffix );
+
+    /* convert according to [Gg Mm Kk] */
+    switch ( suffix ) {
+        case 'G':  theNum *= kGiga_to_Unit;  break;
+        case 'M':  theNum *= kMega_to_Unit;  break;
+        case 'K':  theNum *= kKilo_to_Unit;  break;
+        case 'g':  theNum *= kgiga_to_Unit;  break;
+        case 'm':  theNum *= kmega_to_Unit;  break;
+        case 'k':  theNum *= kkilo_to_Unit;  break;
+        default: break;
+    }
+    return (max_size_t) theNum;
+} /* end byte_atof */

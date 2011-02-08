@@ -748,13 +748,12 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	void (*volatile oldintr)(int);
 	void (*volatile oldintp)(int);
 	volatile long bytes = 0, hashbytes = HASHBYTES;
-	char buf[BUFSIZ], *bufp;
 	const char *volatile lmode;
 	
 	/* for rdma */
-	struct ibv_send_wr *bad_wr;
 	int ret;
-
+	c = d = 0;
+	
 	if (verbose && printnames) {
 		if (local && *local != '-')
 			printf("local: %s ", local);
@@ -1441,7 +1440,6 @@ rdmarecvrequest(const char *cmd,
 	struct stat st;
 	
 	/* for rdma */
-	struct ibv_send_wr *bad_wr;
 	int ret;
 
 	is_retr = strcmp(cmd, "RRTR") == 0;
@@ -1972,7 +1970,7 @@ rdmainitconn(void)
 {
 	register char *p, *a;
 	int result, tmpno = 0;
-	socklen_t len;
+/*	socklen_t len; */
 	int on = 1;
 	int tos;
 	u_long a1,a2,a3,a4,p1,p2;
@@ -2088,11 +2086,11 @@ noport:
 		sendport = 1;
 
 	return (0);
-bad:
+/*bad:
 	(void) close(data), data = -1;
 	if (tmpno)
 		sendport = 1;
-	return (1);
+	return (1);*/
 }
 
 static FILE *
@@ -2124,16 +2122,12 @@ dataconn(const char *lmode)
 static void
 rdmadataconn(const char *lmode)
 {
-	struct sockaddr_in from;
-	int s, tos;
-	socklen_t fromlen = sizeof(from);
-
-	struct ibv_send_wr *bad_send_wr;
+/*	struct ibv_send_wr *bad_send_wr; */
 	struct ibv_recv_wr *bad_recv_wr;
 	int ret;
 
-        if (passivemode)
-            return (fdopen(data, lmode));
+        if (passivemode) /* Todo here */
+            return; /* (fdopen(data, lmode)); */
 
 	/* wait for connection established */
 	struct wcm_id *item;

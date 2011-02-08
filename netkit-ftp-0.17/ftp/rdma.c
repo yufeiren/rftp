@@ -95,7 +95,7 @@
 extern struct acptq acceptedTqh;
 
 extern struct options opt;
-
+/*
 static int server_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 {
 	if (wc->byte_len != sizeof(cb->recv_buf)) {
@@ -109,7 +109,7 @@ static int server_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 	cb->remote_mode = ntohl(cb->recv_buf.mode);
 	DEBUG_LOG("Received rkey %x addr %" PRIx64 " len %d from peer\n",
 		  cb->remote_rkey, cb->remote_addr, cb->remote_len);
-	
+*/	
 /*	switch ( cb->remote_mode ) {
 	case MODE_RDMA_ACTRD:
 		cb->trans_mode = kRdmaTrans_PasRead;
@@ -134,28 +134,26 @@ static int server_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 	else
 		cb->state = RDMA_WRITE_ADV; */
 	
-	return 0;
-}
-
+/*	return 0;
+}*/
+/*
 static int client_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 {
 	if (wc->byte_len != sizeof(cb->recv_buf)) {
 		fprintf(stderr, "Received bogus data, size %d\n", wc->byte_len);
 		return -1;
-	}
+	}*/
 /*
 	if (cb->state == RDMA_READ_ADV)
 		cb->state = RDMA_WRITE_ADV;
 	else
 		cb->state = RDMA_WRITE_COMPLETE;
 */
-	return 0;
-}
+/*	return 0;
+}*/
 
 static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 {
-	struct ibv_send_wr *bad_wr;
-
 	if (wc->byte_len != sizeof(cb->recv_buf)) {
 		fprintf(stderr, "Received bogus data, size %d\n", wc->byte_len);
 		return -1;
@@ -304,9 +302,9 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 	struct ibv_recv_wr *bad_wr;
 	int ret;
 	
-	DPRINTF(("2 cq_handler cb @ %x\n", (unsigned long)cb));
+/*	DPRINTF(("2 cq_handler cb @ %x\n", (unsigned long)cb));
 	DPRINTF(("cq_handler sem_post @ %x\n", (unsigned long)&cb->sem));
-	
+*/	
 	while ((ret = ibv_poll_cq(cb->cq, 1, &wc)) == 1) {
 		ret = 0;
 
@@ -459,6 +457,7 @@ int rdma_cb_init( struct rdma_cb *cb ) {
 
 int rdma_cb_destroy( struct rdma_cb *cb )
 {
+	cb->server = 0;
 	return 0;
 }
 
@@ -621,7 +620,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 	iperf_setup_wr(cb);
 	DEBUG_LOG("allocated & registered buffers...\n");
 	return 0;
-
+/*
 err5:
 	free(cb->rdma_source_buf);
 err4:
@@ -629,7 +628,7 @@ err4:
 err3:
 	free(cb->rdma_sink_buf);
 err2:
-	ibv_dereg_mr(cb->send_mr);
+	ibv_dereg_mr(cb->send_mr); */
 err1:
 	ibv_dereg_mr(cb->recv_mr);
 	return ret;
@@ -928,8 +927,6 @@ recver(void *arg)
 {
 	BUFDATBLK *bufblk;
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
-	struct ibv_send_wr *bad_wr;
-	int ret;
 	off_t currlen;
 	int thislen;
 	
@@ -1131,17 +1128,17 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	bufblk->rdma_sq_wr.sg_list->length = rhdr.dlen + sizeof(rmsgheader);
 	
 	DPRINTF(("start data transfer using RDMA_WRITE\n"));
-	DEBUG_LOG("rdma write from lkey %x laddr %x len %d\n",
+/*	DEBUG_LOG("rdma write from lkey %x laddr %x len %d\n",
 		  bufblk->rdma_sq_wr.sg_list->lkey,
 		  bufblk->rdma_sq_wr.sg_list->addr,
 		  bufblk->rdma_sq_wr.sg_list->length);
-	
+*/
 	ret = ibv_post_send(dc_cb->qp, &bufblk->rdma_sq_wr, &bad_wr);
 	if (ret) {
 		fprintf(stderr, "post send error %d\n", ret);
 		return 0;
 	}
-	dc_cb->state != ACTIVE_WRITE_POST;
+/*	dc_cb->state != ACTIVE_WRITE_POST; -> Todo */
 	DPRINTF(("send_dat_blk: ibv_post_send finish\n"));
 	/* wait the finish of RDMA_WRITE */
 	sem_wait(&dc_cb->sem);

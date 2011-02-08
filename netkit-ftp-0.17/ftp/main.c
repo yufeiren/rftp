@@ -230,7 +230,7 @@ DPRINTF(("before cmdscanner\n"));
 	
 	DPRINTF(("before initialize\n"));
 	initialize();
-	DPRINTF(("opt.cbufsiz = %d\n", opt.cbufsiz));
+	DPRINTF(("opt.cbufsiz = %ld\n", opt.cbufsiz));
 	DPRINTF(("opt.cbufnum = %d\n", opt.cbufnum));
 	
 	for (;;) {
