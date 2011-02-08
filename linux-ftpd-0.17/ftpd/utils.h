@@ -70,6 +70,7 @@ extern "C" {
 #include <assert.h>
 #include <stdarg.h>
 #include <locale.h>
+#include <ctype.h>
 
 /* Needed for Unix version of run_with_timeout. */
 #include <signal.h>
@@ -81,15 +82,15 @@ extern "C" {
 #  define countof(x) (sizeof (x) / sizeof ((x)[0]))
 # endif
 
-#define CMP1(p, c0) (c_tolower((p)[0]) == (c0) && (p)[1] == '\0')
+#define CMP1(p, c0) (tolower((p)[0]) == (c0) && (p)[1] == '\0')
 
-#define CMP2(p, c0, c1) (c_tolower((p)[0]) == (c0)        \
-                         && c_tolower((p)[1]) == (c1)     \
+#define CMP2(p, c0, c1) (tolower((p)[0]) == (c0)        \
+                         && tolower((p)[1]) == (c1)     \
                          && (p)[2] == '\0')
 
-#define CMP3(p, c0, c1, c2) (c_tolower((p)[0]) == (c0)    \
-                     && c_tolower((p)[1]) == (c1)         \
-                     && c_tolower((p)[2]) == (c2)         \
+#define CMP3(p, c0, c1, c2) (tolower((p)[0]) == (c0)    \
+                     && tolower((p)[1]) == (c1)         \
+                     && tolower((p)[2]) == (c2)         \
                      && (p)[3] == '\0')
 
 /* Copy the data delimited with BEG and END to alloca-allocated

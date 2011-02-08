@@ -58,6 +58,8 @@ enum parse_line {
   line_unknown_command
 };
 
+char *strdupdelim (const char *beg, const char *end);
+
 #define CMD_DECLARE(func) static bool func (const char *, const char *, void *)
 
 CMD_DECLARE (cmd_boolean);
@@ -102,7 +104,7 @@ parse_line (const char *line, char **com, char **val, int *comind);
 static void
 defaults (void)
 {
-  char *tmp;
+/*  char *tmp;*/
 
   /* Most of the default values are 0 (and 0.0, NULL, and false).
      Just reset everything, and fill in the non-zero values.  Note
@@ -568,9 +570,9 @@ static bool
 setval_internal_tilde (int comind, const char *com, const char *val)
 {
   bool ret;
-  int homelen;
+/*  int homelen;
   char *home;
-  char **pstring;
+  char **pstring;*/
   ret = setval_internal (comind, com, val);
 
   /* We make tilde expansion for cmd_file and cmd_directory
