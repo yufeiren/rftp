@@ -450,7 +450,7 @@ cmd_string (const char *com, const char *val, void *place)
 static bool
 cmd_byte (const char *com, const char *val, void *place)
 {
-  *place = (long) byte_atoi(val);
+  *(long *)place = (long) byte_atoi(val);
   
   return true;
 }
