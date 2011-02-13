@@ -91,6 +91,9 @@ readernum
 writernum
 sendernum
 recvernum
+
+active listening port area (min to max)
+
 */
 };
 
