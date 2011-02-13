@@ -972,7 +972,7 @@ reader(void *arg)
 	totallen = cb->filesize;
 	
 /*	for (currlen = 0; currlen < totallen; currlen += thislen) { */
-	for (currlen = 0; currlen < totallen; currlen += thislen) {
+	for (currlen = 0; ; currlen += thislen) {
 		/* get free block */
 		TAILQ_LOCK(&free_tqh);
 		while (TAILQ_EMPTY(&free_tqh))
