@@ -18,6 +18,10 @@ OBJS=ftpd.o ftpcmd.o logutmp.o logwtmp.o popen.o rdma.o utils.o init.o
 
 CFLAGS+=-DRFTPDRC
 
+ifeq ($(USE_SHADOW), 1)
+	CFLAGS+=-DUSE_SHADOW
+endif
+
 all: rftpd
 
 %.o: %.c

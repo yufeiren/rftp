@@ -1,5 +1,9 @@
 include ../MCONFIG
 
+ifeq ($(USE_SHADOW), 1)
+	CFLAGS+=-DUSE_SHADOW
+endif
+
 OBJS=daemon.o setproctitle.o isexpired.o vis.o
 
 all: libsupport.a

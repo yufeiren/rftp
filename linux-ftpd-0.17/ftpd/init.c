@@ -48,6 +48,12 @@ as that of the covered work.
 #include "utils.h"
 #include "init.h"
 
+#if defined(RCFTPRC)
+# define SYSTEM_RFTPDRC "/etc/rcftprc"
+#elif defined(RFTPDRC)
+# define SYSTEM_RFTPDRC "/etc/rftpdrc"
+#endif
+
 extern struct options opt;
 
 /* Return values of parse_line. */
