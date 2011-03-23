@@ -61,6 +61,7 @@ extern "C" {
 #include <rdma/rdma_cma.h>
 #include <infiniband/arch.h>
 
+#include <fcntl.h>
 #include <semaphore.h>
 #include <sys/sendfile.h>
 
