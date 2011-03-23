@@ -124,7 +124,8 @@ defaults (void)
   opt.cbufnum = 10;
   
   opt.srvcomport = 21;
-  opt.issendfile = false;
+  opt.usesendfile = false;
+  opt.usesplice = false;
 }
 
 /* Return the user's home directory (strdup-ed), or NULL if none is

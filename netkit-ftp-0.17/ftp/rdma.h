@@ -61,7 +61,7 @@ extern "C" {
 #include <rdma/rdma_cma.h>
 #include <infiniband/arch.h>
 
-#define _GNU_SOURCE	/* for splice */
+#define __USE_GNU		/* for splice */
 #include <fcntl.h>
 
 #include <semaphore.h>
