@@ -89,7 +89,8 @@ static const struct {
 /* if sendfile set Y, 
    put will use sendfile instead of read file + write socket
 */
-	{ "sendfile",      &opt.issendfile,        cmd_boolean },
+	{ "usesendfile",   &opt.usesendfile,       cmd_boolean },
+	{ "usesplice",     &opt.usesplice,         cmd_boolean },
 /*
 readernum
 writernum

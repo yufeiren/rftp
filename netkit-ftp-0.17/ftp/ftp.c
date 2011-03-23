@@ -614,10 +614,16 @@ sendrequest(const char *cmd, char *local, char *remote, int printnames)
 	case TYPE_L:
 		errno = d = 0;
 		
-		if (opt.issendfile == true) { /* sendfile */
+		if (opt.usesplice == true) {
+		printf("use splice to transfer data\n");
 			off_t offset;
 			offset = 0;
-			bytes = sendfilen(fileno(dout), fileno(fin), &offset, st.st_size);
+			bytes = ff_splice(fileno(dout), fileno(fin), offset, st.st_size);
+		} else if (opt.usesendfile == true) { /* sendfile */
+		printf("use sendfile to transfer data\n");
+			off_t offset;
+			offset = 0;
+			bytes = sendfilen(fileno(dout), fileno(fin), offset, st.st_size);
 		} else
 		while ((c = read(fileno(fin), buf, sizeof (buf))) > 0) {
 			bytes += c;
