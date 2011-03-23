@@ -234,4 +234,4 @@ max_size_t byte_atoi( const char *inString ) {
         default: break;
     }
     return (max_size_t) theNum;
-} /* end byte_atof */
+} /* end byte_atoi */

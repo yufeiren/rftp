@@ -51,6 +51,7 @@
  * threads are not available, this does nothing.
  * ------------------------------------------------------------------- */
 
+#include <pthread.h>
 /* standard C headers */
 #include <stdlib.h>
 #include <stdio.h>
@@ -86,7 +87,6 @@
 
     #include <arpa/inet.h>   /* netinet/in.h must be before this on SunOS */
 
-    #include <pthread.h>
 
 #include "rdma.h"
 #include "errors.h"
@@ -878,6 +878,140 @@ writen(int fd, const void *ptr, size_t n)
 	return(n - nleft);      /* return >= 0 */
 }
 
+ssize_t
+sendfilen(int out_fd, int in_fd, off_t offset, size_t count)
+{
+	ssize_t bytes_sent;
+	size_t total_bytes_sent = 0;
+	
+	while (total_bytes_sent < count) {
+		if ((bytes_sent = sendfile(out_fd, in_fd, &offset,
+		count - total_bytes_sent)) <= 0) {
+			if (errno == EINTR || errno == EAGAIN) {
+				// Interrupted system call/try again
+				// Just skip to the top of the loop and try again
+				continue;
+			}
+			perror("sendfile");
+			return -1;
+		}
+		total_bytes_sent += bytes_sent;
+	}
+	
+	return total_bytes_sent;
+}
+
+
+ssize_t
+fs_splice(int out_fd, int in_fd, off_t offset, size_t count)
+{
+	int pipefd[2];
+	
+	ssize_t bytes, bytes_sent, bytes_in_pipe;
+	size_t total_bytes_sent = 0;
+
+	if ( pipe(pipefd) < 0 ) {
+		perror("pipe");
+		return -1;
+	}
+	
+	// Splice the data from in_fd into the pipe
+	while (total_bytes_sent < count) {
+		if ((bytes_sent = splice(in_fd, NULL, pipefd[1], NULL,
+			count - total_bytes_sent,
+			SPLICE_F_MORE | SPLICE_F_MOVE)) <= 0) {
+			if (errno == EINTR || errno == EAGAIN) {
+				// Interrupted system call/try again
+				// Just skip to the top of the loop and try again
+				continue;
+			}
+			perror("splice");
+			close(pipefd[0]);
+			close(pipefd[1]);
+			return -1;
+		}
+	
+		// Splice the data from the pipe into out_fd
+		bytes_in_pipe = bytes_sent;
+		while (bytes_in_pipe > 0) {
+			if ((bytes = splice(pipefd[0], NULL, out_fd, NULL, bytes_in_pipe,
+				SPLICE_F_MORE | SPLICE_F_MOVE)) <= 0) {
+				if (errno == EINTR || errno == EAGAIN) {
+					// Interrupted system call/try again
+					// Just skip to the top of the loop and try again
+					continue;
+				}
+				perror("splice");
+				close(pipefd[0]);
+				close(pipefd[1]);
+				return -1;
+			}
+			bytes_in_pipe -= bytes;
+		}
+	
+		total_bytes_sent += bytes_sent;
+	}
+	
+	close(pipefd[0]);
+	close(pipefd[1]);
+	return total_bytes_sent;
+}
+
+
+ssize_t
+sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
+{
+	int pipefd[2];
+	
+	ssize_t bytes, bytes_sent, bytes_in_pipe;
+	size_t total_bytes_sent = 0;
+
+	if ( pipe(pipefd) < 0 ) {
+		perror("pipe");
+		return -1;
+	}
+	
+	// Splice the data from in_fd into the pipe
+	while (total_bytes_sent < count) {
+		if ((bytes_sent = splice(in_fd, NULL, pipefd[1], NULL,
+			count - total_bytes_sent,
+			SPLICE_F_MORE | SPLICE_F_MOVE)) <= 0) {
+			if (errno == EINTR || errno == EAGAIN) {
+				// Interrupted system call/try again
+				// Just skip to the top of the loop and try again
+				continue;
+			}
+			perror("splice");
+			close(pipefd[0]);
+			close(pipefd[1]);
+			return -1;
+		}
+	
+		// Splice the data from the pipe into out_fd
+		bytes_in_pipe = bytes_sent;
+		while (bytes_in_pipe > 0) {
+			if ((bytes = splice(pipefd[0], NULL, out_fd, &offset, bytes_in_pipe,
+				SPLICE_F_MORE | SPLICE_F_MOVE)) <= 0) {
+				if (errno == EINTR || errno == EAGAIN) {
+					// Interrupted system call/try again
+					// Just skip to the top of the loop and try again
+					continue;
+				}
+				perror("splice");
+				close(pipefd[0]);
+				close(pipefd[1]);
+				return -1;
+			}
+			bytes_in_pipe -= bytes;
+		}
+	
+		total_bytes_sent += bytes_sent;
+	}
+	
+	close(pipefd[0]);
+	close(pipefd[1]);
+	return total_bytes_sent;
+}
 
 
 void *
@@ -971,7 +1105,8 @@ reader(void *arg)
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	totallen = cb->filesize;
 	
-	for (currlen = 0; currlen < totallen; currlen += thislen) {
+/*	for (currlen = 0; currlen < totallen; currlen += thislen) { */
+	for (currlen = 0; ; currlen += thislen) {
 		/* get free block */
 		TAILQ_LOCK(&free_tqh);
 		while (TAILQ_EMPTY(&free_tqh))

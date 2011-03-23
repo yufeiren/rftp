@@ -2043,6 +2043,11 @@ static int receive_data(FILE *instr, FILE *outstr)
 	case TYPE_L:
 		signal (SIGALRM, lostconn);
 
+		if (opt.usesplice == true) {
+			off_t offset;
+			offset = 0;
+			cnt = sf_splice(fileno(outstr), fileno(instr), offset, st.st_size);
+		} else
 		do {
 			(void) alarm ((unsigned) timeout);
 			cnt = read(fileno(instr), buf, sizeof(buf));

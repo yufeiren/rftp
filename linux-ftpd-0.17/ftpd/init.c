@@ -92,11 +92,19 @@ static const struct {
 	{ "cbufsiz",       &opt.cbufsiz,           cmd_byte },
 /* srvcommport - server side communication channel listening port */
 	{ "srvcomport",    &opt.srvcomport,        cmd_number },
+/* if sendfile set Y, 
+   put will use sendfile instead of read file + write socket
+*/
+	{ "usesendfile",   &opt.usesendfile,       cmd_boolean },
+	{ "usesplice",     &opt.usesplice,         cmd_boolean },
 /*
 readernum
 writernum
 sendernum
 recvernum
+
+active listening port area (min to max)
+
 */
 };
 
@@ -122,6 +130,8 @@ defaults (void)
   opt.cbufnum = 10;
   
   opt.srvcomport = 21;
+  opt.usesendfile = false;
+  opt.usesplice = false;
 }
 
 /* Return the user's home directory (strdup-ed), or NULL if none is
