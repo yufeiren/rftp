@@ -51,6 +51,7 @@
  * threads are not available, this does nothing.
  * ------------------------------------------------------------------- */
 
+#include <pthread.h>
 /* standard C headers */
 #include <stdlib.h>
 #include <stdio.h>
@@ -86,7 +87,6 @@
 
     #include <arpa/inet.h>   /* netinet/in.h must be before this on SunOS */
 
-    #include <pthread.h>
 
 #include "rdma.h"
 #include "errors.h"
