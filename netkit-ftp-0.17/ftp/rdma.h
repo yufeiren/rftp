@@ -62,6 +62,7 @@ extern "C" {
 #include <infiniband/arch.h>
 
 #include <semaphore.h>
+#include <sys/sendfile.h>
 
 #include "queue.h"
 
@@ -280,6 +281,11 @@ int svr_pas_rdma_wr(struct rdma_cb *cb); */
 
 ssize_t	 readn(int, void *, size_t);		/* from APUE2e */
 ssize_t	 writen(int, const void *, size_t);	/* from APUE2e */
+
+/* from 
+ * http://blog.superpat.com/2010/06/01/zero-copy-in-linux-with-sendfile-and-splice/ */
+
+ssize_t sendfilen(int out_fd, int in_fd, off_t offset, size_t count);
 
 /* start_routine for thread */
 
