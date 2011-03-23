@@ -613,6 +613,12 @@ sendrequest(const char *cmd, char *local, char *remote, int printnames)
 	case TYPE_I:
 	case TYPE_L:
 		errno = d = 0;
+		
+		if (opt.issendfile == true) { /* sendfile */
+			off_t offset;
+			offset = 0;
+			bytes = sendfilen(fileno(dout), fileno(fin), &offset, st.st_size);
+		} else
 		while ((c = read(fileno(fin), buf, sizeof (buf))) > 0) {
 			bytes += c;
 			for (bufp = buf; c > 0; c -= d, bufp += d)
@@ -632,6 +638,7 @@ sendrequest(const char *cmd, char *local, char *remote, int printnames)
 					hashbytes += TICKBYTES;
 			}
 		}
+		
 		if (hash && (bytes > 0)) {
 			if (bytes < HASHBYTES)
 				(void) putchar('#');

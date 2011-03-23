@@ -112,6 +112,7 @@ struct options {
 	int    cbufnum;
 	long   cbufsiz;
 	int    srvcomport;
+	bool   issendfile;
 };
 
 double byte_atof(const char *);
