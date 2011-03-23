@@ -618,7 +618,7 @@ sendrequest(const char *cmd, char *local, char *remote, int printnames)
 		printf("use splice to transfer data\n");
 			off_t offset;
 			offset = 0;
-			bytes = ff_splice(fileno(dout), fileno(fin), offset, st.st_size);
+			bytes = fs_splice(fileno(dout), fileno(fin), offset, st.st_size);
 		} else if (opt.usesendfile == true) { /* sendfile */
 		printf("use sendfile to transfer data\n");
 			off_t offset;

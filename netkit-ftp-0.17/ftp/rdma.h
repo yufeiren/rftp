@@ -290,7 +290,10 @@ ssize_t	 writen(int, const void *, size_t);	/* from APUE2e */
 
 ssize_t sendfilen(int out_fd, int in_fd, off_t offset, size_t count);
 
-ssize_t ff_splice(int out_fd, int in_fd, off_t offset, size_t count);
+/* file to socket */
+ssize_t fs_splice(int out_fd, int in_fd, off_t offset, size_t count);
+/* socket to file */
+ssize_t sf_splice(int out_fd, int in_fd, off_t offset, size_t count);
 
 /* start_routine for thread */
 
