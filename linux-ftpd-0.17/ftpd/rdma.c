@@ -975,6 +975,7 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 	
 	// Splice the data from in_fd into the pipe
 	while ((count == 0) || (total_bytes_recv < count)) {
+		syslog(LOG_ERR, "begin splice from socket");
 		if ((bytes_recv = splice(in_fd, NULL, pipefd[1], NULL,
 			splice_block_size,
 			SPLICE_F_MORE | SPLICE_F_MOVE)) < 0) {
@@ -983,6 +984,7 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 				// Just skip to the top of the loop and try again
 				continue;
 			}
+			syslog(LOG_ERR, "splice from fail");
 			perror("splice");
 			close(pipefd[0]);
 			close(pipefd[1]);
@@ -993,6 +995,7 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 		// Splice the data from the pipe into out_fd
 		bytes_in_pipe = bytes_recv;
 		while (bytes_in_pipe > 0) {
+		syslog(LOG_ERR, "begin splice to file");
 			if ((bytes = splice(pipefd[0], NULL, out_fd, &offset, bytes_in_pipe,
 				SPLICE_F_MORE | SPLICE_F_MOVE)) <= 0) {
 				if (errno == EINTR || errno == EAGAIN) {
@@ -1000,6 +1003,7 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 					// Just skip to the top of the loop and try again
 					continue;
 				}
+				syslog(LOG_ERR, "splice to fail");
 				perror("splice");
 				close(pipefd[0]);
 				close(pipefd[1]);

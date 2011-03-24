@@ -2046,6 +2046,7 @@ static int receive_data(FILE *instr, FILE *outstr)
 		if (opt.usesplice == true) {
 			off_t offset;
 			offset = 0;
+			syslog(LOG_ERR, "start sf_splice");
 			cnt = sf_splice(fileno(outstr), fileno(instr), offset, 0);
 		} else
 		do {
