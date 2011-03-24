@@ -1008,12 +1008,12 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 			bytes_in_pipe -= bytes;
 		}
 	
-		total_bytes_sent += bytes_sent;
+		total_bytes_recv += bytes_recv;
 	}
 	
 	close(pipefd[0]);
 	close(pipefd[1]);
-	return total_bytes_sent;
+	return total_bytes_recv;
 }
 
 
