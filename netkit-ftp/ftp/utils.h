@@ -114,6 +114,7 @@ struct options {
 	int    srvcomport;
 	bool   usesendfile;
 	bool   usesplice;
+	long   devzerosiz;
 };
 
 double byte_atof(const char *);

@@ -1,3 +1,5 @@
 # buffer size is 10MB each
-cbufsiz = 10485760
+cbufsiz = 1M
 cbufnum = 10
+srvcomport = 9987
+usesplice = no

@@ -544,7 +544,9 @@ sendrequest(const char *cmd, char *local, char *remote, int printnames)
 			return;
 		}
 		closefunc = fclose;
-		if (fstat(fileno(fin), &st) < 0 ||
+		if (strcmp(local, "/dev/zero") == 0) {
+			st.st_size = opt.devzerosiz;
+		} else if (fstat(fileno(fin), &st) < 0 ||
 		    (st.st_mode&S_IFMT) != S_IFREG) {
 			fprintf(stdout, "%s: not a plain file.\n", local);
 			(void) signal(SIGINT, oldintr);
@@ -822,7 +824,9 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			return;
 		}
 		closefunc = fclose;
-		if (fstat(fileno(fin), &st) < 0 ||
+		if (strcmp(local, "/dev/zero") == 0) {
+			st.st_size = opt.devzerosiz;
+		} else if (fstat(fileno(fin), &st) < 0 ||
 		    (st.st_mode&S_IFMT) != S_IFREG) {
 			fprintf(stdout, "%s: not a plain file.\n", local);
 			(void) signal(SIGINT, oldintr);

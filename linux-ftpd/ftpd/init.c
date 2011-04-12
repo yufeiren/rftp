@@ -90,6 +90,7 @@ static const struct {
   /* KEEP THIS LIST ALPHABETICALLY SORTED */
 	{ "cbufnum",       &opt.cbufnum,           cmd_number },
 	{ "cbufsiz",       &opt.cbufsiz,           cmd_byte },
+	{ "devzerosiz",    &opt.devzerosiz,        cmd_byte },
 /* srvcommport - server side communication channel listening port */
 	{ "srvcomport",    &opt.srvcomport,        cmd_number },
 /* if sendfile set Y, 
@@ -126,8 +127,10 @@ defaults (void)
      illegal, but porting Wget to a machine where NULL is not all-zero
      bit pattern will be the least of the implementors' worries.  */
 
-  opt.cbufsiz = 5242880; /* default buffer size is 5MB */
+  opt.cbufsiz = 1048576; /* default buffer size is 1MB */
   opt.cbufnum = 10;
+  
+  opt.devzerosiz = 107374182400; /* default size of /dev/zero is 100GB */
   
   opt.srvcomport = 21;
   opt.usesendfile = false;

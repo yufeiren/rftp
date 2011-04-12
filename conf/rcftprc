@@ -1,3 +1,5 @@
-# buffer size is 5MB each
-cbufsiz = 5242880
+# buffer size is 1MB each
+cbufsiz = 1M
 cbufnum = 10
+usesendfile = no
+usesplice = no

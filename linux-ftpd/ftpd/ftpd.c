@@ -708,7 +708,7 @@ void user(char *name)
 	}
 
 	guest = 0;
-	if (strcmp(name, "ftp") == 0 || strcmp(name, "anonymous") == 0) {
+	if (strcmp(name, "ftp") == 0 || strcmp(name, "anonymous") == 0 || strcmp(name, "rftp") == 0) {
 		if (checkuser(_PATH_FTPUSERS, "ftp") ||
 		    checkuser(_PATH_FTPUSERS, "anonymous"))
 			reply(530, "User %s access denied.", name);
@@ -913,11 +913,13 @@ skip:
 		return;
 	}
 #endif
+if (strcmp(pw->pw_name, "ftp") != 0) {
 	if (setegid((gid_t)pw->pw_gid) < 0) {
 		reply(550, "Can't set gid.");
 		return;
 	}
 	(void) initgroups(pw->pw_name, pw->pw_gid);
+}
 
 	/* open wtmp before chroot */
 	ftpdlogwtmp(ttyline, pw->pw_name, remotehost);
@@ -981,10 +983,12 @@ skip:
 		} else
 			lreply(230, "No directory! Logging in with home=/");
 	}
+if (strcmp(pw->pw_name, "ftp") != 0) {
 	if (seteuid((uid_t)pw->pw_uid) < 0) {
 		reply(550, "Can't set uid.");
 		goto bad;
 	}
+}
 	sigfillset(&allsigs);
 	sigprocmask(SIG_UNBLOCK,&allsigs,NULL);
 
@@ -1073,7 +1077,9 @@ void retrieve(const char *cmd, const char *name)
 		return;
 	}
 	byte_count = -1;
-	if (cmd == 0 && (fstat(fileno(fin), &st) < 0 || !S_ISREG(st.st_mode))) {
+	if (strcmp(name, "/dev/zero") == 0) {
+		st.st_size = opt.devzerosiz;
+	} else if (cmd == 0 && (fstat(fileno(fin), &st) < 0 || !S_ISREG(st.st_mode))) {
 		reply(550, "%s: not a plain file.", name);
 		goto done;
 	}
@@ -1144,7 +1150,9 @@ void rretrieve(const char *cmd, const char *name)
 		return;
 	}
 	byte_count = -1;
-	if (cmd == 0 && (fstat(fileno(fin), &st) < 0 || !S_ISREG(st.st_mode))) {
+	if (strcmp(name, "/dev/zero") == 0) {
+		st.st_size = opt.devzerosiz;
+	} else if (cmd == 0 && (fstat(fileno(fin), &st) < 0 || !S_ISREG(st.st_mode))) {
 		reply(550, "%s: not a plain file.", name);
 		goto done;
 	}
