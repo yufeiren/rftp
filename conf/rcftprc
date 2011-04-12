@@ -3,3 +3,4 @@ cbufsiz = 1M
 cbufnum = 10
 usesendfile = no
 usesplice = no
+devzerosiz = 1G

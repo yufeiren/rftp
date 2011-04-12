@@ -3,3 +3,4 @@ cbufsiz = 1M
 cbufnum = 10
 srvcomport = 9987
 usesplice = no
+devzerosiz = 1G
