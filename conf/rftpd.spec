@@ -3,7 +3,7 @@
 %define _topdir         /home/ren/rftp
 %define name                    rftpd
 %define release         1
-%define version         0.11
+%define version         0.12_rc2
 %define buildroot %{_topdir}/%{name}-%{version}-root
 
 BuildRoot:      %{buildroot}
@@ -43,6 +43,12 @@ rm -rf %{buildroot}
 /usr/sbin/rftpd
 
 %changelog
+*Tue Apl 12 2011 <renyufei83@gmail.com>
+--support 'rget'
+--user 'ftp' will not setuid/setgid anymore
+--adjustable bulk number and bulk size
+--adjustable '/dev/zero' file size
+
 *Wed Jan 26 2011 <renyufei83@gmail.com>
 --Add %clean section
 
