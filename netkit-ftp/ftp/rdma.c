@@ -915,10 +915,12 @@ fs_splice(int out_fd, int in_fd, off_t offset, size_t count)
 		return -1;
 	}
 	
+	size_t splice_block_size = 16384;	/* 16K */
+	
 	// Splice the data from in_fd into the pipe
 	while (total_bytes_sent < count) {
 		if ((bytes_sent = splice(in_fd, NULL, pipefd[1], NULL,
-			count - total_bytes_sent,
+			splice_block_size,
 			SPLICE_F_MORE | SPLICE_F_MOVE)) <= 0) {
 			if (errno == EINTR || errno == EAGAIN) {
 				// Interrupted system call/try again
@@ -930,7 +932,7 @@ fs_splice(int out_fd, int in_fd, off_t offset, size_t count)
 			close(pipefd[1]);
 			return -1;
 		}
-	
+		
 		// Splice the data from the pipe into out_fd
 		bytes_in_pipe = bytes_sent;
 		while (bytes_in_pipe > 0) {
