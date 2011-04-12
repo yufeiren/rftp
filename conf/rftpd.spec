@@ -43,7 +43,7 @@ rm -rf %{buildroot}
 /usr/sbin/rftpd
 
 %changelog
-*Tue Apl 12 2011 <renyufei83@gmail.com>
+*Tue Apr 12 2011 <renyufei83@gmail.com>
 --support 'rget'
 --user 'ftp' will not setuid/setgid anymore
 --adjustable bulk number and bulk size
