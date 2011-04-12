@@ -1,5 +1,64 @@
 RDMA FTP client (rcftp) and server (rftpd) is a set of tools for high performance data transfer using RDMA technology based on ftp protocol.
 
+New Features
+==
+* Support RDMA bidirection data transfer using 'rput' and 'rget'
+* Support sendfile
+* Support splice
+* Adjustable buffer size and buffer block number
+* Adjustable server side listening port number
+* /dev/zero could be set as data source with limited size
+* Client could load script as input for batch convenient
+
+Installation
+==
+1. If you have installed previous version, please use upgrade command,
+ # rpm -Uvh rftpd-0.12_rc2-1.x86_64.rpm
+ # rpm -Uvh rcftp-0.12_rc2-1.x86_64.rpm
+
+2. Comfirm version
+ # rpm -qa rcftp
+ rcftp-0.12_rc2-1
+ # rpm -qa rftpd
+ rftpd-0.12_rc2-1
+
+Configuration
+==
+* Configuration file lookup:
+ load default value
+ if (system configuration exist)
+     load /etc/rcftprc (client) or /etc/rftpdrc (server)
+ if (user specific configuration exist)
+     override system configuration with
+     $HOME/.rcftprc (client) or $HOME/.rftpdrc (server)
+
+* The application both client and server could be configured with several parameters as follows,
+
++-------------+----------+--------+--------------------------------+
+|   option    |  default |  app   |   description                  |
++-------------+----------+--------+--------------------------------+
+| cbufsiz     |  1MB     | rcftp  | circular buffer block size     |
+|             |          | rftpd  |                                |
++-------------+----------+--------+--------------------------------+
+| cbufnum     |  10      | rcftp  | circular buffer block number   |
+|             |          | rftpd  |                                |
++-------------+----------+--------+--------------------------------+
+| srvcomport  |  21      | rftpd  | server side communication      |
+|             |          |        | channel listening port         |
++-------------+----------+--------+--------------------------------+
+| usesendfile |  no      | rcftp  | set 'yes' if you want to use   |
+|             |          | rftpd  | sendfile to avoid data copy    |
+|             |          |        | between kernel and userspace   |
++-------------+----------+--------+--------------------------------+
+| usesplice   |  no      | rcftp  | set 'yes' if you want to take  |
+|             |          | rftpd  | advantage of splice to avoid   |
+|	      |	         |        | data copy between kernel and   |
+|             |          |        | userspace                      |
++-------------+----------+--------+--------------------------------+
+| devzerosiz  |  100G    | rcftp  | set /dev/zero size for         |
+|             |          | rftpd  | limited data transfer          |
++-------------+----------+--------+--------------------------------+
+
 Usage
 =====
 
@@ -7,27 +66,31 @@ Usage
  # /usr/sbin/rftpd -D &
 
 2. Check the network status
- # netstat -an | grep 9987
- tcp    0   0  0.0.0.0:9987           0.0.0.0:*             LISTEN
+ # netstat -an | grep [port]
+ tcp    0   0  0.0.0.0:port           0.0.0.0:*             LISTEN
  
-To distingwish between traditional ftp service and RDMA ftp, the rftpd chose port 9987 for listening.
-
 3. Startup client and login to the server
- # /usr/bin/rcftp [serv addr] 9987
+ # /usr/bin/rcftp [server addr] [port]
  ...
  Name: ftp
  Password: ftp
 
-ftp/ftp is a kind of anonymous user/passwd pair.
+ftp/ftp is a kind of anonymous user/passwd pair, and the server would not set user id and group which makes regular user startup server possible.
 
 4. Change directories
  ftp> lcd [local working directory]
  ftp> cd [remote working directory]
 
-5. Transfer data via RDMA
- ftp> rput local-file
+5.1. Transfer data via RDMA
+ ftp> rput local-file [ remote-file ]
  ftp> rget remote-file [ local-file ]
  
+5.2. Transfer data via RDMA from memory to memory
+ ftp> rput /dev/zero /dev/null
+
+5.3. After you set the 'usesplice' or 'usesendfile' as 'yes', the apps will avoid data copy between user space and kernel space
+ ftp> put local-file [ remote-file ]
+
 6. Close the connection
  ftp> by
  221 Goodbye.
@@ -36,10 +99,18 @@ ftp/ftp is a kind of anonymous user/passwd pair.
 Issues
 ======
 
-Version 0.11
-1. We only support RDMA put (rput) to transfer data in this version.
-2. Because of circular buffer introduced, each connection for one file will allocate 50 MB * 30 = 1.5 GB main memory for cache data on both client and server side. So, please be sure the number of files to be parallel transfered at the same time, and make sure the memory is enough to hold such amount of buffer. Otherwise, the linux swap should be very busy so that there would be unbearable performance. The memory will be released after you close the connection.
+* splice has higher priority than sendfile. so if 'usesplice' and 'usesendfile' are both set as 'yes', the application will use splice to send data.
 
-
-This doc is also available at:
-http://hpdtl.cewit.stonybrook.edu/mediawiki/index.php/Rftp_Usage
+* If concurrent clients are wanted, we suggest you could take scripts for convenient to do repeatable task. For example, if you want to transfer some large file, you could do as follows,
+ # /root/bin/rcftp -n -i < [script]
+ in the script file, you could write some task as you want,
+------------
+open server-addr port
+user username password
+bin
+prompt
+lcd local-dir
+cd remote-dir
+rput local-file remote-file
+bye
+------------
