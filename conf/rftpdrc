@@ -1,4 +1,4 @@
-# buffer size is 10MB each
+# buffer size is 1MB each
 cbufsiz = 1M
 cbufnum = 10
 srvcomport = 9987

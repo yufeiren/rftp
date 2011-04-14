@@ -2,6 +2,9 @@
 
 GITSRCDIR=$HOME/git/rftp
 RPMDIR=$HOME/rftp
+VERSION=0.12_rc2
+
+TAG=v$VERSION
 
 # clear
 rm -rf $RPMDIR/BUILD/*
@@ -13,7 +16,7 @@ cp $GITSRCDIR/conf/rftpd.spec $RPMDIR/SPECS/
 # client: git archive
 cd $GITSRCDIR/netkit-ftp
 # HEAD or vx.xx
-git archive --format=tar --prefix=rcftp-0.12_rc2/ v0.12_rc2 | gzip -9 > $RPMDIR/SOURCES/rcftp-0.12_rc2.tar.gz
+git archive --format=tar --prefix=rcftp-$VERSION/ $TAG | gzip -9 > $RPMDIR/SOURCES/rcftp-$VERSION.tar.gz
 
 
 # build client
@@ -22,7 +25,7 @@ rpmbuild -ba rftp.spec
 
 # server: git archive
 cd $GITSRCDIR/linux-ftpd
-git archive --format=tar --prefix=rftpd-0.12_rc2/ v0.12_rc2 | gzip -9 > $RPMDIR/SOURCES/rftpd-0.12_rc2.tar.gz
+git archive --format=tar --prefix=rftpd-$VERSION/ $TAG | gzip -9 > $RPMDIR/SOURCES/rftpd-$VERSION.tar.gz
 
 # build server
 cd $RPMDIR/SPECS/
