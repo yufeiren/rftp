@@ -13,17 +13,19 @@ New Features
 Installation
 ==
 1. If you have installed previous version, please use upgrade command,
- # rpm -Uvh rftpd-0.12_rc2-1.x86_64.rpm
- # rpm -Uvh rcftp-0.12_rc2-1.x86_64.rpm
+ # rpm -Uvh rftpd-0.12-1.x86_64.rpm
+ # rpm -Uvh rcftp-0.12-1.x86_64.rpm
 
 2. Comfirm version
  # rpm -qa rcftp
- rcftp-0.12_rc2-1
+ rcftp-0.12-1
  # rpm -qa rftpd
- rftpd-0.12_rc2-1
+ rftpd-0.12-1
 
 Configuration
 ==
+* You could copy the sample configration(rcftprc and rftpdrc) files to /etc directory.
+
 * Configuration file lookup:
  load default value
  if (system configuration exist)
