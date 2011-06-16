@@ -1640,41 +1640,6 @@ rdmarecvrequest(const char *cmd,
 	rdmadataconn("r");
 	DPRINTF(("rdmadataconn successful\n"));
 	
-/*	if (din == NULL)
-		goto abort; */
-	if (strcmp(local, "-") == 0)
-		fout = stdout;
-	else if (*local == '|') {
-		oldintp = signal(SIGPIPE, SIG_IGN);
-		fout = popen(local + 1, "w");
-		if (fout == NULL) {
-			perror(local+1);
-			goto abort;
-		}
-		closefunc = pclose;
-	} 
-	else {
-		fout = fopen(local, lmode);
-		if (fout == NULL) {
-			fprintf(stderr, "local: %s: %s\n", local,
-				strerror(errno));
-			goto abort;
-		}
-		closefunc = fclose;
-	}
-	if (fstat(fileno(fout), &st) < 0 || st.st_blksize == 0)
-		st.st_blksize = BUFSIZ;
-	if (st.st_blksize > bufsize) {
-		if (buf)
-			(void) free(buf);
-		buf = malloc((unsigned)st.st_blksize);
-		if (buf == NULL) {
-			perror("malloc");
-			bufsize = 0;
-			goto abort;
-		}
-		bufsize = st.st_blksize;
-	}
 	(void) gettimeofday(&start, (struct timezone *)0);
 	
 	TAILQ_INIT(&free_tqh);

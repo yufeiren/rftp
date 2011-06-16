@@ -2,25 +2,26 @@ RDMA FTP client (rcftp) and server (rftpd) is a set of tools for high performanc
 
 New Features
 ==
-* Support RDMA bidirection data transfer using 'rput' and 'rget'
-* Support sendfile
-* Support splice
-* Adjustable buffer size and buffer block number
-* Adjustable server side listening port number
-* /dev/zero could be set as data source with limited size
-* Client could load script as input for batch convenient
+* RFTP version information
+* support multiple channel data transfer
+* support directory hierarchy transfer
+* support 'rmput'
+* support direct io
+* support sendfile, splice
+* adjustable reader/writer
+* adjustable io depth of send queue and recv queue
+* bandwidth monitor
 
 Installation
 ==
 1. If you have installed previous version, please use upgrade command,
- # rpm -Uvh rftpd-0.12-1.x86_64.rpm
- # rpm -Uvh rcftp-0.12-1.x86_64.rpm
+ # rpm -Uvh rftpd-0.13-1.x86_64.rpm
+ # rpm -Uvh rcftp-0.13-1.x86_64.rpm
 
 2. Comfirm version
- # rpm -qa rcftp
- rcftp-0.12-1
- # rpm -qa rftpd
- rftpd-0.12-1
+ # rpm -qa rcftp rftpd
+ rcftp-0.13-1
+ rftpd-0.13-1
 
 Configuration
 ==
@@ -60,6 +61,36 @@ Configuration
 | devzerosiz  |  100G    | rcftp  | set /dev/zero size for         |
 |             |          | rftpd  | limited data transfer          |
 +-------------+----------+--------+--------------------------------+
+| rmtaddrnum  |  100     | rcftp  | number of pre-allocated        |
+|             |          | rftpd  | remote addr information        |
++-------------+----------+--------+--------------------------------+
+| evbufnum    |  100     | rcftp  | number of pre-allocated        |
+|             |          | rftpd  | send control messages buf      |
++-------------+----------+--------+--------------------------------+
+| recvbufnum  |  100     | rcftp  | number of pre-allocated        |
+|             |          | rftpd  | recv control messages buf      |
++-------------+----------+--------+--------------------------------+
+| rcstreamnum |  1       | rcftp  | number of parallel data        |
+|             |          |        | data channels                  |
++-------------+----------+--------+--------------------------------+
+| readernum   |  1       | rcftp  | number of reader               |
+|             |          | rftpd  |                                |
++-------------+----------+--------+--------------------------------+
+| writernum   |  1       | rcftp  | number of writer               |
+|             |          | rftpd  |                                |
++-------------+----------+--------+--------------------------------+
+| directio    |  no      | rcftp  | on/off direct IO feature when  |
+|             |          | rftpd  |  doing file io                 |
+|             |          |        | CHR device like /dev/zero and  |
+|             |          |        |  /devnull don't support this   |
++-------------+----------+--------+--------------------------------+
+| rdma_qp_sq  |  64      | rcftp  | maximum iodepth of rdma send   |
+| _depth      |          | rftpd  | queue                          |
++-------------+----------+--------+--------------------------------+
+| rdma_qp_rq  |  64      | rcftp  | maximum iodepth of rdma recv   |
+| _depth      |          | rftpd  | queue                          |
++-------------+----------+--------+--------------------------------+
+
 
 Usage
 =====
@@ -86,7 +117,8 @@ ftp/ftp is a kind of anonymous user/passwd pair, and the server would not set us
 5.1. Transfer data via RDMA
  ftp> rput local-file [ remote-file ]
  ftp> rget remote-file [ local-file ]
- 
+ ftp> rmput [[file1] ...] [[dir1] ...]
+
 5.2. Transfer data via RDMA from memory to memory
  ftp> rput /dev/zero /dev/null
 
