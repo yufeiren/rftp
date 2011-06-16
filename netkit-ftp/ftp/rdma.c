@@ -87,6 +87,7 @@
 
     #include <arpa/inet.h>   /* netinet/in.h must be before this on SunOS */
 
+#include <dirent.h>	/* for dir resolve */
 
 #include "rdma.h"
 #include "errors.h"
@@ -95,72 +96,54 @@
 extern struct acptq acceptedTqh;
 
 extern struct options opt;
-/*
-static int server_recv(struct rdma_cb *cb, struct ibv_wc *wc)
-{
-	if (wc->byte_len != sizeof(cb->recv_buf)) {
-		fprintf(stderr, "Received bogus data, size %d\n", wc->byte_len);
-		return -1;
-	}
 
-	cb->remote_rkey = ntohl(cb->recv_buf.rkey);
-	cb->remote_addr = ntohll(cb->recv_buf.buf);
-	cb->remote_len  = ntohl(cb->recv_buf.size);
-	cb->remote_mode = ntohl(cb->recv_buf.mode);
-	DEBUG_LOG("Received rkey %x addr %" PRIx64 " len %d from peer\n",
-		  cb->remote_rkey, cb->remote_addr, cb->remote_len);
-*/	
-/*	switch ( cb->remote_mode ) {
-	case MODE_RDMA_ACTRD:
-		cb->trans_mode = kRdmaTrans_PasRead;
-		break;
-	case MODE_RDMA_ACTWR:
-		cb->trans_mode = kRdmaTrans_PasWrte;
-		break;
-	case MODE_RDMA_PASRD:
-		cb->trans_mode = kRdmaTrans_ActRead;
-		break;
-	case MODE_RDMA_PASWR:
-		cb->trans_mode = kRdmaTrans_ActWrte;
-		break;
-	default:
-		fprintf(stderr, "unrecognize transfer mode %d\n", \
-			cb->remote_mode);
-		break;
-	}*/
-	
-/*	if (cb->state <= CONNECTED || cb->state == ACTIVE_WRITE_FIN)
-		cb->state = RDMA_READ_ADV;
-	else
-		cb->state = RDMA_WRITE_ADV; */
-	
-/*	return 0;
-}*/
-/*
-static int client_recv(struct rdma_cb *cb, struct ibv_wc *wc)
-{
-	if (wc->byte_len != sizeof(cb->recv_buf)) {
-		fprintf(stderr, "Received bogus data, size %d\n", wc->byte_len);
-		return -1;
-	}*/
-/*
-	if (cb->state == RDMA_READ_ADV)
-		cb->state = RDMA_WRITE_ADV;
-	else
-		cb->state = RDMA_WRITE_COMPLETE;
-*/
-/*	return 0;
-}*/
+extern pthread_mutex_t dir_mutex;
+
+static int max_not_finish;
+static int reqblknum;
+static int repblknum;
+static int sndbcknum;
+static int sendblknum;
+
+static int untag_send_num;
+static int untag_recv_num;
+
+static struct rdma_cb *tmpcb;
+/* static tmp; */
+
+static int filesessionid;
+
 
 static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 {
+	int ret;
+	pthread_t tid;
+	struct ibv_recv_wr *bad_wr;
+	
 	if (wc->byte_len != sizeof(cb->recv_buf)) {
-		fprintf(stderr, "Received bogus data, size %d\n", wc->byte_len);
+		syslog(LOG_ERR, "Received bogus data, size %d\n", wc->byte_len);
 		return -1;
 	}
 	
-	if (cb->recv_buf.mode == kRdmaTrans_ActWrte) {
-		switch (cb->recv_buf.stat) {
+	/* find the recv buffer */
+	RECVWR *recvwr = NULL;
+	TAILQ_FOREACH(recvwr, &recvwr_tqh, entries)
+		if (recvwr->wr_id == wc->wr_id)
+			break;
+	
+	if (recvwr == NULL) {
+		syslog(LOG_ERR, "can not find recv wr id, %ld", recvwr->wr_id);
+		return -1;
+	}
+	
+	struct rdma_info_blk *newbuf;
+	newbuf = (struct rdma_info_blk *) malloc(sizeof(struct rdma_info_blk));
+	memset(newbuf, '\0', sizeof(struct rdma_info_blk));
+	memcpy(newbuf, &recvwr->recv_buf, sizeof(struct rdma_info_blk));
+	
+/*	if (cb->recv_buf.mode == kRdmaTrans_ActWrte) { */
+	if (recvwr->recv_buf.mode == kRdmaTrans_ActWrte) {
+		switch (recvwr->recv_buf.stat) {
 		case ACTIVE_WRITE_ADV:
 /*			iperf_format_send(cb, cb->rdma_sink_buf, cb->rdma_sink_mr); */
 			cb->send_buf.stat = ACTIVE_WRITE_RESP;
@@ -172,17 +155,702 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 			cb->remote_len  = ntohl(cb->recv_buf.size);
 			break;
 		case ACTIVE_WRITE_FIN:
+			/* take the block out */
+	/*		recv_data(&recvwr->recv_buf); */
+			ret = pthread_create(&tid, NULL, recv_data, newbuf);
+			if (ret != 0) {
+				perror("pthread_create recv_data:");
+				exit(EXIT_FAILURE);
+			}
+			break;
+		case ACTIVE_WRITE_RQBLK:
+			/* prep_blk(cb); */
+			ret = pthread_create(&tid, NULL, prep_blk, cb);
+			if (ret != 0) {
+				perror("pthread_create sender:");
+				exit(EXIT_FAILURE);
+			}
+			break;
+		case ACTIVE_WRITE_RPBLK:
+			/* acpt_blk(&recvwr->recv_buf); */
+			ret = pthread_create(&tid, NULL, acpt_blk, &recvwr->recv_buf);
+			if (ret != 0) {
+				perror("pthread_create sender:");
+				exit(EXIT_FAILURE);
+			}
+			break;
+		case DC_QP_REQ:
+			tmpcb = cb;
+			ret = pthread_create(&tid, NULL, handle_qp_req, &recvwr->recv_buf);
+			if (ret != 0) {
+				perror("pthread_create handle_qp_req:");
+				exit(EXIT_FAILURE);
+			}
+			break;
+		case DC_QP_REP:
+			ret = pthread_create(&tid, NULL, handle_qp_rep, &recvwr->recv_buf);
+			if (ret != 0) {
+				perror("pthread_create handle_qp_rep:");
+				exit(EXIT_FAILURE);
+			}
+			break;
+		case FILE_SESSION_ID_REQUEST:
+			tmpcb = cb;
+			ret = pthread_create(&tid, NULL, handle_file_session_req, &recvwr->recv_buf);
+			if (ret != 0) {
+				perror("pthread_create handle_file_session_req:");
+				exit(EXIT_FAILURE);
+			}
+			break;
+		case FILE_SESSION_ID_RESPONSE:
+			ret = pthread_create(&tid, NULL, handle_file_session_rep, &recvwr->recv_buf);
+			if (ret != 0) {
+				perror("pthread_create handle_file_session_rep:");
+				exit(EXIT_FAILURE);
+			}
+			break;
+		case DC_CONNECTION_REQ:
+			memcpy(&opt.rcstreamnum, recvwr->recv_buf.addr, 4);
+			syslog(LOG_ERR, "dc conn num is %d", opt.rcstreamnum);
 			break;
 		default:
 			fprintf(stderr, "unrecognized stat %d\n", cb->recv_buf.stat);
 			break;
 		}
 	}
+	
+	if (recvwr->recv_buf.stat != ACTIVE_WRITE_FIN) {
+		free(newbuf);
+	}
+	
+	/* the created thread should copy the recvbuf
+	   otherwise, the recvbuf could be flushed */
+	
+	/* repost the RDMA_RECV work request */
+	ret = ibv_post_recv(cb->qp, &recvwr->recv_wr, &bad_wr);
+	if (ret) {
+		syslog(LOG_ERR, "post recv error: %d\n", ret);
+		return -1;
+	}
+
+/*	sem_post(&cb->sem);
 
 	DEBUG_LOG("Received rkey %x addr %" PRIx64 " len %d from peer\n",
-		  cb->remote_rkey, cb->remote_addr, cb->remote_len);
+		  cb->remote_rkey, cb->remote_addr, cb->remote_len); */
 	
 	return 0;
+}
+
+
+void *
+handle_file_session_req(void *arg)
+{
+	struct rdma_info_blk *recvbuf = (struct rdma_info_blk *) arg;
+	struct rdma_info_blk tmpbuf;
+	EVENTWR *evwr;
+	struct ibv_send_wr *bad_wr;
+	
+	int ret;
+	
+	pthread_detach(pthread_self());
+	
+	memcpy(&tmpbuf, recvbuf, sizeof(struct rdma_info_blk));
+	recvbuf = &tmpbuf;
+	
+	FILEINFO *item = (FILEINFO *) malloc(sizeof(FILEINFO));
+	if (item == NULL) {
+		syslog(LOG_ERR, "malloc fail");
+		exit(EXIT_FAILURE);
+	}
+	
+	char filename[128];
+	memset(filename, '\0', 128);
+	
+	memcpy(filename, recvbuf->addr, 32);
+	
+	parsedir(filename);
+	
+	/* compose file information */
+	strcpy(item->lf, filename);
+	
+	if (opt.directio == true)
+		item->fd = open(item->lf, O_WRONLY | O_CREAT | O_DIRECT, 0666);
+	else
+		item->fd = open(item->lf, O_WRONLY | O_CREAT, 0666);
+	if (item->fd < 0) {
+		syslog(LOG_ERR, "Open failed %s", item->lf);
+		exit(EXIT_FAILURE);
+	}
+	
+	item->sessionid = ++ filesessionid;
+	
+	item->seqnum = 1;
+	
+	memcpy(&item->fsize, recvbuf->addr + 32, 8);
+	transtotallen += item->fsize;
+	
+	TAILQ_INIT(&item->pending_tqh);
+	syslog(LOG_ERR, "get file: %s, size: %ld\n", filename, item->fsize);
+	
+	/* insert file info into finfo_tqh */
+	TAILQ_LOCK(&finfo_tqh);
+	TAILQ_INSERT_TAIL(&finfo_tqh, item, entries);
+	TAILQ_UNLOCK(&finfo_tqh);
+	
+	/* compose response */
+	TAILQ_LOCK(&free_evwr_tqh);
+
+	while (TAILQ_EMPTY(&free_evwr_tqh)) {
+		if (TAILQ_WAIT(&free_evwr_tqh) != 0)
+			continue;	/* goto while */
+	}
+
+	evwr = TAILQ_FIRST(&free_evwr_tqh);
+	TAILQ_REMOVE(&free_evwr_tqh, evwr, entries);
+	
+	TAILQ_UNLOCK(&free_evwr_tqh);
+	
+	evwr->ev_buf.mode = kRdmaTrans_ActWrte;
+	evwr->ev_buf.stat = FILE_SESSION_ID_RESPONSE;
+	
+	strcpy(evwr->ev_buf.addr, filename);
+	memcpy(evwr->ev_buf.addr + 32, &filesessionid, 4);
+	
+	/* post send response */
+	TAILQ_LOCK(&evwr_tqh);
+	TAILQ_INSERT_TAIL(&evwr_tqh, evwr, entries);
+	TAILQ_UNLOCK(&evwr_tqh);
+	
+	ret = ibv_post_send(tmpcb->qp, &evwr->ev_wr, &bad_wr);
+	if (ret) {
+		syslog(LOG_ERR, "ibv_post_send: %m");
+		pthread_exit(NULL);
+	}
+	
+	pthread_exit(NULL);
+}
+
+
+void *
+handle_file_session_rep(void *arg)
+{
+	struct rdma_info_blk *recvbuf = (struct rdma_info_blk *) arg;
+	struct rdma_info_blk tmpbuf;
+	EVENTWR *evwr;
+	struct ibv_send_wr *bad_wr;
+	
+	pthread_detach(pthread_self());
+	
+	memcpy(&tmpbuf, recvbuf, sizeof(struct rdma_info_blk));
+	recvbuf = &tmpbuf;
+	
+	char filename[128];
+	memset(filename, '\0', 128);
+	
+	memcpy(filename, recvbuf->addr, 32);
+	
+	int sessionid;
+	memcpy(&sessionid, recvbuf->addr + 32, 4);
+	
+	/* find file id - move to scheduler list */
+	FILEINFO *item;
+	
+	TAILQ_LOCK(&finfo_tqh);
+	TAILQ_FOREACH(item, &finfo_tqh, entries)
+		if (strcmp(item->lf, filename) == 0)
+			break;
+	
+	if (item == NULL) {
+		syslog(LOG_ERR, "cannot find file: %s", filename);
+		TAILQ_UNLOCK(&finfo_tqh);
+		pthread_exit(NULL);
+	}
+
+	TAILQ_REMOVE(&finfo_tqh, item, entries);
+	item->sessionid = sessionid;
+
+	TAILQ_UNLOCK(&finfo_tqh);
+	
+	TAILQ_LOCK(&schedule_tqh);
+	TAILQ_INSERT_TAIL(&schedule_tqh, item, entries);
+	TAILQ_UNLOCK(&schedule_tqh);
+	TAILQ_SIGNAL(&schedule_tqh);
+	
+	pthread_exit(NULL);
+}
+
+
+void *handle_qp_req(void *arg)
+{
+	struct rdma_info_blk *recvbuf = (struct rdma_info_blk *) arg;
+	struct rdma_info_blk tmpbuf;
+	int i;
+	int ret;
+	int num, tmpnum;
+	union ibv_gid remote_gid;
+	
+	memcpy(&tmpbuf, recvbuf, sizeof(struct rdma_info_blk));
+	recvbuf = &tmpbuf;
+	
+	DATAQP *dcqp;
+	
+	char msg[128];
+	struct ibv_qp_attr attr;
+	
+	pthread_detach(pthread_self());
+	
+	/* length */
+	memcpy(&tmpnum, recvbuf->addr, 4);
+	num = ntohl(tmpnum);
+	
+	/* remote gid */
+	memset(msg, '\0', 128);
+	memcpy(msg, recvbuf->addr + 4, 47);
+	
+	char a[3];
+	for (i = 0; i < 16; i ++) {
+		memset(a, '\0', 3);
+		memcpy(a, msg + i * 3, 2);
+		remote_gid.raw[i] = (unsigned char)strtoll(a, NULL, 16);
+	}
+	
+	syslog(LOG_ERR, "get remote gid: %s", msg);
+	
+	create_dc_qp(tmpcb, num, 0);
+	
+	/* setup qp */
+	i = 0;
+	TAILQ_FOREACH(dcqp, &dcqp_tqh, entries) {
+		memset(msg, '\0', 128);
+		memcpy(msg, recvbuf->addr + i * 23 + 4 + 47, 23);
+		syslog(LOG_ERR, "get remote qp: %s", msg);
+		
+		sscanf(msg, "%04x:%04x:%06x:%06x", \
+			&dcqp->rem_lid, &dcqp->rem_out_reads, \
+			&dcqp->rem_qpn, &dcqp->rem_psn);
+		
+		memset(&attr, '\0', sizeof(struct ibv_qp_attr));
+
+		attr.qp_state = IBV_QPS_RTR;
+		attr.path_mtu = IBV_MTU_1024; /* 2048; */
+		/* port_attr.active_mtu;  user_parm->curr_mtu; */
+		attr.dest_qp_num = dcqp->rem_qpn;
+		attr.rq_psn = dcqp->rem_psn;
+		attr.ah_attr.dlid = dcqp->rem_lid;
+		attr.max_dest_rd_atomic = 1;
+		attr.min_rnr_timer = 12;
+
+/*		if (user_parm->gid_index < 0) { */
+/* 		attr.ah_attr.is_global  = 0;
+		attr.ah_attr.sl         = 0; sl */
+/*		} else { */
+		attr.ah_attr.is_global  = 1;
+		attr.ah_attr.grh.dgid   = remote_gid; /* dest->gid; */
+		attr.ah_attr.grh.sgid_index = 0; /* user_parm->gid_index; */
+		attr.ah_attr.grh.hop_limit = 1;
+		attr.ah_attr.sl         = 0;
+/*		} */
+		
+		attr.ah_attr.src_path_bits = 0;
+		attr.ah_attr.port_num = 1; /* user_parm->ib_port; */
+	
+		if (ibv_modify_qp(dcqp->qp, &attr,
+				  IBV_QP_STATE              |
+				  IBV_QP_AV                 |
+				  IBV_QP_PATH_MTU           |
+				  IBV_QP_DEST_QPN           |
+				  IBV_QP_RQ_PSN             |
+				  IBV_QP_MIN_RNR_TIMER      |
+				  IBV_QP_MAX_DEST_RD_ATOMIC)) {
+			fprintf(stderr, "Failed to modify RC QP to RTR: %d [%s]\n", errno, strerror(errno));
+			syslog(LOG_ERR, "Failed to modify RC QP to RTR: %d [%s]", errno, strerror(errno));
+			pthread_exit(NULL);
+		}
+
+		attr.timeout = 14; /* user_parm->qp_timeout; */
+		attr.retry_cnt = 7;
+		attr.rnr_retry = 7;
+			
+		attr.qp_state 	    = IBV_QPS_RTS;
+		attr.sq_psn 	    = dcqp->loc_psn;
+		attr.max_rd_atomic  = 1;
+		
+		attr.max_rd_atomic  = 1;
+		if (ibv_modify_qp(dcqp->qp, &attr,
+				  IBV_QP_STATE              |
+				  IBV_QP_SQ_PSN             |
+				  IBV_QP_TIMEOUT            |
+				  IBV_QP_RETRY_CNT          |
+				  IBV_QP_RNR_RETRY          |
+				  IBV_QP_MAX_QP_RD_ATOMIC)) {
+			fprintf(stderr, "Failed to modify RC QP to RTS: %d [%s]\n", errno, strerror(errno));
+			syslog(LOG_ERR, "Failed to modify RC QP to RTS: %d [%s]", errno, strerror(errno));
+			pthread_exit(NULL);
+		}
+		
+		i++;
+	}
+	
+	pthread_exit(NULL);
+}
+
+
+void *handle_qp_rep(void *arg)
+{
+	struct rdma_info_blk *recvbuf = (struct rdma_info_blk *) arg;
+	struct rdma_info_blk tmpbuf;
+	int i;
+	int ret;
+	int num, tmpnum;
+	union ibv_gid remote_gid;
+	
+	memcpy(&tmpbuf, recvbuf, sizeof(struct rdma_info_blk));
+	recvbuf = &tmpbuf;
+	
+	DATAQP *dcqp;
+	
+	char msg[128];
+	struct ibv_qp_attr attr;
+	
+	pthread_detach(pthread_self());
+	
+	/* length */
+	memcpy(&tmpnum, recvbuf->addr, 4);
+	num = ntohl(tmpnum);
+	
+	/* remote gid */
+	memset(msg, '\0', 128);
+	memcpy(msg, recvbuf->addr + 4, 47);
+	
+	char a[3];
+	for (i = 0; i < 16; i ++) {
+		memset(a, '\0', 3);
+		memcpy(a, msg + i * 3, 2);
+		remote_gid.raw[i] = (unsigned char)strtoll(a, NULL, 16);
+	}
+	
+	syslog(LOG_ERR, "get remote gid: %s", msg);
+	
+	
+	/* setup qp */
+	i = 0;
+	TAILQ_FOREACH(dcqp, &dcqp_tqh, entries) {
+		memset(msg, '\0', 128);
+		memcpy(msg, recvbuf->addr + i * 23 + 4 + 47, 23);
+		syslog(LOG_ERR, "get remote qp: %s", msg);
+		
+		sscanf(msg, "%04x:%04x:%06x:%06x", \
+			&dcqp->rem_lid, &dcqp->rem_out_reads, \
+			&dcqp->rem_qpn, &dcqp->rem_psn);
+		
+		memset(&attr, '\0', sizeof(struct ibv_qp_attr));
+
+		attr.qp_state = IBV_QPS_RTR;
+		attr.path_mtu = IBV_MTU_1024; /* 2048; */
+		/* port_attr.active_mtu;  user_parm->curr_mtu; */
+		attr.dest_qp_num = dcqp->rem_qpn;
+		attr.rq_psn = dcqp->rem_psn;
+		attr.ah_attr.dlid = dcqp->rem_lid;
+		attr.max_dest_rd_atomic = 1;
+		attr.min_rnr_timer = 12;
+
+/*		if (user_parm->gid_index < 0) { */
+/* 		attr.ah_attr.is_global  = 0;
+		attr.ah_attr.sl         = 0; sl */
+/*		} else { */
+		attr.ah_attr.is_global  = 1;
+		attr.ah_attr.grh.dgid   = remote_gid; /* dest->gid; */
+		attr.ah_attr.grh.sgid_index = 0; /* user_parm->gid_index; */
+		attr.ah_attr.grh.hop_limit = 1;
+		attr.ah_attr.sl         = 0;
+/*		} */
+		
+		attr.ah_attr.src_path_bits = 0;
+		attr.ah_attr.port_num = 1; /* user_parm->ib_port; */
+	
+		if (ibv_modify_qp(dcqp->qp, &attr,
+				  IBV_QP_STATE              |
+				  IBV_QP_AV                 |
+				  IBV_QP_PATH_MTU           |
+				  IBV_QP_DEST_QPN           |
+				  IBV_QP_RQ_PSN             |
+				  IBV_QP_MIN_RNR_TIMER      |
+				  IBV_QP_MAX_DEST_RD_ATOMIC)) {
+			fprintf(stderr, "Failed to modify RC QP to RTR: %d [%s]\n", errno, strerror(errno));
+			syslog(LOG_ERR, "Failed to modify RC QP to RTR: %d [%s]", errno, strerror(errno));
+			pthread_exit(NULL);
+		}
+
+		attr.timeout = 14; /* user_parm->qp_timeout; */
+		attr.retry_cnt = 7;
+		attr.rnr_retry = 7;
+			
+		attr.qp_state 	    = IBV_QPS_RTS;
+		attr.sq_psn 	    = dcqp->loc_psn;
+		attr.max_rd_atomic  = 1;
+		
+		attr.max_rd_atomic  = 1;
+		if (ibv_modify_qp(dcqp->qp, &attr,
+				  IBV_QP_STATE              |
+				  IBV_QP_SQ_PSN             |
+				  IBV_QP_TIMEOUT            |
+				  IBV_QP_RETRY_CNT          |
+				  IBV_QP_RNR_RETRY          |
+				  IBV_QP_MAX_QP_RD_ATOMIC)) {
+			fprintf(stderr, "Failed to modify RC QP to RTS: %d [%s]\n", errno, strerror(errno));
+			syslog(LOG_ERR, "Failed to modify RC QP to RTS: %d [%s]", errno, strerror(errno));
+			pthread_exit(NULL);
+		}
+		
+		i++;
+	}
+	
+	pthread_exit(NULL);
+}
+
+
+void *
+recv_data(void *arg)
+{
+	BUFDATBLK *bufblk;
+	rmsgheader rhdr;
+	struct rdma_info_blk *recvbuf  = (struct rdma_info_blk *) arg;
+	struct rdma_info_blk tmpbuf;
+
+	memcpy(&tmpbuf, recvbuf, sizeof(struct rdma_info_blk));
+	free(arg);
+	
+	recvbuf = &tmpbuf;
+	pthread_detach(pthread_self());
+	FILEINFO *finfo;
+	
+	bufblk = NULL;
+	
+	/* event finish */
+	TAILQ_LOCK(&waiting_tqh);
+	
+	TAILQ_FOREACH(bufblk, &waiting_tqh, entries)
+		if ((uint64_t) (unsigned long)bufblk->rdma_buf == ntohll(recvbuf->buf))
+			break;
+
+
+	if (bufblk != NULL)
+		TAILQ_REMOVE(&waiting_tqh, bufblk, entries);
+	else {
+		syslog(LOG_ERR, "could not find comp buf %ld\n", ntohll(recvbuf->buf));
+		TAILQ_UNLOCK(&waiting_tqh);
+		return;
+	}
+	
+	TAILQ_UNLOCK(&waiting_tqh);
+	
+	/* parse header */
+	memcpy(&rhdr, bufblk->rdma_buf, sizeof(rmsgheader));
+	
+	/* find file: according session id */
+	TAILQ_FOREACH(finfo, &finfo_tqh, entries)
+		if (rhdr.sessionid == finfo->sessionid)
+			break;
+	
+	if (finfo == NULL) {
+		syslog(LOG_ERR, "could not find file session %d", \
+			rhdr.sessionid);
+		return;
+	}
+	
+	bufblk->fd = finfo->fd;
+	bufblk->seqnum = rhdr.seqnum;
+	bufblk->offset = finfo->offset;
+	bufblk->buflen = rhdr.dlen + sizeof(rhdr);
+	
+	BUFDATBLK *tmpblk;
+	
+	if (finfo->seqnum == rhdr.seqnum) {
+		finfo->seqnum ++;
+		/* insert into writer list */
+		TAILQ_LOCK(&writer_tqh);
+		TAILQ_INSERT_TAIL(&writer_tqh, bufblk, entries);
+		TAILQ_UNLOCK(&writer_tqh);
+		TAILQ_SIGNAL(&writer_tqh);	
+		
+TAILQ_LOCK(&finfo->pending_tqh);
+		if (!TAILQ_EMPTY(&finfo->pending_tqh)) {
+			for (tmpblk = TAILQ_FIRST(&finfo->pending_tqh);
+			     (tmpblk != NULL) && (tmpblk->seqnum == finfo->seqnum);
+			     finfo->seqnum ++)
+			{
+				bufblk = TAILQ_NEXT(tmpblk, entries);
+				TAILQ_REMOVE(&finfo->pending_tqh, tmpblk, entries);
+				
+				TAILQ_LOCK(&writer_tqh);
+				TAILQ_INSERT_TAIL(&writer_tqh, tmpblk, entries);
+				TAILQ_UNLOCK(&writer_tqh);
+				TAILQ_SIGNAL(&writer_tqh);	
+				
+				tmpblk = bufblk;
+			}
+			bufblk = TAILQ_FIRST(&finfo->pending_tqh);
+		}
+TAILQ_UNLOCK(&finfo->pending_tqh);
+		
+	} else { /* insert into  */
+		TAILQ_LOCK(&finfo->pending_tqh);
+		TAILQ_FOREACH(tmpblk, &finfo->pending_tqh, entries)
+			if (tmpblk->seqnum > bufblk->seqnum) {
+				TAILQ_INSERT_BEFORE(tmpblk, bufblk, entries);
+				break;
+			}
+		
+		if (tmpblk == NULL) {
+			TAILQ_INSERT_TAIL(&finfo->pending_tqh, bufblk, entries);
+		}
+		TAILQ_UNLOCK(&finfo->pending_tqh);
+	}
+	
+	pthread_exit(NULL);	
+}
+
+void *prep_blk(void *arg)
+{
+/* addr: num(4 bytes) + (buf 8 + rkey 4 + size 4) */
+
+	int i;
+	BUFDATBLK *bufblk;
+	EVENTWR *evwr;
+	struct ibv_send_wr *bad_wr;
+	int ret;
+	struct rdma_cb *cb = (struct rdma_cb *) arg;
+	
+	char *offset;
+	int j = 0;
+	int num;
+
+	pthread_detach(pthread_self());
+	
+	/* get addr info */
+	TAILQ_LOCK(&free_evwr_tqh);
+
+	while (TAILQ_EMPTY(&free_evwr_tqh)) {
+		if (TAILQ_WAIT(&free_evwr_tqh) != 0)
+			continue;	/* goto while */
+	}
+
+	evwr = TAILQ_FIRST(&free_evwr_tqh);
+	TAILQ_REMOVE(&free_evwr_tqh, evwr, entries);
+	
+	TAILQ_UNLOCK(&free_evwr_tqh);
+	
+	for (i = 0; i < 10; i ++) {
+		/* get from free list */
+		TAILQ_LOCK(&free_tqh);
+		if (i == 0) { /* at least one block response */
+			while (TAILQ_EMPTY(&free_tqh)) {
+				if (TAILQ_WAIT(&free_tqh) != 0)
+					continue;	/* goto while */
+			}
+			bufblk = TAILQ_FIRST(&free_tqh);
+			TAILQ_REMOVE(&free_tqh, bufblk, entries);
+		} else {
+			if (TAILQ_EMPTY(&free_tqh)) {
+				TAILQ_UNLOCK(&free_tqh);
+				break;
+			}
+			
+			bufblk = TAILQ_FIRST(&free_tqh);
+			TAILQ_REMOVE(&free_tqh, bufblk, entries);
+		}
+		
+		TAILQ_UNLOCK(&free_tqh);
+				
+		/* insert bulk into waiting list */
+		TAILQ_LOCK(&waiting_tqh);
+		TAILQ_INSERT_TAIL(&waiting_tqh, bufblk, entries);
+		TAILQ_UNLOCK(&waiting_tqh);
+		
+		evwr->ev_buf.buf = htonll((uint64_t) (unsigned long)bufblk->rdma_buf);
+		evwr->ev_buf.rkey = htonl(bufblk->rdma_mr->rkey);
+		evwr->ev_buf.size = htonl(cb->size + sizeof(rmsgheader));
+		
+		offset = evwr->ev_buf.addr + i * 16 + 4;
+		memcpy(offset, &(evwr->ev_buf.buf), 8);
+		memcpy(offset + 8, &(evwr->ev_buf.rkey), 4);
+		memcpy(offset + 12, &(evwr->ev_buf.size), 4);
+		
+		++ j;
+		
+		/* put wr into evwr_tqh list */
+	}
+	
+	/* num */
+	num = htonl(j);
+	memcpy(evwr->ev_buf.addr, &num, 4);
+	
+	evwr->ev_buf.mode = kRdmaTrans_ActWrte;
+	evwr->ev_buf.stat = ACTIVE_WRITE_RPBLK;
+	
+	/* post send response */
+	TAILQ_LOCK(&evwr_tqh);
+	TAILQ_INSERT_TAIL(&evwr_tqh, evwr, entries);
+	TAILQ_UNLOCK(&evwr_tqh);
+	
+	ret = ibv_post_send(cb->qp, &evwr->ev_wr, &bad_wr);
+	if (ret) {
+		syslog(LOG_ERR, "ibv_post_send: %m");
+		pthread_exit(NULL);
+	}	
+	
+	pthread_exit(NULL);	
+}
+
+
+void *acpt_blk(void *arg)
+{
+	REMOTEADDR *rmtaddr;
+	pthread_detach(pthread_self());
+	struct rdma_info_blk tmpbuf;
+	struct rdma_info_blk *recvbuf = (struct rdma_info_blk *) arg;
+	int i;
+	int num, tmpnum;
+	
+	memcpy(&tmpbuf, recvbuf, sizeof(struct rdma_info_blk));
+	recvbuf = &tmpbuf;
+	
+	memcpy(&tmpnum, recvbuf->addr, 4);
+	num = ntohl(tmpnum);
+	
+	pthread_detach(pthread_self());
+	
+	for (i = 0 ; i < num; i ++) {
+		/* get a free remote address info */
+		TAILQ_LOCK(&free_rmtaddr_tqh);
+		
+		while (TAILQ_EMPTY(&free_rmtaddr_tqh))
+			if (TAILQ_WAIT(&free_rmtaddr_tqh) != 0)
+				continue;	/* goto while */
+		
+		rmtaddr = TAILQ_FIRST(&free_rmtaddr_tqh);
+		TAILQ_REMOVE(&free_rmtaddr_tqh, rmtaddr, entries);
+		
+		TAILQ_UNLOCK(&free_rmtaddr_tqh);
+		
+		/* set value */
+		
+		memcpy(&recvbuf->buf, recvbuf->addr + i * 16 + 4, 8);
+		memcpy(&recvbuf->rkey, recvbuf->addr + i * 16 + 12, 4);
+		memcpy(&recvbuf->size, recvbuf->addr + i * 16 + 16, 4);
+		
+		rmtaddr->buf = ntohll(recvbuf->buf);
+		rmtaddr->rkey = ntohl(recvbuf->rkey);
+		rmtaddr->size = ntohl(recvbuf->size);
+		
+		/* insert into addr ready list */
+		TAILQ_LOCK(&rmtaddr_tqh);
+		TAILQ_INSERT_TAIL(&rmtaddr_tqh, rmtaddr, entries);
+		TAILQ_UNLOCK(&rmtaddr_tqh);
+		TAILQ_SIGNAL(&rmtaddr_tqh);
+	}
+	
+	pthread_exit(NULL);
 }
 
 
@@ -195,7 +863,7 @@ int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 	DEBUG_LOG("cma_event type %s cma_id %p (%s)\n",
 		  rdma_event_str(event->event), cma_id,
 		  (cma_id == cb->cm_id) ? "parent" : "child");
-
+	
 	switch (event->event) {
 	case RDMA_CM_EVENT_ADDR_RESOLVED:
 		cb->state = ADDR_RESOLVED;
@@ -224,13 +892,13 @@ int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 		}
 		
 		item->child_cm_id = cma_id;
-				
+		
 		TAILQ_INSERT_TAIL(&acceptedTqh, item, entries);
 		
 		TAILQ_UNLOCK(&acceptedTqh);
 		TAILQ_SIGNAL(&acceptedTqh);
 		cb->child_cm_id = cma_id;
-		DEBUG_LOG("child cma %p\n", cb->child_cm_id);
+		syslog(LOG_ERR, "get a new connection: %p", cma_id);
 //		sem_post(&cb->sem);
 		break;
 
@@ -258,7 +926,7 @@ int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 		break;
 
 	case RDMA_CM_EVENT_DISCONNECTED:
-		fprintf(stderr, "RDMA %s DISCONNECT EVENT...\n",
+		syslog(LOG_ERR, "RDMA %s DISCONNECT EVENT...\n",
 			cb->server ? "server" : "client");
 		sem_post(&cb->sem);
 		break;
@@ -269,7 +937,7 @@ int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 		break;
 
 	default:
-		fprintf(stderr, "unhandled event: %s, ignoring\n",
+		syslog(LOG_ERR, "unhandled event: %s, ignoring\n",
 			rdma_event_str(event->event));
 		break;
 	}
@@ -301,16 +969,46 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 	struct ibv_wc wc;
 	struct ibv_recv_wr *bad_wr;
 	int ret;
+	int compevnum = 0;
 	
 /*	DPRINTF(("2 cq_handler cb @ %x\n", (unsigned long)cb));
 	DPRINTF(("cq_handler sem_post @ %x\n", (unsigned long)&cb->sem));
 */	
 	while ((ret = ibv_poll_cq(cb->cq, 1, &wc)) == 1) {
 		ret = 0;
+		compevnum ++;
 
+/*
+enum ibv_wc_status {
+        IBV_WC_SUCCESS,
+        IBV_WC_LOC_LEN_ERR,
+        IBV_WC_LOC_QP_OP_ERR,
+        IBV_WC_LOC_EEC_OP_ERR,
+        IBV_WC_LOC_PROT_ERR,
+        IBV_WC_WR_FLUSH_ERR,
+        IBV_WC_MW_BIND_ERR,
+        IBV_WC_BAD_RESP_ERR,
+        IBV_WC_LOC_ACCESS_ERR,
+        IBV_WC_REM_INV_REQ_ERR,
+        IBV_WC_REM_ACCESS_ERR,
+        IBV_WC_REM_OP_ERR,
+        IBV_WC_RETRY_EXC_ERR,
+        IBV_WC_RNR_RETRY_EXC_ERR,
+        IBV_WC_LOC_RDD_VIOL_ERR,
+        IBV_WC_REM_INV_RD_REQ_ERR,
+        IBV_WC_REM_ABORT_ERR,
+        IBV_WC_INV_EECN_ERR,
+        IBV_WC_INV_EEC_STATE_ERR,
+        IBV_WC_FATAL_ERR,
+        IBV_WC_RESP_TIMEOUT_ERR,
+        IBV_WC_GENERAL_ERR
+};
+
+*/
 		if (wc.status) {
-			syslog(LOG_ERR, "cq completion failed status %d", \
-				wc.status);
+                        syslog(LOG_ERR, "cq completion failed status %d(%s), opcode: %d, wr id: %ld", \
+                                wc.status, ibv_wc_status_str(wc.status), wc.opcode, wc.wr_id);
+
 			// IBV_WC_WR_FLUSH_ERR == 5
 			if (wc.status != IBV_WC_WR_FLUSH_ERR)
 				ret = -1;
@@ -319,13 +1017,25 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 
 		switch (wc.opcode) {
 		case IBV_WC_SEND:
-			DEBUG_LOG("send completion\n");
+			/* cb->sq_wr.wr_id = wc.wr_id;  not safe */
+/* 			ret = pthread_create(&tid, NULL, handle_wr, cb);
+			if (ret != 0) {
+				syslog(LOG_ERR, "pthread_create handle_wr:");
+				exit(EXIT_FAILURE);
+			} */
+			handle_wr(cb, wc.wr_id);
 			break;
 
 		case IBV_WC_RDMA_WRITE:
 			DEBUG_LOG("rdma write completion\n");
 			cb->state = RDMA_WRITE_COMPLETE;
-			sem_post(&cb->sem);
+			/* cb->sq_wr.wr_id = wc.wr_id; not safe */
+			/* ret = pthread_create(&tid, NULL, handle_wr, cb);
+			if (ret != 0) {
+				syslog(LOG_ERR, "pthread_create handle_wr:");
+				exit(EXIT_FAILURE);
+			} */
+			handle_wr(cb, wc.wr_id);
 			break;
 
 		case IBV_WC_RDMA_READ:
@@ -345,14 +1055,14 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 				fprintf(stderr, "recv wc error: %d\n", ret);
 				goto error;
 			}
-
+			/*
 			ret = ibv_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
 			if (ret) {
 				fprintf(stderr, "post recv error: %d\n", ret);
 				goto error;
 			}
 
-			sem_post(&cb->sem);
+			sem_post(&cb->sem); */
 			DPRINTF(("IBV_WC_RECV success\n"));
 			break;
 
@@ -366,12 +1076,124 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 		fprintf(stderr, "poll error %d\n", ret);
 		goto error;
 	}
-	return 0;
+	return compevnum;
+/*	return 0; */
 
 error:
 	cb->state = STATE_ERROR;
 	sem_post(&cb->sem);
-	return ret;
+	return compevnum;
+}
+
+void
+handle_wr(struct rdma_cb *cb, uint64_t wr_id)
+{
+	int ret;
+	BUFDATBLK *item;
+	EVENTWR *evwr;
+	
+	pthread_t tid;
+	
+	if ((wr_id & WRIDEVENT) > 0) {
+		/* event finish */
+		TAILQ_LOCK(&evwr_tqh);
+		
+		TAILQ_FOREACH(evwr, &evwr_tqh, entries)
+			if (evwr->wr_id == wr_id)
+				break;
+		
+		if (evwr != NULL)
+			TAILQ_REMOVE(&evwr_tqh, evwr, entries);
+		else {
+			syslog(LOG_ERR, "can not find event %ld\n", wr_id);
+			TAILQ_UNLOCK(&evwr_tqh);
+			return;
+		}
+		
+		TAILQ_UNLOCK(&evwr_tqh);
+		
+		/* insert into free_evwr_tqh */
+		TAILQ_LOCK(&free_evwr_tqh);
+		TAILQ_INSERT_TAIL(&free_evwr_tqh, evwr, entries);
+		TAILQ_UNLOCK(&free_evwr_tqh);
+		TAILQ_SIGNAL(&free_evwr_tqh);
+		
+	} else if ((wr_id & WRIDBUFFER) > 0) {
+		/* rdma rw finish */
+		/* move out of waiting list */
+		TAILQ_LOCK(&waiting_tqh);
+		
+		TAILQ_FOREACH(item, &waiting_tqh, entries) {
+			if (item->wr_id == wr_id) {
+				break;
+			}
+		}
+		if (item != NULL)
+			TAILQ_REMOVE(&waiting_tqh, item, entries);
+		else {
+			syslog(LOG_ERR, "can not find buf %ld\n", wr_id);
+			TAILQ_UNLOCK(&waiting_tqh);
+			return;
+		}
+		
+		TAILQ_UNLOCK(&waiting_tqh);
+		
+		item->qp = cb->qp;
+		
+		ret = pthread_create(&tid, NULL, notify_blk, item);
+		if (ret != 0) {
+			syslog(LOG_ERR, "pthread_create notify_blk fail");
+			exit(EXIT_FAILURE);
+		}
+	}
+	
+	return;
+}
+
+void *notify_blk(void *arg)
+{
+	EVENTWR *evwr;
+	struct ibv_send_wr *bad_wr;
+	int ret;
+	BUFDATBLK *item = (BUFDATBLK *) arg;
+		
+	pthread_detach(pthread_self());
+
+	/* notify peer side the WHICH rdma_write finish */
+	TAILQ_LOCK(&free_evwr_tqh);
+	while (TAILQ_EMPTY(&free_evwr_tqh))
+		if (TAILQ_WAIT(&free_evwr_tqh) != 0)
+			continue;	/* goto while */
+	
+	evwr = TAILQ_FIRST(&free_evwr_tqh);
+	TAILQ_REMOVE(&free_evwr_tqh, evwr, entries);
+	
+	TAILQ_UNLOCK(&free_evwr_tqh);
+	
+	evwr->ev_buf.buf = htonll(item->rdma_sq_wr.wr.rdma.remote_addr);
+	evwr->ev_buf.mode = kRdmaTrans_ActWrte;
+	evwr->ev_buf.stat = ACTIVE_WRITE_FIN;
+
+	TAILQ_LOCK(&evwr_tqh);
+	TAILQ_INSERT_TAIL(&evwr_tqh, evwr, entries);
+	TAILQ_UNLOCK(&evwr_tqh);
+	
+	ret = ibv_post_send(item->qp, &evwr->ev_wr, &bad_wr);
+	if (ret) {
+		syslog(LOG_ERR, "post send error %d\n", ret);
+		TAILQ_LOCK(&free_evwr_tqh);
+		TAILQ_INSERT_TAIL(&free_evwr_tqh, evwr, entries);
+		TAILQ_UNLOCK(&free_evwr_tqh);
+		TAILQ_SIGNAL(&free_evwr_tqh);
+		pthread_exit(NULL);
+	}
+	
+	TAILQ_LOCK(&free_tqh);
+	TAILQ_INSERT_TAIL(&free_tqh, item, entries);
+	TAILQ_UNLOCK(&free_tqh);
+	TAILQ_SIGNAL(&free_tqh);
+	
+	pthread_exit(NULL);
 }
 
 
@@ -386,7 +1208,6 @@ void *cq_thread(void *arg)
 
 	while (1) {
 		pthread_testcancel();
-
 		ret = ibv_get_cq_event(cb->channel, &ev_cq, &ev_ctx);
 		if (ret) {
 			fprintf(stderr, "Failed to get cq event!\n");
@@ -406,10 +1227,12 @@ void *cq_thread(void *arg)
 		}
 
 		ret = iperf_cq_event_handler(cb);
-		ibv_ack_cq_events(cb->cq, 1);
-		if (ret)
+		ibv_ack_cq_events(cb->cq, ret);
+/*		if (ret) {
+			syslog(LOG_ERR, "!! iperf_cq_event_handler %m");
 			pthread_exit(NULL);
-	}
+		}
+*/	}
 }
 
 
@@ -470,6 +1293,7 @@ int iperf_setup_qp(struct rdma_cb *cb, struct rdma_cm_id *cm_id)
 	cb->pd = ibv_alloc_pd(cm_id->verbs);
 	if (!cb->pd) {
 		fprintf(stderr, "ibv_alloc_pd failed\n");
+		syslog(LOG_ERR, "ibv_alloc_pd failed: %m");
 		return errno;
 	}
 	DEBUG_LOG("created pd %p\n", cb->pd);
@@ -478,6 +1302,7 @@ int iperf_setup_qp(struct rdma_cb *cb, struct rdma_cm_id *cm_id)
 	if (!cb->channel) {
 		fprintf(stderr, "ibv_create_comp_channel failed\n");
 		ret = errno;
+		syslog(LOG_ERR, "ibv_create_comp_channel failed: %m");
 		goto err1;
 	}
 	DEBUG_LOG("created channel %p\n", cb->channel);
@@ -486,6 +1311,7 @@ int iperf_setup_qp(struct rdma_cb *cb, struct rdma_cm_id *cm_id)
 				cb->channel, 0);
 	if (!cb->cq) {
 		fprintf(stderr, "ibv_create_cq failed\n");
+		syslog(LOG_ERR, "ibv_create_cq failed: %m");
 		ret = errno;
 		goto err2;
 	}
@@ -494,7 +1320,8 @@ int iperf_setup_qp(struct rdma_cb *cb, struct rdma_cm_id *cm_id)
 	DEBUG_LOG("before ibv_req_notify_cq\n");
 	ret = ibv_req_notify_cq(cb->cq, 0);
 	if (ret) {
-		fprintf(stderr, "ibv_create_cq failed\n");
+		fprintf(stderr, "ibv_req_notify_cq failed\n");
+		syslog(LOG_ERR, "ibv_req_notify_cq failed: %m");
 		ret = errno;
 		goto err3;
 	}
@@ -503,6 +1330,7 @@ int iperf_setup_qp(struct rdma_cb *cb, struct rdma_cm_id *cm_id)
 	ret = iperf_create_qp(cb);
 	if (ret) {
 		perror("rdma_create_qp");
+		syslog(LOG_ERR, "iperf_create_qp failed: %m");
 		goto err3;
 	}
 	DEBUG_LOG("created qp %p\n", cb->qp);
@@ -524,10 +1352,10 @@ int iperf_create_qp(struct rdma_cb *cb)
 	int ret;
 
 	memset(&init_attr, 0, sizeof(init_attr));
-	init_attr.cap.max_send_wr = IPERF_RDMA_SQ_DEPTH;
-	init_attr.cap.max_recv_wr = 2;
-	init_attr.cap.max_recv_sge = 1;
-	init_attr.cap.max_send_sge = 1;
+	init_attr.cap.max_send_wr = opt.rdma_qp_sq_depth;
+	init_attr.cap.max_recv_wr = opt.rdma_qp_rq_depth;
+	init_attr.cap.max_recv_sge = 4;
+	init_attr.cap.max_send_sge = 4;
 	init_attr.qp_type = IBV_QPT_RC;
 	init_attr.send_cq = cb->cq;
 	init_attr.recv_cq = cb->cq;
@@ -538,10 +1366,14 @@ int iperf_create_qp(struct rdma_cb *cb)
 		ret = rdma_create_qp(cb->child_cm_id, cb->pd, &init_attr);
 		if (!ret)
 			cb->qp = cb->child_cm_id->qp;
+		else
+			syslog(LOG_ERR, "rdma_create_qp fail: %d", ret);
 	} else {
 		ret = rdma_create_qp(cb->cm_id, cb->pd, &init_attr);
 		if (!ret)
 			cb->qp = cb->cm_id->qp;
+		else
+			syslog(LOG_ERR, "rdma_create_qp fail: %d", ret);
 	}
 	DPRINTF(("after rdma_create_qp, ret = %d\n", ret));
 
@@ -563,23 +1395,23 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 
 	DEBUG_LOG("rping_setup_buffers called on cb %p\n", cb);
 
-/* recv_mr */
+/* recv_mr
 	cb->recv_mr = ibv_reg_mr(cb->pd, &cb->recv_buf, sizeof cb->recv_buf,
 				 IBV_ACCESS_LOCAL_WRITE);
 	if (!cb->recv_mr) {
 		fprintf(stderr, "recv_buf reg_mr failed\n");
 		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr recv_mr");
 		return errno;
-	}
+	} */
 
-/* send_mr */
+/* send_mr
 	cb->send_mr = ibv_reg_mr(cb->pd, &cb->send_buf, sizeof cb->send_buf, 0);
 	if (!cb->send_mr) {
 		fprintf(stderr, "send_buf reg_mr failed\n");
 		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr send_mr");
 		ret = errno;
 		goto err1;
-	}
+	} */
 
 /* rdma_sink_mr
 	cb->rdma_sink_buf = malloc(cb->size + sizeof(rmsgheader));
@@ -630,7 +1462,6 @@ err3:
 err2:
 	ibv_dereg_mr(cb->send_mr); */
 err1:
-	ibv_dereg_mr(cb->recv_mr);
 	return ret;
 }
 
@@ -640,6 +1471,12 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 /* init rdma_mr and insert into the free list */
 	int i;
 	BUFDATBLK *item;
+	REMOTEADDR *rmtaddritem;
+	EVENTWR *evwritem;
+	
+	RECVWR *recvitem;
+	struct ibv_recv_wr *bad_recv_wr;
+	int ret;
 	
 	for (i = 0; i < opt.cbufnum; i++) {
 		if ( (item = (BUFDATBLK *) malloc(sizeof(BUFDATBLK))) == NULL) {
@@ -649,9 +1486,18 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 		
 		memset(item, '\0', sizeof(BUFDATBLK));
 		
-		if ( (item->rdma_buf = (char *) malloc(cb->size + sizeof(rmsgheader))) == NULL) {
-			perror("tsf_setup_buf_list: malloc 2");
-			exit(EXIT_FAILURE);
+		item->wr_id = (uint64_t) (i + 1) | WRIDBUFFER;
+		
+		if (opt.directio != true) {
+			if ( (item->rdma_buf = (char *) malloc(cb->size + sizeof(rmsgheader))) == NULL) {
+				perror("tsf_setup_buf_list: malloc 2");
+				exit(EXIT_FAILURE);
+			}
+		} else {
+			if ( posix_memalign(&item->rdma_buf, getpagesize(), cb->size + sizeof(rmsgheader)) != 0 ) {
+			        syslog(LOG_ERR, "tsf_setup_buf_list: memalign");
+			        exit(EXIT_FAILURE);
+			        }
 		}
 		
 		memset(item->rdma_buf, '\0', cb->size + sizeof(rmsgheader));
@@ -671,7 +1517,111 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 		TAILQ_INSERT_TAIL(&free_tqh, item, entries);
 	}
 	
+	for (i = 0; i < opt.evbufnum; i++) {
+		if ( (evwritem = (EVENTWR *) malloc(sizeof(EVENTWR))) == NULL) {
+			perror("tsf_setup_buf_list: malloc");
+			exit(EXIT_FAILURE);
+		}
+		
+		memset(evwritem, '\0', sizeof(EVENTWR));
+		
+		evwritem->wr_id = (uint64_t) (i + 1) | WRIDEVENT;
+		syslog(LOG_ERR, "new EVENTWR wr_id: %ld", evwritem->wr_id);
+		
+		evwritem->ev_mr = ibv_reg_mr(cb->pd, &evwritem->ev_buf, sizeof(struct rdma_info_blk), 0);
+		if (!evwritem->ev_mr) {
+			fprintf(stderr, "ev_mr reg_mr failed\n");
+			syslog(LOG_ERR, "evwritem->ev_mr ibv_reg_mr send_mr");
+			exit(EXIT_FAILURE);
+		}
+		
+		evwritem->ev_sgl.addr = (uint64_t) (unsigned long) &evwritem->ev_buf;
+		evwritem->ev_sgl.length = sizeof evwritem->ev_buf;
+		evwritem->ev_sgl.lkey = evwritem->ev_mr->lkey;
+
+		evwritem->ev_wr.opcode = IBV_WR_SEND;
+		evwritem->ev_wr.send_flags = IBV_SEND_SIGNALED;
+		evwritem->ev_wr.sg_list = &evwritem->ev_sgl;
+		evwritem->ev_wr.num_sge = 1;
+		
+		evwritem->ev_wr.wr_id = evwritem->wr_id;
+		TAILQ_LOCK(&free_evwr_tqh);
+		TAILQ_INSERT_TAIL(&free_evwr_tqh, evwritem, entries);
+		TAILQ_UNLOCK(&free_evwr_tqh);
+	}
+	
+	for (i = 0; i < opt.rmtaddrnum; i++) {
+		if ( (rmtaddritem = (REMOTEADDR *) malloc(sizeof(REMOTEADDR))) == NULL) {
+			perror("tsf_setup_buf_list: malloc");
+			exit(EXIT_FAILURE);
+		}
+		
+		memset(rmtaddritem, '\0', sizeof(REMOTEADDR));
+		
+		TAILQ_LOCK(&free_rmtaddr_tqh);
+		TAILQ_INSERT_TAIL(&free_rmtaddr_tqh, rmtaddritem, entries);
+		TAILQ_UNLOCK(&free_rmtaddr_tqh);
+	}
+	
+	/* untagged recv buf list */
+	for (i = 0; i < opt.recvbufnum; i++) {
+		if ( (recvitem = (RECVWR *) malloc(sizeof(RECVWR))) == NULL) {
+			perror("tsf_setup_buf_list: malloc");
+			exit(EXIT_FAILURE);
+		}
+		
+		memset(recvitem, '\0', sizeof(RECVWR));
+		
+		recvitem->wr_id = (uint64_t) (i + 1) | WRIDRECV;
+		syslog(LOG_ERR, "new RECVDWR wr_id: %ld", recvitem->wr_id);
+		
+		recvitem->recv_mr = ibv_reg_mr(cb->pd, &recvitem->recv_buf, sizeof(struct rdma_info_blk), IBV_ACCESS_LOCAL_WRITE);
+		if (!recvitem->recv_mr) {
+			fprintf(stderr, "recv_mr reg_mr failed\n");
+			syslog(LOG_ERR, "recvitem->recv_mr ibv_reg_mr recv_mr");
+			exit(EXIT_FAILURE);
+		}
+		
+		TAILQ_INSERT_TAIL(&recvwr_tqh, recvitem, entries);
+		
+		recvitem->recv_sgl.addr = (uint64_t) (unsigned long) &recvitem->recv_buf;
+		recvitem->recv_sgl.length = sizeof recvitem->recv_buf;
+		recvitem->recv_sgl.lkey = recvitem->recv_mr->lkey;
+		recvitem->recv_wr.sg_list = &recvitem->recv_sgl;
+		recvitem->recv_wr.num_sge = 1;
+		
+		recvitem->recv_wr.wr_id = recvitem->wr_id;
+		
+		ret = ibv_post_recv(cb->qp, &recvitem->recv_wr, &bad_recv_wr);
+		if (ret) {
+			syslog(LOG_ERR, "ibv_post_recv fail: %m");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("ibv_post_recv success\n"));
+	}
+	
 	return 0;
+}
+
+void
+tsf_waiting_to_free(void)
+{
+	/* because of pre-post block in waiting list, 
+	   the app should recycle the block from waiting list to free list */
+	BUFDATBLK *item;
+	
+	while (!TAILQ_EMPTY(&waiting_tqh)) {
+		TAILQ_LOCK(&waiting_tqh);
+		item = TAILQ_FIRST(&waiting_tqh);
+		TAILQ_REMOVE(&waiting_tqh, item, entries);
+		TAILQ_UNLOCK(&waiting_tqh);
+		
+		TAILQ_LOCK(&free_tqh);
+		TAILQ_INSERT_TAIL(&free_tqh, item, entries);
+		TAILQ_UNLOCK(&free_tqh);
+	}
+
+	return;
 }
 
 void
@@ -680,12 +1630,17 @@ tsf_free_buf_list(void)
 	BUFDATBLK *item;
 	
 	/* free free list - not thread safe */
-	for ( ; ; ) {
-		if (TAILQ_EMPTY(&free_tqh))
-			break;
+	int i;
+	for (i = 0; i < opt.cbufnum; i ++) {
+		TAILQ_LOCK(&free_tqh);
+		while ( TAILQ_EMPTY(&free_tqh) )
+			if ( TAILQ_WAIT(&free_tqh) != 0)
+				syslog(LOG_ERR, "TAILQ_WAIT free_tqh");
 		
 		item = TAILQ_FIRST(&free_tqh);
 		TAILQ_REMOVE(&free_tqh, item, entries);
+		
+		TAILQ_UNLOCK(&free_tqh);
 		
 		ibv_dereg_mr(item->rdma_mr);
 		
@@ -698,8 +1653,6 @@ tsf_free_buf_list(void)
 void iperf_free_buffers(struct rdma_cb *cb)
 {
 	DEBUG_LOG("free_buffers called on cb %p\n", cb);
-	ibv_dereg_mr(cb->recv_mr);
-	ibv_dereg_mr(cb->send_mr);
 /*	ibv_dereg_mr(cb->rdma_sink_mr);
 	ibv_dereg_mr(cb->rdma_source_mr);
 	free(cb->rdma_sink_buf);
@@ -709,20 +1662,6 @@ void iperf_free_buffers(struct rdma_cb *cb)
 
 void iperf_setup_wr(struct rdma_cb *cb)
 {
-	cb->recv_sgl.addr = (uint64_t) (unsigned long) &cb->recv_buf;
-	cb->recv_sgl.length = sizeof cb->recv_buf;
-	cb->recv_sgl.lkey = cb->recv_mr->lkey;
-	cb->rq_wr.sg_list = &cb->recv_sgl;
-	cb->rq_wr.num_sge = 1;
-
-	cb->send_sgl.addr = (uint64_t) (unsigned long) &cb->send_buf;
-	cb->send_sgl.length = sizeof cb->send_buf;
-	cb->send_sgl.lkey = cb->send_mr->lkey;
-
-	cb->sq_wr.opcode = IBV_WR_SEND;
-	cb->sq_wr.send_flags = IBV_SEND_SIGNALED;
-	cb->sq_wr.sg_list = &cb->send_sgl;
-	cb->sq_wr.num_sge = 1;
 /*
 	cb->rdma_sink_sgl.addr = (uint64_t) (unsigned long) cb->rdma_sink_buf;
 	cb->rdma_sink_sgl.lkey = cb->rdma_sink_mr->lkey;
@@ -1018,6 +1957,491 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 	return total_bytes_recv;
 }
 
+void
+create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
+{
+	struct Rcinfo *rcinfo;
+	int i;
+	struct wcm_id *item;
+	struct ibv_qp_init_attr init_attr;
+	struct rdma_conn_param conn_param;
+	int ret;
+	
+	for (i = 0; i < num; i ++) {
+		rcinfo = (RCINFO *) malloc(sizeof(RCINFO));
+		if (rcinfo == NULL) {
+			perror("malloc fail");
+			syslog(LOG_ERR, "malloc fail");
+			exit(EXIT_FAILURE);
+		}
+	
+		/* create channel */
+		rcinfo->cm_channel = rdma_create_event_channel();
+		if (!rcinfo->cm_channel) {
+			perror("rdma_create_event_channel");
+			syslog(LOG_ERR, "rdma_create_event_channel fail: %m");
+			exit(EXIT_FAILURE);
+		}
+
+		ret = rdma_create_id(rcinfo->cm_channel, &rcinfo->cm_id, rcinfo, RDMA_PS_TCP);
+		if (ret) {
+			perror("rdma_create_id");
+			syslog(LOG_ERR, "rdma_create_id fail: %m");
+			rdma_destroy_event_channel(rcinfo->cm_channel);
+			exit(EXIT_FAILURE);
+		}
+	
+/*		if (pthread_create(&cb->cmthread, NULL, cm_thread, cb) != 0)
+			perror("pthread_create"); */
+		
+		/* resolve addr */
+		ret = rdma_resolve_addr(rcinfo->cm_id, NULL, \
+			(struct sockaddr *) dest, 2000);
+		if (ret) {
+			syslog(LOG_ERR, "rdma_resolve_addr: %m");
+			exit(EXIT_FAILURE);
+		}
+		
+		ret = get_next_channel_event(rcinfo->cm_channel, RDMA_CM_EVENT_ADDR_RESOLVED);
+		if (ret) {
+			syslog(LOG_ERR, "get_next_channel_event");
+			exit(EXIT_FAILURE);
+		}
+		
+		/* resolve route */
+		ret = rdma_resolve_route(rcinfo->cm_id, 2000);
+		if (ret) {
+			syslog(LOG_ERR, "rdma_resolve_route: %m");
+			exit(EXIT_FAILURE);
+		}
+		
+		ret = get_next_channel_event(rcinfo->cm_channel, RDMA_CM_EVENT_ROUTE_RESOLVED);
+		if (ret) {
+			syslog(LOG_ERR, "get_next_channel_event");
+			exit(EXIT_FAILURE);
+		}
+		
+		/* create pd ????????????? */
+		rcinfo->pd = ibv_alloc_pd(rcinfo->cm_id->verbs);
+		if (!rcinfo->pd) {
+			fprintf(stderr, "ibv_alloc_pd failed\n");
+			exit(EXIT_FAILURE);
+		}
+		
+		/* create qp */
+		memset(&init_attr, 0, sizeof(init_attr));
+		init_attr.cap.max_send_wr = IPERF_RDMA_SQ_DEPTH;
+		init_attr.cap.max_recv_wr = 4;
+		init_attr.cap.max_recv_sge = 4;
+		init_attr.cap.max_send_sge = 4;
+		init_attr.qp_type = IBV_QPT_RC;
+		init_attr.send_cq = cb->cq;
+		init_attr.recv_cq = cb->cq;
+		
+		DPRINTF(("before rdma_create_qp\n"));
+		ret = rdma_create_qp(rcinfo->cm_id, cb->pd, &init_attr);
+		if (!ret)
+			rcinfo->qp = rcinfo->cm_id->qp;
+		else {
+			fprintf(stderr, "rdma_create_qp fail\n");
+			exit(EXIT_FAILURE);
+		}
+		
+		/* connect cm_id */
+		memset(&conn_param, 0, sizeof conn_param);
+		conn_param.responder_resources = 1;
+		conn_param.initiator_depth = 1;
+		conn_param.retry_count = 10;
+		
+		ret = rdma_connect(rcinfo->cm_id, &conn_param);
+		if (ret) {
+			syslog(LOG_ERR, "rdma_connect");
+			exit(EXIT_FAILURE);
+		}
+		
+		ret = get_next_channel_event(rcinfo->cm_channel, RDMA_CM_EVENT_ESTABLISHED);
+		if (ret) {
+			syslog(LOG_ERR, "get_next_channel_event");
+			exit(EXIT_FAILURE);
+		}
+		
+		syslog(LOG_ERR, "new connection: cma_id %p", rcinfo->cm_id);
+		
+		TAILQ_INSERT_TAIL(&rcif_tqh, rcinfo, entries);
+		
+	}
+	
+
+	return;
+}
+
+int
+get_next_channel_event(struct rdma_event_channel *channel, enum rdma_cm_event_type wait_event)
+{
+	int ret;
+	struct rdma_cm_event *event;
+	
+	ret = rdma_get_cm_event(channel, &event);
+	if (ret) {
+		perror("rdma_get_cm_event");
+		syslog(LOG_ERR, "rdma_get_cm_event %m");
+		exit(ret);
+	}
+	
+	if (event->event != wait_event) {
+		syslog(LOG_ERR, "event is %d instead of %d\n", \
+			event->event, wait_event);
+		return 1;
+	}
+	
+	rdma_ack_cm_event(event);
+	
+	return 0;
+}
+
+void create_dc_stream_server(struct rdma_cb *cb, int num)
+{
+	struct Rcinfo *rcinfo;
+	int i;
+	struct wcm_id *item;
+	struct ibv_qp_init_attr init_attr;
+	struct rdma_conn_param conn_param;
+	int ret;
+
+	/* wait for RC streams connection */
+	TAILQ_LOCK(&acceptedTqh);
+	for (i = 0; i < num; i ++) {
+		while ( TAILQ_EMPTY(&acceptedTqh) )
+			if ( TAILQ_WAIT(&acceptedTqh) != 0)
+				fprintf(stderr, "TAILQ_WAIT acceptedTqh\n");
+		
+		item = TAILQ_FIRST(&acceptedTqh);
+		TAILQ_REMOVE(&acceptedTqh, item, entries);
+		
+		rcinfo = (RCINFO *) malloc(sizeof(RCINFO));
+		if (rcinfo == NULL) {
+			perror("malloc fail:");
+			exit(EXIT_FAILURE);
+		}
+		
+		memset(rcinfo, '\0', sizeof(RCINFO));
+		
+		rcinfo->cm_id = item->child_cm_id;
+		
+		/* create channel */
+		rcinfo->cm_channel = rdma_create_event_channel();
+		if (!rcinfo->cm_channel) {
+			perror("rdma_create_event_channel");
+			exit(EXIT_FAILURE);
+		}
+		
+		/* create pd */
+		rcinfo->pd = ibv_alloc_pd(rcinfo->cm_id->verbs);
+		if (!rcinfo->pd) {
+			fprintf(stderr, "ibv_alloc_pd failed\n");
+			exit(EXIT_FAILURE);
+		}
+
+		/* create qp */		
+		DPRINTF(("before iperf_create_qp\n"));
+
+		memset(&init_attr, 0, sizeof(init_attr));
+		init_attr.cap.max_send_wr = IPERF_RDMA_SQ_DEPTH;
+		init_attr.cap.max_recv_wr = 4;
+		init_attr.cap.max_recv_sge = 4;
+		init_attr.cap.max_send_sge = 4;
+		init_attr.qp_type = IBV_QPT_RC;
+		init_attr.send_cq = cb->cq;
+		init_attr.recv_cq = cb->cq;
+
+		DPRINTF(("before rdma_create_qp\n"));
+		ret = rdma_create_qp(rcinfo->cm_id, cb->pd, &init_attr);
+		if (!ret)
+			rcinfo->qp = rcinfo->cm_id->qp;
+		else {
+			fprintf(stderr, "rdma_create_qp fail\n");
+			exit(EXIT_FAILURE);
+		}
+		
+		DPRINTF(("after rdma_create_qp, ret = %d\n", ret));
+		DEBUG_LOG("accepting client connection request\n");
+
+		
+		/* accept new connection */
+		memset(&conn_param, 0, sizeof conn_param);
+		conn_param.responder_resources = 1;
+		conn_param.initiator_depth = 1;
+		
+		ret = rdma_accept(rcinfo->cm_id, &conn_param);
+		if (ret) {
+			perror("rdma_accept");
+			syslog(LOG_ERR, "rdma_accept fail: %m");
+			return;
+		}
+		
+/* 		syslog(LOG_ERR, "before wait for a-accept success");
+		sem_wait(&cb->sem);
+		syslog(LOG_ERR, "finish wait for a-accept success"); */
+		
+		/* wait for establish
+		ret = get_next_channel_event(rcinfo->cm_channel, RDMA_CM_EVENT_ESTABLISHED);
+		if (ret) {
+			syslog(LOG_ERR, "get_next_channel_event");
+			exit(EXIT_FAILURE);
+		} */
+		
+		TAILQ_INSERT_TAIL(&rcif_tqh, rcinfo, entries);
+		
+		free(item);
+		
+	}
+	
+	TAILQ_UNLOCK(&acceptedTqh);
+	
+	/* create new channel and QP */
+	TAILQ_FOREACH(rcinfo, &rcif_tqh, entries) {
+
+		
+/*
+	ret = rdma_create_id(cb->cm_channel, &cb->cm_id, cb, RDMA_PS_TCP);
+	if (ret) {
+		perror("rdma_create_id");
+		rdma_destroy_event_channel(cb->cm_channel);
+		free(cb);
+		return -1;
+	}
+
+	if (pthread_create(&cb->cmthread, NULL, cm_thread, cb) != 0)
+		perror("pthread_create"); */
+		
+		/* create pd ?????????????  */
+		
+
+/*	cb->channel = ibv_create_comp_channel(cm_id->verbs);
+	if (!cb->channel) {
+		fprintf(stderr, "ibv_create_comp_channel failed\n");
+		ret = errno;
+		goto err1;
+	}
+	DEBUG_LOG("created channel %p\n", cb->channel);
+
+	cb->cq = ibv_create_cq(cm_id->verbs, IPERF_RDMA_SQ_DEPTH * 2, cb,
+				cb->channel, 0);
+	if (!cb->cq) {
+		fprintf(stderr, "ibv_create_cq failed\n");
+		ret = errno;
+		goto err2;
+	}
+	DEBUG_LOG("created cq %p\n", cb->cq);
+	
+	DEBUG_LOG("before ibv_req_notify_cq\n");
+	ret = ibv_req_notify_cq(cb->cq, 0);
+	if (ret) {
+		fprintf(stderr, "ibv_create_cq failed\n");
+		ret = errno;
+		goto err3;
+	} */
+
+
+/*	sem_wait(&cb->sem);
+	if (cb->state == STATE_ERROR) {
+		fprintf(stderr, "wait for CONNECTED state %d\n", cb->state);
+		return -1;
+	}
+	DPRINTF(("iperf_accept finish with state %d\n", cb->state)); */
+	}
+		
+	return;
+}
+
+
+void create_dc_qp(struct rdma_cb *cb, int num, int isrequest)
+{
+	int i, ret;
+	EVENTWR *evwr;
+	struct ibv_send_wr *bad_wr;
+	struct ibv_qp_init_attr init_attr;
+	struct ibv_qp_attr attr;
+	struct ibv_port_attr port_attr;
+	int flags;
+	
+	DATAQP *item;
+	
+	int ib_port = 1;
+	struct ibv_context *context;
+	struct ibv_device  *ib_dev = NULL;
+	
+	int num_of_device;
+	struct ibv_device **dev_list;
+	char *ib_devname = NULL;
+	
+	char msg[128];
+	
+	ib_devname = opt.ib_devname;
+	syslog(LOG_ERR, "device name is %s", ib_devname);
+	
+	/* get device */
+	dev_list = ibv_get_device_list(&num_of_device);
+
+	if (num_of_device <= 0) {
+		fprintf(stderr," Did not detect devices \n");
+		fprintf(stderr," If device exists, check if driver is up\n");
+		return;
+	}
+
+	if (!ib_devname) {
+		ib_dev = dev_list[0];
+		if (ib_dev == NULL)
+			fprintf(stderr, "No IB devices found\n");
+	} else {
+		for (; (ib_dev = *dev_list); ++dev_list)
+			if (!strcmp(ibv_get_device_name(ib_dev), ib_devname))
+				break;
+		if (!ib_dev)
+			fprintf(stderr, "IB device %s not found\n", ib_devname);
+	}
+	
+	/* get context */
+	context = ibv_open_device(ib_dev);
+	if (!context) {
+		fprintf(stderr, "Couldn't get context for %s\n",
+			ibv_get_device_name(ib_dev));
+		return;
+	}
+	
+	/* get gid */
+	union ibv_gid temp_gid;
+	if (ibv_query_gid(context, 1, 0, &temp_gid)) {
+		fprintf(stderr, "ibv_query_gid fail");
+		return;
+	}
+	
+/*	if (ibv_query_port(context, port, &port_attr) != 0) { */
+	if (ibv_query_port(context, 1, &port_attr) != 0) {
+		syslog(LOG_ERR, "ibv_query_port: %m");
+		exit(EXIT_FAILURE);
+	}
+	
+	/* get send work request */
+	TAILQ_LOCK(&free_evwr_tqh);
+
+	while (TAILQ_EMPTY(&free_evwr_tqh)) {
+		if (TAILQ_WAIT(&free_evwr_tqh) != 0)
+			continue;	/* goto while */
+	}
+
+	evwr = TAILQ_FIRST(&free_evwr_tqh);
+	TAILQ_REMOVE(&free_evwr_tqh, evwr, entries);
+	
+	TAILQ_UNLOCK(&free_evwr_tqh);
+	
+	srand48(getpid() * time(NULL));
+	
+/* len(4) + (lid 2 out_reads 2 qpn 3 psn 3) */
+	for (i = 0; i < num; i ++) {
+		/* create qp */
+		item = (DATAQP *) malloc(sizeof(DATAQP));
+		if (item == NULL) {
+			syslog(LOG_ERR, "malloc %m");
+			exit(EXIT_FAILURE);
+		}
+		
+		memset(&init_attr, 0, sizeof(init_attr));
+		
+		init_attr.cap.max_send_wr = IPERF_RDMA_SQ_DEPTH;
+		init_attr.cap.max_recv_wr = 4;
+		init_attr.cap.max_recv_sge = 4;
+		init_attr.cap.max_send_sge = 4;
+		init_attr.qp_type = IBV_QPT_RC;
+		init_attr.send_cq = cb->cq;
+		init_attr.recv_cq = cb->cq;
+		
+		item->qp = ibv_create_qp(cb->pd, &init_attr);
+		if (item->qp == NULL) {
+			syslog(LOG_ERR, "can not create qp: %m");
+			exit(EXIT_FAILURE);
+		}
+		
+		item->loc_lid = port_attr.lid;
+		item->loc_qpn = item->qp->qp_num;
+		item->loc_psn = lrand48() & 0xffffff;
+		item->loc_out_reads = 4;
+		
+		/* assemble qp information */
+		memset(msg, '\0', 128);
+		
+		sprintf(msg, "%04x:%04x:%06x:%06x", \
+			item->loc_lid, item->loc_out_reads, \
+			item->loc_qpn, item->loc_psn);
+		
+		syslog(LOG_ERR, "new loc qp attr: %s", msg);
+		
+		memcpy(evwr->ev_buf.addr + i * 23 + 4 + 47, msg, 23);
+		
+		/* modify qp to init */
+		flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT;
+		memset(&attr, 0, sizeof(struct ibv_qp_attr));
+		
+		attr.qp_state        = IBV_QPS_INIT;
+		attr.pkey_index      = 0;
+		attr.port_num        = 1; /* param->ib_port; */
+		attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
+				       IBV_ACCESS_LOCAL_WRITE;
+
+		flags |= IBV_QP_ACCESS_FLAGS;
+		    
+		if (ibv_modify_qp(item->qp, &attr, flags))  {
+			fprintf(stderr, "Failed to modify QP to INIT\n");
+			syslog(LOG_ERR, "Failed to modify QP to INIT\n");
+			return;
+		}
+		
+		/* set loc gid */
+		memcpy(item->loc_gid.raw, temp_gid.raw, 16);
+		
+		TAILQ_INSERT_TAIL(&dcqp_tqh, item, entries);
+	}
+	
+	/* num */
+	num = htonl(i);
+	memcpy(evwr->ev_buf.addr, &num, 4);
+	
+	/* gid */
+	memset(msg, '\0', 128);
+	sprintf(msg, "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", \
+			temp_gid.raw[0],temp_gid.raw[1],
+			temp_gid.raw[2],temp_gid.raw[3],
+			temp_gid.raw[4],temp_gid.raw[5],
+			temp_gid.raw[6],temp_gid.raw[7],
+			temp_gid.raw[8],temp_gid.raw[9],
+			temp_gid.raw[10],temp_gid.raw[11],
+			temp_gid.raw[12],temp_gid.raw[13],
+			temp_gid.raw[14],temp_gid.raw[15]);
+	memcpy(evwr->ev_buf.addr + 4, msg, 47);
+	
+	syslog(LOG_ERR, "request for %d qp\n", i);
+	syslog(LOG_ERR, "loc gid: %s\n", msg);
+	
+	evwr->ev_buf.mode = kRdmaTrans_ActWrte;
+	
+	if (isrequest == 1)
+		evwr->ev_buf.stat = DC_QP_REQ;
+	else
+		evwr->ev_buf.stat = DC_QP_REP;
+
+	/* post send request */
+	TAILQ_LOCK(&evwr_tqh);
+	TAILQ_INSERT_TAIL(&evwr_tqh, evwr, entries);
+	TAILQ_UNLOCK(&evwr_tqh);
+
+	ret = ibv_post_send(cb->qp, &evwr->ev_wr, &bad_wr);
+	if (ret) {
+		syslog(LOG_ERR, "ibv_post_send: %m");
+		exit(EXIT_FAILURE);
+	}
+	
+	return;
+}
 
 void *
 sender(void *arg)
@@ -1026,33 +2450,109 @@ sender(void *arg)
 	off_t currlen;
 	int thislen;
 	BUFDATBLK *bufblk;
+	REMOTEADDR *rmtaddr;
+	EVENTWR *evwr;
+	int ret;
+	int isuse;
+	
+	struct ibv_send_wr *bad_wr;
 	
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	totallen = cb->filesize;
+
+/*
+	DPRINTF(("start create_dc_qp\n"));
+	create_dc_qp(cb, 4, 1);
+	DPRINTF(("finish create_dc_qp\n")); */
 	
+	/* establish new RC connection
+	DPRINTF(("start create_dc_stream_server\n"));
+	create_dc_stream_server(child_dc_cb, 1);
+	DPRINTF(("finish create_dc_stream_server\n")); */
+
 /*	for (currlen = 0; currlen < totallen; currlen += thislen) { */
-	for (currlen = 0; ; currlen += thislen) {
+	for (currlen = 0; transcurrlen < transtotallen; currlen += thislen) {
+		/* check if the remote addr is available */
+		isuse = 0;
+		TAILQ_LOCK(&free_evwr_tqh);
+		while (TAILQ_EMPTY(&free_evwr_tqh)) {
+			if (TAILQ_WAIT(&free_evwr_tqh) != 0)
+				continue;	/* goto while */
+		}
+		evwr = TAILQ_FIRST(&free_evwr_tqh);
+		TAILQ_REMOVE(&free_evwr_tqh, evwr, entries);
+		
+		TAILQ_UNLOCK(&free_evwr_tqh);
+
+		rmtaddr = NULL;
+		TAILQ_LOCK(&rmtaddr_tqh);
+/*		
+		if (!TAILQ_EMPTY(&rmtaddr_tqh)) {
+			rmtaddr = TAILQ_FIRST(&rmtaddr_tqh);
+			TAILQ_REMOVE(&rmtaddr_tqh, rmtaddr, entries);
+		} */
+		while (TAILQ_EMPTY(&rmtaddr_tqh)) {
+			evwr->ev_buf.mode = kRdmaTrans_ActWrte;
+			evwr->ev_buf.stat = ACTIVE_WRITE_RQBLK;
+			
+			TAILQ_LOCK(&evwr_tqh);
+			TAILQ_INSERT_TAIL(&evwr_tqh, evwr, entries);
+			TAILQ_UNLOCK(&evwr_tqh);
+
+			ret = ibv_post_send(cb->qp, &evwr->ev_wr, &bad_wr);
+			if (ret) {
+				fprintf(stderr, "post send error %d\n", ret);
+				return 0;
+			}
+			
+			isuse = 1;
+			DPRINTF(("sender: post request resource success\n"));
+	
+			if (TAILQ_WAIT(&rmtaddr_tqh) != 0)
+				continue;
+		}
+
+		rmtaddr = TAILQ_FIRST(&rmtaddr_tqh);
+		TAILQ_REMOVE(&rmtaddr_tqh, rmtaddr, entries);
+		
+		TAILQ_UNLOCK(&rmtaddr_tqh);
+
 		/* get send block */
 		TAILQ_LOCK(&sender_tqh);
-		while (TAILQ_EMPTY(&sender_tqh))
+		while (TAILQ_EMPTY(&sender_tqh)) {
 			if (TAILQ_WAIT(&sender_tqh) != 0)
 				continue;	/* goto while */
+		}
 		
 		bufblk = TAILQ_FIRST(&sender_tqh);
 		TAILQ_REMOVE(&sender_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&sender_tqh);
-		
+
 		/* send data */
-		thislen = send_dat_blk(bufblk, cb);
+		thislen = send_dat_blk(bufblk, cb, rmtaddr);
 		DPRINTF(("send %d bytes\n", thislen));
 		
-		/* insert to free list */
-		TAILQ_LOCK(&free_tqh);
-		TAILQ_INSERT_TAIL(&free_tqh, bufblk, entries);
-		TAILQ_UNLOCK(&free_tqh);
+		/* insert to waiting list */
+		TAILQ_LOCK(&waiting_tqh);
+		TAILQ_INSERT_TAIL(&waiting_tqh, bufblk, entries);
+		TAILQ_UNLOCK(&waiting_tqh);
 		
-		TAILQ_SIGNAL(&free_tqh);
+		TAILQ_SIGNAL(&waiting_tqh);
+
+		TAILQ_LOCK(&free_rmtaddr_tqh);
+		TAILQ_INSERT_TAIL(&free_rmtaddr_tqh, rmtaddr, entries);
+		TAILQ_UNLOCK(&free_rmtaddr_tqh);
+		
+		TAILQ_SIGNAL(&free_rmtaddr_tqh);
+		
+		if (isuse == 0) {
+			TAILQ_LOCK(&free_evwr_tqh);
+			TAILQ_INSERT_TAIL(&free_evwr_tqh, evwr, entries);
+			TAILQ_UNLOCK(&free_evwr_tqh);
+			
+			TAILQ_SIGNAL(&free_evwr_tqh);
+		}
 		
 		if (thislen == 0)
 			break;
@@ -1110,68 +2610,107 @@ reader(void *arg)
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	totallen = cb->filesize;
 	
-	for (currlen = 0; currlen < totallen; currlen += thislen) {
-/*	for (currlen = 0; ; currlen += thislen) { */
-		/* get free block */
-		TAILQ_LOCK(&free_tqh);
-		while (TAILQ_EMPTY(&free_tqh))
-			if (TAILQ_WAIT(&free_tqh) != 0)
-				continue;	/* goto while */
-		
-		bufblk = TAILQ_FIRST(&free_tqh);
-		TAILQ_REMOVE(&free_tqh, bufblk, entries);
-		
-		TAILQ_UNLOCK(&free_tqh);
-		
-		/* load data */
-		bufblk->fd = cb->fd;
-		thislen = load_dat_blk(bufblk);
-		
-		DPRINTF(("load %d bytes\n", thislen));
-		
-		if (thislen <= 0) {
-			TAILQ_LOCK(&free_tqh);
-			TAILQ_INSERT_TAIL(&free_tqh, bufblk, entries);
-			TAILQ_UNLOCK(&free_tqh);
+	FILEINFO *item;
+	
+	TAILQ_HEAD(, Bufdatblk) 	inner_tqh;
+	TAILQ_INIT(&inner_tqh);
+	int innersize;
+	int seqnum;
+	int i;
+	
+	for ( ; ; ) {
+		/* get file info block */
+		TAILQ_LOCK(&schedule_tqh);
+		if (TAILQ_EMPTY(&schedule_tqh)) {
+			TAILQ_UNLOCK(&schedule_tqh);
 			break;
 		}
 		
-		rhdr.dlen = thislen;
-		memcpy(bufblk->rdma_buf, &rhdr, sizeof(rmsgheader));
+		item = TAILQ_FIRST(&schedule_tqh);
+		TAILQ_REMOVE(&schedule_tqh, item, entries);
 		
-		/* insert to sender list */
-		TAILQ_LOCK(&sender_tqh);
-		TAILQ_INSERT_TAIL(&sender_tqh, bufblk, entries);
-		TAILQ_UNLOCK(&sender_tqh);
+		TAILQ_UNLOCK(&schedule_tqh);
 		
-		TAILQ_SIGNAL(&sender_tqh);
+		if (opt.directio == true)
+			item->fd = open(item->lf, O_RDONLY | O_DIRECT);
+		else
+			item->fd = open(item->lf, O_RDONLY);
+		if (item->fd < 0) {
+			perror("Open failed");
+			exit(EXIT_FAILURE);
+		}
+		
+		currlen = seqnum = 0;
+		
+		/* deal with one file with the size item->fsize */
+	do {
+		if (currlen >= item->fsize) /* /dev/zero doesn't have EOF */
+			break;
+		
+		/* get free block as much as possible */
+		if (TAILQ_EMPTY(&inner_tqh)) {
+			TAILQ_LOCK(&free_tqh);
+			while (TAILQ_EMPTY(&free_tqh))
+				if (TAILQ_WAIT(&free_tqh) != 0)
+					continue;
+	
+			innersize = 0;
+			while (!TAILQ_EMPTY(&free_tqh) && ++innersize < 10) {
+				bufblk = TAILQ_FIRST(&free_tqh);
+				TAILQ_REMOVE(&free_tqh, bufblk, entries);
+				
+				TAILQ_INSERT_TAIL(&inner_tqh, bufblk, entries);
+			}
+			
+			TAILQ_UNLOCK(&free_tqh);
+		}
+		
+		while (!TAILQ_EMPTY(&inner_tqh)) {
+			bufblk = TAILQ_FIRST(&inner_tqh);
+			TAILQ_REMOVE(&inner_tqh, bufblk, entries);
+			
+			bufblk->fd = item->fd;
+			thislen = load_dat_blk(bufblk);
+			DPRINTF(("load %d bytes\n", thislen));
+			
+			if (thislen <= 0) {
+				TAILQ_INSERT_TAIL(&inner_tqh, bufblk, entries);
+				break;
+			}
+			
+			rhdr.sessionid = item->sessionid;
+			rhdr.seqnum = ++ seqnum;
+			rhdr.dlen = thislen;
+			
+			currlen += thislen;
+
+			memcpy(bufblk->rdma_buf, &rhdr, sizeof(rmsgheader));
+			
+			/* insert to sender list */
+			TAILQ_LOCK(&sender_tqh);
+			TAILQ_INSERT_TAIL(&sender_tqh, bufblk, entries);
+			TAILQ_UNLOCK(&sender_tqh);
+			
+			TAILQ_SIGNAL(&sender_tqh);
+		}
+	} while (thislen > 0);
+
 	}
 	
-	/* generate a zero package */
-	/* get free block */
-	TAILQ_LOCK(&free_tqh);
-	while (TAILQ_EMPTY(&free_tqh))
-		if (TAILQ_WAIT(&free_tqh) != 0)
-			continue;	/* goto while */
+	/* return inner block to free list */
+	while (!TAILQ_EMPTY(&inner_tqh)) {
+		bufblk = TAILQ_FIRST(&inner_tqh);
+		TAILQ_REMOVE(&inner_tqh, bufblk, entries);
 	
-	bufblk = TAILQ_FIRST(&free_tqh);
-	TAILQ_REMOVE(&free_tqh, bufblk, entries);
-	
-	TAILQ_UNLOCK(&free_tqh);
-	
-	rhdr.dlen = 0;
-	memcpy(bufblk->rdma_buf, &rhdr, sizeof(rmsgheader));
-	
-	/* insert to sender list */
-	TAILQ_LOCK(&sender_tqh);
-	TAILQ_INSERT_TAIL(&sender_tqh, bufblk, entries);
-	TAILQ_UNLOCK(&sender_tqh);
-	
-	TAILQ_SIGNAL(&sender_tqh);
+		TAILQ_LOCK(&free_tqh);
+		TAILQ_INSERT_TAIL(&free_tqh, bufblk, entries);
+		TAILQ_UNLOCK(&free_tqh);
+	}
 	
 	/* data read finished */
 	pthread_exit((void *) currlen);
 }
+
 
 void *
 writer(void *arg)
@@ -1181,9 +2720,15 @@ writer(void *arg)
 	off_t currlen;
 	int thislen;
 	
+	TAILQ_HEAD(, Bufdatblk) 	inner_tqh;
+	TAILQ_INIT(&inner_tqh);
+	
+	int innersize;
+	int seqnum;
+	
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 
-	for (currlen = 0 ; ; currlen += thislen) {
+	for (currlen = 0 ; transcurrlen < transtotallen; currlen += thislen) {
 		/* get write block */
 		TAILQ_LOCK(&writer_tqh);
 		while (TAILQ_EMPTY(&writer_tqh))
@@ -1194,14 +2739,8 @@ writer(void *arg)
 		TAILQ_REMOVE(&writer_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&writer_tqh);
-		
-		/* offload data */
-		bufblk->fd = cb->fd;
-		memcpy(&rhdr, bufblk->rdma_buf, sizeof(rmsgheader));
-		bufblk->buflen = rhdr.dlen + sizeof(rmsgheader);
-		thislen = rhdr.dlen;
-		
-		offload_dat_blk(bufblk);
+			
+		thislen = offload_dat_blk(bufblk);
 		
 		/* insert to free list */
 		TAILQ_LOCK(&free_tqh);
@@ -1212,9 +2751,182 @@ writer(void *arg)
 		
 		if (thislen == 0)
 			break;
+		
+		transcurrlen += thislen;
 	}
 	
 	pthread_exit((void *) currlen);
+}
+
+void *
+scheduler(void *arg)
+{
+	struct rdma_cb *cb = (struct rdma_cb *) arg;
+	
+	BUFDATBLK *bufblk;
+	rmsgheader rhdr;
+	off_t currlen;
+	int thislen;
+	off_t totallen = 0;
+	int ret;
+	
+	FILEINFO *item;
+	EVENTWR *evwr;
+	struct ibv_send_wr *bad_wr;
+	
+	TAILQ_FOREACH(item, &finfo_tqh, entries) {
+		/* get a file block */
+		
+		/* get a send buf */
+		TAILQ_LOCK(&free_evwr_tqh);
+		while (TAILQ_EMPTY(&free_evwr_tqh)) {
+			if (TAILQ_WAIT(&free_evwr_tqh) != 0)
+				continue;	/* goto while */
+		}
+		
+		evwr = TAILQ_FIRST(&free_evwr_tqh);
+		TAILQ_REMOVE(&free_evwr_tqh, evwr, entries);
+		
+		TAILQ_UNLOCK(&free_evwr_tqh);
+		
+		/* compose send request - FILE_SESSION_ID_REQUEST */
+		evwr->ev_buf.mode = kRdmaTrans_ActWrte;
+		evwr->ev_buf.stat = FILE_SESSION_ID_REQUEST;
+		strncpy(evwr->ev_buf.addr, item->rf, 32);
+		memcpy(evwr->ev_buf.addr + 32, &item->fsize, 8);
+
+		TAILQ_LOCK(&evwr_tqh);
+		TAILQ_INSERT_TAIL(&evwr_tqh, evwr, entries);
+		TAILQ_UNLOCK(&evwr_tqh);
+		
+		ret = ibv_post_send(cb->qp, &evwr->ev_wr, &bad_wr);
+		if (ret) {
+			syslog(LOG_ERR, "post send error %d\n", ret);
+		}
+	}
+
+	pthread_exit(NULL);
+}
+
+void
+parsedir(const char *dir)
+{
+	char *head;
+	char *tail;
+	
+	char curpath[256];
+	
+	struct stat st;
+	
+	head = dir;
+	
+	while ((tail = strchr(head, '/')) != NULL) {
+		memset(curpath, '\0', 256);
+		memcpy(curpath, dir, tail - dir);
+		
+		if (stat(curpath, &st) != 0) {	/* create dir */
+			if (mkdir(curpath, S_IRWXU|S_IRGRP|S_IXGRP) != 0)
+				syslog(LOG_ERR, "mkdir %s fail: %d(%s)", \
+					dir, errno, strerror(errno));
+		}
+		
+		head = tail + 1;
+	}
+	
+	return;
+}
+
+void
+parsepath(const char *path)
+{
+	/* recursively resolve files or folders */
+	FILEINFO *item;
+	struct stat st;
+	DIR *dp;
+	struct dirent *entry;
+	
+	if (stat(path, &st) != 0) {
+		fprintf(stderr, "lstat fail: %d(%s)", errno, strerror(errno));
+		return;
+	}
+	
+	if (S_ISDIR(st.st_mode)) {
+		char newpath[1024];
+		
+		if((dp = opendir(path)) == NULL) {
+			fprintf(stderr,"cannot open directory: %s\n", path);
+			return;
+		}
+		
+		while((entry = readdir(dp)) != NULL) {
+			memset(newpath, '\0', 1024);
+			
+			/* ignore . and .. */
+			if (strcmp(".", entry->d_name) == 0 || 
+				strcmp("..", entry->d_name) == 0)
+				continue;
+			
+			if (*(path + strlen(path) - 1) == '/')
+				snprintf(newpath, 1024, "%s%s", path, entry->d_name);
+			else
+				snprintf(newpath, 1024, "%s/%s", path, entry->d_name);
+			
+			parsepath(newpath);
+		}
+		
+		closedir(dp);
+	} else if (S_ISREG(st.st_mode)) {
+		item = (FILEINFO *) malloc(sizeof(FILEINFO));
+		if (item == NULL) {
+			fprintf(stderr, "malloc fail");
+			exit(0);
+		}
+		memset(item, '\0', sizeof(FILEINFO));
+	
+		strcpy(item->lf, path);
+		strcpy(item->rf, path);
+		item->offset = 0;
+		
+		item->fsize = st.st_size;
+		
+		transtotallen += item->fsize;
+		
+		syslog(LOG_ERR, "REG file: %s, size: %ld bytes\n", \
+			item->lf, item->fsize);
+		
+		TAILQ_INSERT_TAIL(&finfo_tqh, item, entries);
+	} else if (S_ISCHR(st.st_mode)) {
+		/* suppose this is /dev/zero */
+		item = (FILEINFO *) malloc(sizeof(FILEINFO));
+		if (item == NULL) {
+			fprintf(stderr, "malloc fail");
+			exit(0);
+		}
+		memset(item, '\0', sizeof(FILEINFO));
+	
+		strcpy(item->lf, path);
+		strcpy(item->rf, path);
+		item->offset = 0;
+		
+		item->fsize = opt.devzerosiz;
+		
+		transtotallen += item->fsize;
+		
+		syslog(LOG_ERR, "CHR file: %s, size: %ld bytes\n", \
+			item->lf, item->fsize);
+		
+		TAILQ_INSERT_TAIL(&finfo_tqh, item, entries);
+	} else if (S_ISBLK(st.st_mode)) {
+		printf("IS BLK\n");
+	} else if (S_ISLNK(st.st_mode)) {
+		printf("IS LNK\n");
+	} else if (S_ISSOCK(st.st_mode)) {
+		printf("IS SOCK\n");
+	} else {
+		printf("unknown file type\n");
+	}
+	
+	return;
 }
 
 int
@@ -1231,7 +2943,7 @@ offload_dat_blk(BUFDATBLK *bufblk)
 
 
 int
-send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
+send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 {
 	struct ibv_send_wr *bad_wr;
 	int ret;
@@ -1242,7 +2954,7 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	/* setup wr */
 	tsf_setup_wr(bufblk);
 	
-	/* talk to peer what type of transfer to use */
+	/* talk to peer what type of transfer to use
 	dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
 	dc_cb->send_buf.stat = ACTIVE_WRITE_ADV;
 	ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
@@ -1250,10 +2962,10 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 		fprintf(stderr, "post send error %d\n", ret);
 		return 0;
 	}
-	dc_cb->state = ACTIVE_WRITE_ADV;
+	dc_cb->state = ACTIVE_WRITE_ADV; */
 	
-	/* wait the peer tell me where should i write to */
-	sem_wait(&dc_cb->sem);
+	/* wait the peer tell me where should i write to
+	sem_wait(&dc_cb->sem); */
 /*	if (child_dc_cb->state != ACTIVE_WRITE_RESP) {
 		fprintf(stderr, \
 			"wait for ACTIVE_WRITE_RESP state %d\n", \
@@ -1263,9 +2975,13 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 	
 	/* start data transfer using RDMA_WRITE */
 	bufblk->rdma_sq_wr.opcode = IBV_WR_RDMA_WRITE;
-	bufblk->rdma_sq_wr.wr.rdma.rkey = dc_cb->remote_rkey;
-	bufblk->rdma_sq_wr.wr.rdma.remote_addr = dc_cb->remote_addr;
+	bufblk->rdma_sq_wr.wr.rdma.rkey = rmt->rkey;
+	bufblk->rdma_sq_wr.wr.rdma.remote_addr = rmt->buf;
 	bufblk->rdma_sq_wr.sg_list->length = rhdr.dlen + sizeof(rmsgheader);
+	bufblk->rdma_sq_wr.wr_id = bufblk->wr_id;
+	
+/*	bufblk->rdma_sq_wr.send_flags = IBV_SEND_SIGNALED;
+        bufblk->rdma_sq_wr.next = NULL; */
 	
 	DPRINTF(("start data transfer using RDMA_WRITE\n"));
 /*	DEBUG_LOG("rdma write from lkey %x laddr %x len %d\n",
@@ -1273,15 +2989,29 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 		  bufblk->rdma_sq_wr.sg_list->addr,
 		  bufblk->rdma_sq_wr.sg_list->length);
 */
-	ret = ibv_post_send(dc_cb->qp, &bufblk->rdma_sq_wr, &bad_wr);
+/*	DATAQP *item;
+	item = TAILQ_FIRST(&dcqp_tqh);
+	TAILQ_REMOVE(&dcqp_tqh, item, entries);;
+	TAILQ_INSERT_TAIL(&dcqp_tqh, item, entries); */
+	
+	RCINFO *item;
+	item = TAILQ_FIRST(&rcif_tqh);
+	TAILQ_REMOVE(&rcif_tqh, item, entries);
+	TAILQ_INSERT_TAIL(&rcif_tqh, item, entries);
+	
+/*	ret = ibv_post_send(dc_cb->qp, &bufblk->rdma_sq_wr, &bad_wr); */
+	ret = ibv_post_send(item->qp, &bufblk->rdma_sq_wr, &bad_wr);
 	if (ret) {
 		fprintf(stderr, "post send error %d\n", ret);
 		return 0;
 	}
+	
+	transcurrlen += rhdr.dlen;
+	
 /*	dc_cb->state != ACTIVE_WRITE_POST; -> Todo */
 	DPRINTF(("send_dat_blk: ibv_post_send finish\n"));
-	/* wait the finish of RDMA_WRITE */
-	sem_wait(&dc_cb->sem);
+	/* wait the finish of RDMA_WRITE
+	sem_wait(&dc_cb->sem); */
 	DPRINTF(("sem_wait finish of RDMA_WRITE success\n"));
 /*			if (child_dc_cb->state != ACTIVE_WRITE_FIN) {
 		fprintf(stderr, \
@@ -1290,7 +3020,7 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 		return;
 	} */
 	
-	/* tell the peer transfer finished */
+	/* tell the peer transfer finished
 	dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
 	dc_cb->send_buf.stat = ACTIVE_WRITE_FIN;
 	ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
@@ -1298,7 +3028,7 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 		fprintf(stderr, "post send error %d\n", ret);
 		return 0;
 	}
-	DPRINTF(("send_dat_blk: ibv_post_send finish 2\n"));
+	DPRINTF(("send_dat_blk: ibv_post_send finish 2\n")); */
 	
 /*	if (tick && (bytes >= hashbytes)) {
 		printf("\rBytes transferred: %ld", bytes);
@@ -1307,9 +3037,9 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb)
 			hashbytes += TICKBYTES;
 	} */
 	
-	/* wait the client to notify next round data transfer */
+	/* wait the client to notify next round data transfer
 	sem_wait(&dc_cb->sem);
-	DPRINTF(("wait notify next round data transfer success\n"));
+	DPRINTF(("wait notify next round data transfer success\n")); */
 	
 	return rhdr.dlen;
 }
@@ -1352,4 +3082,39 @@ recv_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *cb)
 	}
 	
 	return rhdr.dlen;
+}
+
+
+void
+dc_conn_req(struct rdma_cb *cb)
+{
+	EVENTWR *evwr;
+	struct ibv_send_wr *bad_wr;
+	int ret;
+	
+	/* get a send buf */
+	TAILQ_LOCK(&free_evwr_tqh);
+	while (TAILQ_EMPTY(&free_evwr_tqh))
+		if (TAILQ_WAIT(&free_evwr_tqh) != 0)
+			continue;	/* goto while */
+	
+	evwr = TAILQ_FIRST(&free_evwr_tqh);
+	TAILQ_REMOVE(&free_evwr_tqh, evwr, entries);
+	
+	TAILQ_UNLOCK(&free_evwr_tqh);
+	
+	/* compose send request - FILE_SESSION_ID_REQUEST */
+	evwr->ev_buf.mode = kRdmaTrans_ActWrte;
+	evwr->ev_buf.stat = DC_CONNECTION_REQ;
+	strncpy(evwr->ev_buf.addr, &opt.rcstreamnum, 4);
+	
+	TAILQ_LOCK(&evwr_tqh);
+	TAILQ_INSERT_TAIL(&evwr_tqh, evwr, entries);
+	TAILQ_UNLOCK(&evwr_tqh);
+	
+	ret = ibv_post_send(cb->qp, &evwr->ev_wr, &bad_wr);
+	if (ret)
+		syslog(LOG_ERR, "post send error %d\n", ret);
+	
+	return;
 }

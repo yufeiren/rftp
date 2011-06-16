@@ -235,3 +235,65 @@ max_size_t byte_atoi( const char *inString ) {
     }
     return (max_size_t) theNum;
 } /* end byte_atoi */
+
+void *
+anabw(void *arg)
+{
+	long prelen = 0;
+	long trans; /* bits */
+	
+	double percent;
+	
+	int banlen = 30;
+	int i;
+	
+	for ( ; transcurrlen < transtotallen; ) {
+		sleep(1);
+		trans = (transcurrlen - prelen) * 8;
+		
+		/* percentage */
+		percent = (double) transcurrlen / (double) transtotallen;
+		
+		printf(" ");
+		printf("%6.2f", percent * 100);
+		printf("%%");
+		
+		/* draw banner */
+		printf(" ");
+		printf("[");
+		for (i = 0; i < banlen; i ++) {
+			if (i < percent * banlen)
+				printf("=");
+			else
+				printf(" ");
+		}
+		printf("]");
+		
+		/* total bytes */
+		printf("%15ld", transcurrlen);
+		
+		/* bandwidth */
+		printf("  ");
+		
+		if (trans < kKilo_to_Unit)
+			printf("%7.2f Bits/sec", (double) trans);
+		else if (trans < kMega_to_Unit)
+			printf("%7.2f KBits/sec", \
+				(double) trans / kKilo_to_Unit);
+		else if (trans < kGiga_to_Unit)
+			printf("%7.2f MBits/sec", \
+				(double) trans / kMega_to_Unit);
+		else
+			printf("%7.2f GBits/sec", \
+				(double) trans / kGiga_to_Unit);
+		
+		printf("\r");
+		fflush(stdout);
+		
+		prelen = transcurrlen;
+	}
+	printf("\n");
+	
+	pthread_exit(NULL);
+}
+

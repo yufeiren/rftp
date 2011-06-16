@@ -78,6 +78,11 @@ extern FILE *fin;
 // rdma_listen backlog
 #define RLISTENBACKLOG		32
 
+// wr_id bitmask
+#define WRIDEVENT	0x0100000000000000
+#define WRIDBUFFER	0x0200000000000000
+#define WRIDRECV	0x0400000000000000
+
 // rdma transfer mode
 typedef enum RdmaTransMode {
     kRdmaTrans_ActRead = 0,
@@ -103,6 +108,13 @@ enum rdma_state_mac {
 	ACTIVE_WRITE_RESP,
 	ACTIVE_WRITE_POST,
 	ACTIVE_WRITE_FIN,
+	ACTIVE_WRITE_RQBLK,
+	ACTIVE_WRITE_RPBLK,
+	DC_QP_REQ,
+	DC_QP_REP,
+	DC_CONNECTION_REQ,
+	FILE_SESSION_ID_REQUEST,
+	FILE_SESSION_ID_RESPONSE,
 	RDMA_WRITE_COMPLETE,
 	RDMA_READ_COMPLETE,
 	STATE_ERROR
@@ -114,11 +126,15 @@ enum rdma_state_mac {
 };
 
 struct rdma_info_blk {
+	uint64_t wr_id;
 	uint64_t buf;
 	uint32_t rkey;
 	uint32_t size;
 	uint32_t mode;	/* for rdma transfer mode */
 	uint32_t stat;  /* status */
+	char addr[256];	/* support multiple addr a time */
+			/* also used for qp information exchange - just for demo. otherwise this logic should be condemned */
+			/* also used for file session id */
 };
 
 
@@ -142,30 +158,135 @@ struct rdma_info_blk {
 extern int PseudoSock;
 extern pthread_mutex_t PseudoSockCond;
 
+
 struct Bufdatblk {
+	uint64_t		wr_id;		/* work request id */
 	int			buflen;
 	struct ibv_send_wr	rdma_sq_wr;	/* rdma work request record */
 	struct ibv_sge		rdma_sgl;	/* rdma single SGE */
 	char			*rdma_buf;	/* used as rdma sink or source*/
 	struct ibv_mr 		*rdma_mr;
 	int			fd;		/* in and out fd */
+	struct ibv_qp 		*qp;		/* qp */
+	int			seqnum;
+	off_t			offset;
 	
 	TAILQ_ENTRY(Bufdatblk) entries;
 };
 typedef struct Bufdatblk BUFDATBLK;
+
+struct Fileinfo {
+	char   lf[1024];	/* local file name */
+	char   rf[1024];	/* remote file name */
+	int    fd;
+	int    sessionid;
+	off_t  offset;
+	int    seqnum;		/* the next wanted sequence num */
+	off_t  fsize;
+	
+	TAILQ_HEAD(, Bufdatblk) pending_tqh;
+
+	TAILQ_ENTRY(Fileinfo) entries;
+};
+typedef struct Fileinfo FILEINFO;
+
+struct Remoteaddr {
+	uint64_t buf;
+	uint32_t rkey;
+	uint32_t size;
+	
+	TAILQ_ENTRY(Remoteaddr) entries;
+};
+typedef struct Remoteaddr REMOTEADDR;
+
+/* sendeventwr is better */
+struct Eventwr {
+	uint64_t wr_id;
+	struct ibv_send_wr ev_wr;	/* send work request record */
+	struct ibv_sge ev_sgl;	/* send single SGE */
+	struct rdma_info_blk ev_buf;  /* single send buf */
+	struct ibv_mr *ev_mr;		/* MR associated with this buffer */
+	
+	TAILQ_ENTRY(Eventwr) entries;
+};
+typedef struct Eventwr EVENTWR;
+
+
+struct Recvwr {
+	uint64_t wr_id;
+	struct ibv_recv_wr recv_wr;	/* recv work request record */
+	struct ibv_sge recv_sgl;	/* recv single SGE */
+	struct rdma_info_blk recv_buf;  /* single recv buf */
+	struct ibv_mr *recv_mr;		/* MR associated with this buffer */
+	
+	TAILQ_ENTRY(Eventwr) entries;
+};
+typedef struct Recvwr RECVWR;
+
+struct Dataqp {
+	int loc_lid;
+	int loc_out_reads;
+	int loc_qpn;
+	int loc_psn;
+	union ibv_gid loc_gid;
+	int rem_lid;
+	int rem_out_reads;
+	int rem_qpn;
+	int rem_psn;
+	union ibv_gid rem_gid;
+	
+	struct ibv_qp *qp;
+	
+	TAILQ_ENTRY(Dataqp) entries;
+};
+typedef struct Dataqp DATAQP;
+
+struct Rcinfo {		/* reliable connection information */
+	struct ibv_comp_channel *channel;
+	struct ibv_pd *pd;
+	struct ibv_qp *qp;
+	
+	struct rdma_event_channel *cm_channel;
+	struct rdma_cm_id *cm_id;
+	
+	TAILQ_ENTRY(Rcinfo) entries;
+};
+typedef struct Rcinfo RCINFO;
+
 
 /* res */
 	/* free list, sender list, and writer list */
 TAILQ_HEAD(, Bufdatblk) 	free_tqh;
 TAILQ_HEAD(, Bufdatblk) 	sender_tqh;
 TAILQ_HEAD(, Bufdatblk) 	writer_tqh;
+TAILQ_HEAD(, Bufdatblk) 	waiting_tqh;
 
+	/* remote addr infor addr */
+TAILQ_HEAD(, Remoteaddr)	free_rmtaddr_tqh;
+TAILQ_HEAD(, Remoteaddr)	rmtaddr_tqh;
+
+	/* event work request addr */
+TAILQ_HEAD(, Eventwr)		free_evwr_tqh;
+TAILQ_HEAD(, Eventwr)		evwr_tqh;
+
+	/* event work request addr */
+TAILQ_HEAD(, Recvwr)		recvwr_tqh;
+
+	/* queue pair list */
+TAILQ_HEAD(, Dataqp)		dcqp_tqh;
+
+	/* RC stream list */
+TAILQ_HEAD(, Rcinfo)		rcif_tqh;
+
+	/* multiple file list */
+TAILQ_HEAD(, Fileinfo) 		schedule_tqh;
+TAILQ_HEAD(, Fileinfo)		finfo_tqh;
 
 /*
  * RDMA Control block struct.
  */
 typedef struct rdma_cb {
-	int server;			/* 0 iff client */
+	int server;			/* 0 if client */
 	pthread_t cqthread;
 	struct ibv_comp_channel *channel;
 	struct ibv_cq *cq;
@@ -228,7 +349,10 @@ typedef struct wcm_id {
 TAILQ_HEAD(acptq, wcm_id);
 
 typedef struct rmsgheader {
+	uint32_t sessionid;
+	uint32_t seqnum;
 	uint32_t dlen;
+	char blank[4084];	/* getpagesize minus 12 = 4096 - 12 */
 } rmsgheader;
 
 /* prototype - defined in rdma.c*/
@@ -255,6 +379,8 @@ void iperf_free_qp(struct rdma_cb *cb);
 int iperf_setup_buffers(struct rdma_cb *cb);
 
 int tsf_setup_buf_list(struct rdma_cb *cb);
+
+void tsf_waiting_to_free(void);
 
 void tsf_free_buf_list(void);
 
@@ -302,13 +428,46 @@ void	*recver(void *);
 void	*reader(void *);
 void	*writer(void *);
 
+void	*scheduler(void *);
+
 int load_dat_blk(BUFDATBLK *);
 
 int offload_dat_blk(BUFDATBLK *);
 
-int send_dat_blk(BUFDATBLK *, struct rdma_cb *);
+int send_dat_blk(BUFDATBLK *, struct rdma_cb *, struct Remoteaddr *);
 
 int recv_dat_blk(BUFDATBLK *, struct rdma_cb *);
+
+void *prep_blk(void *);
+void *acpt_blk(void *);
+void *notify_blk(void *);
+
+void *handle_qp_req(void *);
+void *handle_qp_rep(void *);
+
+void *recv_data(void *);
+
+void handle_wr(struct rdma_cb *, uint64_t wr_id);
+/* void *handle_wr(void *); */
+
+void create_dc_qp(struct rdma_cb *, int, int);
+
+void create_dc_stream_server(struct rdma_cb *cb, int num);
+void create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest);
+
+void *handle_file_session_req(void *);
+void *handle_file_session_rep(void *);
+
+
+int get_next_channel_event(struct rdma_event_channel *channel, enum rdma_cm_event_type event);
+
+/* data sink */
+void parsedir(const char *dir);
+
+/* data source */
+void parsepath(const char *path);
+
+void dc_conn_req(struct rdma_cb *cb);
 
 #ifdef __cplusplus
 } /* end extern "C" */

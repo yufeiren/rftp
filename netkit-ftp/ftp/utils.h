@@ -108,13 +108,27 @@ extern "C" {
 
 typedef uint64_t max_size_t;
 
+max_size_t transtotallen;		/* totally trans data */
+max_size_t transcurrlen;
+
 struct options {
 	int    cbufnum;
 	long   cbufsiz;
+	int    evbufnum;
+	int    recvbufnum;
+	int    rmtaddrnum;
 	int    srvcomport;
 	bool   usesendfile;
 	bool   usesplice;
 	long   devzerosiz;
+	char   *ib_devname;
+	int    rcstreamnum;	/* number of reliable connection */
+	int    readernum;	/* number of reader if send data */
+	int    writernum;	/* number of writer if recv data */
+	char   *ioengine;
+	bool   directio;
+	int    rdma_qp_rq_depth;
+	int    rdma_qp_sq_depth;
 };
 
 double byte_atof(const char *);
@@ -124,6 +138,9 @@ max_size_t byte_atoi(const char *);
 bool file_exists_p (const char *);
 char *read_whole_line (FILE *);
 char *concat_strings (const char *, ...);
+
+/* thread */
+void *anabw(void *);
 
 #ifdef __cplusplus
 } /* end extern "C" */

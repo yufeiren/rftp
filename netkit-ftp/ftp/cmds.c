@@ -58,6 +58,7 @@ char cmds_rcsid[] =
 #include <time.h>
 #include <string.h>
 #include <unistd.h>
+#include <dirent.h>	/* for dir resolve */
 #ifdef __USE_READLINE__
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -68,6 +69,8 @@ char cmds_rcsid[] =
 #include "cmds.h"
 #include "glob.h"
 #include "errors.h"
+#include "rdma.h"
+#include "utils.h"
 
 void intr(int);
 
@@ -76,6 +79,10 @@ extern int data;
 extern const char *home;
 extern off_t restart_point;
 extern char reply_string[];
+
+extern uint64_t transtotallen;
+
+extern struct options opt;
 
 static char *mname;
 static sigjmp_buf jabort;
@@ -90,7 +97,6 @@ static int confirm(const char *cmd, const char *file);
 static int getit(int argc, char *argv[], int restartit, const char *modestr);
 static int rgetit(int argc, char *argv[], int restartit, const char *modestr);
 static void quote1(const char *initial, int argc, char **argv);
-
 
 /*
  * pipeprotect: protect against "special" local filenames by prepending
@@ -554,6 +560,11 @@ usage:
 	if (loc && mapflag) {
 		argv[2] = domap(argv[2]);
 	}
+	
+	transcurrlen = transtotallen = 0;
+	
+	parsepath(argv[1]);
+	
 	rdmasendrequest(cmd, argv[1], argv[2],
 	    argv[1] != oldargv1 || argv[2] != oldargv2);
 }
@@ -679,6 +690,87 @@ mput(int argc, char *argv[])
 			free((char *)gargs);
 		}
 	}
+	(void) signal(SIGINT, oldintr);
+	mflag = 0;
+}
+
+/*
+ * Send multiple files using RDMA.
+ */
+void
+rmput(int argc, char *argv[])
+{
+	register int i;
+	void (*oldintr)(int);
+	int ointer;
+	char *tp;
+
+	if (argc < 2 && !another(&argc, &argv, "local-files")) {
+		printf("usage: %s local-files\n", argv[0]);
+		code = -1;
+		return;
+	}
+	mname = argv[0];
+	mflag = 1;
+	oldintr = signal(SIGINT, mabort);
+	(void) sigsetjmp(jabort, 1);
+	if (proxy) {
+		char *cp, *tp2, tmpbuf[PATH_MAX];
+
+		while ((cp = remglob(argv,0)) != NULL) {
+			if (*cp == 0) {
+				mflag = 0;
+				continue;
+			}
+			if (mflag && confirm(argv[0], cp)) {
+				tp = cp;
+				if (mcase) {
+					while (*tp && !islower(*tp)) {
+						tp++;
+					}
+					if (!*tp) {
+						tp = cp;
+						tp2 = tmpbuf;
+						while ((*tp2 = *tp) != '\0') {
+						     if (isupper(*tp2)) {
+						        *tp2 = 'a' + *tp2 - 'A';
+						     }
+						     tp++;
+						     tp2++;
+						}
+					}
+					tp = tmpbuf;
+				}
+				if (ntflag) {
+					tp = dotrans(tp);
+				}
+				if (mapflag) {
+					tp = domap(tp);
+				}
+				sendrequest((sunique) ? "STOU" : "STOR",
+				    cp, tp, cp != tp || !interactive);
+				if (!mflag && fromatty) {
+					ointer = interactive;
+					interactive = 1;
+					if (confirm("Continue with","mput")) {
+						mflag++;
+					}
+					interactive = ointer;
+				}
+			}
+		}
+		(void) signal(SIGINT, oldintr);
+		mflag = 0;
+		return;
+	}
+	
+	transcurrlen = transtotallen = 0;
+
+	for (i = 1; i < argc; i++)
+		parsepath(argv[i]);
+	
+	rdmasendrequest("RSTR", argv[1], argv[1], 1);
+	
 	(void) signal(SIGINT, oldintr);
 	mflag = 0;
 }
@@ -955,7 +1047,9 @@ usage:
 			}
 		}
 	}
-
+	
+	transcurrlen = transtotallen = 0;
+	
 	rdmarecvrequest("RRTR", argv[2], argv[1], modestr,
 		    argv[1] != oldargv1 || argv[2] != oldargv2);
 	restart_point = 0;
@@ -1239,9 +1333,9 @@ checkglob(int fd, const char *pattern)
 }
 
 static const char *
-onoff(int bool)
+onoff(int b)
 {
-	return (bool ? "on" : "off");
+	return (b ? "on" : "off");
 }
 
 /*

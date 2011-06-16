@@ -91,6 +91,16 @@ static const struct {
 	{ "cbufnum",       &opt.cbufnum,           cmd_number },
 	{ "cbufsiz",       &opt.cbufsiz,           cmd_byte },
 	{ "devzerosiz",    &opt.devzerosiz,        cmd_byte },
+	{ "directio",      &opt.directio,          cmd_boolean },
+	{ "evbufnum",      &opt.evbufnum,          cmd_number },
+	{ "ibdevname",     &opt.ib_devname,        cmd_string },
+	{ "ioengine",      &opt.ioengine,          cmd_string },
+	{ "rcstreamnum",   &opt.rcstreamnum,       cmd_number },
+	{ "rdma_qp_rq_depth", &opt.rdma_qp_rq_depth, cmd_number },
+	{ "rdma_qp_sq_depth", &opt.rdma_qp_sq_depth, cmd_number },
+	{ "readernum",     &opt.readernum,         cmd_number },
+	{ "recvbufnum",    &opt.recvbufnum,        cmd_number },
+	{ "rmtaddrnum",    &opt.rmtaddrnum,        cmd_number },
 /* srvcommport - server side communication channel listening port */
 	{ "srvcomport",    &opt.srvcomport,        cmd_number },
 /* if sendfile set Y, 
@@ -98,6 +108,7 @@ static const struct {
 */
 	{ "usesendfile",   &opt.usesendfile,       cmd_boolean },
 	{ "usesplice",     &opt.usesplice,         cmd_boolean },
+	{ "writernum",     &opt.writernum,         cmd_number }
 /*
 readernum
 writernum
@@ -127,14 +138,29 @@ defaults (void)
      illegal, but porting Wget to a machine where NULL is not all-zero
      bit pattern will be the least of the implementors' worries.  */
 
-  opt.cbufsiz = 1048576; /* default buffer size is 1MB */
+  opt.cbufsiz = 5242880; /* default buffer size is 5MB */
   opt.cbufnum = 10;
   
   opt.devzerosiz = 107374182400; /* default size of /dev/zero is 100GB */
   
+  opt.evbufnum = 100;
+  opt.recvbufnum = 100;
+  opt.rmtaddrnum = 100;
+  
   opt.srvcomport = 21;
   opt.usesendfile = false;
   opt.usesplice = false;
+  
+  opt.rcstreamnum = 1;
+  
+  opt.readernum = 1;
+  opt.writernum = 1;
+  
+/* opt.ioengine = "sync"; */
+  opt.directio = false;
+  
+  opt.rdma_qp_rq_depth = 64;
+  opt.rdma_qp_sq_depth = 64;
 }
 
 /* Return the user's home directory (strdup-ed), or NULL if none is

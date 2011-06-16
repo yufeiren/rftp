@@ -34,6 +34,7 @@ void append(int argc, char *argv[]);
 void put(int argc, char *argv[]);
 void rput(int argc, char *argv[]);    /* data transfer channel use rdma */
 void mput(int argc, char *argv[]);
+void rmput(int argc, char *argv[]);
 void renamefile(int argc, char *argv[]);
 void status(void);
 void quote(int argc, char *argv[]);

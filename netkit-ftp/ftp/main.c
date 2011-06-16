@@ -91,11 +91,16 @@ struct acptq acceptedTqh;
 
 struct options opt;
 
+/* it is not safe to create directory simutanuously  */
+pthread_mutex_t dir_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+
 static
 void
 usage(void)
 {
-	printf("\n\tUsage: { ftp | pftp } [-pinegvtd] [hostname]\n");
+	printf("\nRFTP client version 0.13\n");
+	printf("\n\tUsage: { rcftp | pftp } [-pinegvtd] [hostname]\n");
 	printf("\t   -p: enable passive mode (default for pftp)\n");
 	printf("\t   -i: turn off prompting during mget\n");
 	printf("\t   -n: inhibit auto-login\n");
@@ -133,7 +138,7 @@ main(volatile int argc, char **volatile argv)
         cp = (cp == NULL) ? argv[0] : cp+1;
         if (strcmp(cp, "pftp") == 0)
             passivemode = 1;
-DPRINTF(("main 1\n"));
+
 #ifdef __USE_READLINE__
 	/* 
 	 * Set terminal type so libreadline can parse .inputrc correctly
@@ -200,7 +205,7 @@ DPRINTF(("main 1\n"));
 	/*
 	 * Set up the home directory in case we're globbing.
 	 */
-DPRINTF(("before getlogin\n"));
+	
 	cp = getlogin();
 	if (cp != NULL) {
 		pw = getpwnam(cp);
@@ -224,14 +229,12 @@ DPRINTF(("before getlogin\n"));
 		(void) signal(SIGINT, intr);
 		(void) signal(SIGPIPE, lostpeer);
 	}
-DPRINTF(("before cmdscanner\n"));
 
 	TAILQ_INIT(&acceptedTqh);
 	
-	DPRINTF(("before initialize\n"));
+	TAILQ_INIT(&finfo_tqh);
+	
 	initialize();
-	DPRINTF(("opt.cbufsiz = %ld\n", opt.cbufsiz));
-	DPRINTF(("opt.cbufnum = %d\n", opt.cbufnum));
 	
 	for (;;) {
 		cmdscanner(top);

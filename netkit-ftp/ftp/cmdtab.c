@@ -174,6 +174,7 @@ struct cmd cmdtab[] = {
 	{ "reset",	resethelp,	0, 1, 1, NULL, reset, NULL },
 	{ "restart",	restarthelp,	1, 1, 1, restart, NULL, NULL },
 	{ "rmdir",	rmdirhelp,	0, 1, 1, removedir, NULL, NULL },
+	{ "rmput",	mputhelp,	1, 1, 1, rmput, NULL, NULL },
 	{ "rput",	sendhelp,	1, 1, 1, rput, NULL, NULL },
 	{ "runique",	runiquehelp,	0, 0, 1, NULL, setrunique, NULL },
 	{ "send",	sendhelp,	1, 1, 1, put, NULL, NULL },

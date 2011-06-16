@@ -3,7 +3,7 @@
 %define _topdir         /home/ren/rftp
 %define name                    rftpd
 %define release         1
-%define version         0.12
+%define version         0.13
 %define buildroot %{_topdir}/%{name}-%{version}-root
 
 BuildRoot:      %{buildroot}
@@ -43,6 +43,17 @@ rm -rf %{buildroot}
 /usr/sbin/rftpd
 
 %changelog
+*Tue Jun 15 2011 <renyufei83@gmail.com>
+--RFTP version information
+--support multiple channel data transfer
+--support directory hierarchy transfer
+--support 'rmput'
+--support direct io
+--support sendfile, splice
+--adjustable reader/writer
+--adjustable io depth of send queue and recv queue
+--bandwidth monitor
+
 *Tue Apr 12 2011 <renyufei83@gmail.com>
 --support 'rget'
 --user 'ftp' will not setuid/setgid anymore

@@ -824,16 +824,18 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			return;
 		}
 		closefunc = fclose;
-		if (strcmp(local, "/dev/zero") == 0) {
-			st.st_size = opt.devzerosiz;
-		} else if (fstat(fileno(fin), &st) < 0 ||
+/* 		if (strcmp(local, "/dev/zero") == 0) {
+			st.st_size = 107374182400;
+		} else if (strcmp(local, "zero") == 0) { ==> /dev/zero
+			st.st_size = 107374182400; */
+/*		} else if (fstat(fileno(fin), &st) < 0 ||
 		    (st.st_mode&S_IFMT) != S_IFREG) {
 			fprintf(stdout, "%s: not a plain file.\n", local);
 			(void) signal(SIGINT, oldintr);
 			fclose(fin);
 			code = -1;
 			return;
-		}
+		}*/
 	}
 	DPRINTF(("rdmainitconn start\n"));
 	if (rdmainitconn()) {
@@ -897,18 +899,41 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	
 /*	if (dout == NULL)
 		goto abort; */
-	(void) gettimeofday(&start, (struct timezone *)0);
-	oldintp = signal(SIGPIPE, SIG_IGN);
 	
 	TAILQ_INIT(&free_tqh);
 	TAILQ_INIT(&sender_tqh);
 	TAILQ_INIT(&writer_tqh);
+	TAILQ_INIT(&waiting_tqh);
+	TAILQ_INIT(&schedule_tqh);
+	
+	TAILQ_INIT(&free_rmtaddr_tqh);
+	TAILQ_INIT(&rmtaddr_tqh);
+
+	TAILQ_INIT(&free_evwr_tqh);
+	TAILQ_INIT(&evwr_tqh);
+	
+	TAILQ_INIT(&recvwr_tqh);
+	
+	TAILQ_INIT(&dcqp_tqh);
+	
+	TAILQ_INIT(&rcif_tqh);
 	
 	child_dc_cb->fd = fileno(fin);
 	child_dc_cb->filesize = st.st_size;
 	DPRINTF(("file size is %ld\n", child_dc_cb->filesize));
 	tsf_setup_buf_list(child_dc_cb);
 	DPRINTF(("tsf_setup_buf_list success\n"));
+	
+	sleep(5);
+	
+	dc_conn_req(child_dc_cb);
+	
+	create_dc_stream_server(child_dc_cb, opt.rcstreamnum);
+
+	(void) gettimeofday(&start, (struct timezone *)0);
+	oldintp = signal(SIGPIPE, SIG_IGN);
+	
+	int i;
 	
 	switch (curtype) {
 
@@ -917,9 +942,31 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		errno = d = 0;
 		
 		/* create sender and reader */
+		pthread_t scheduler_tid;
 		pthread_t sender_tid;
-		pthread_t reader_tid;
+		pthread_t reader_tid[200];
+		pthread_t monitor_tid;
+		
 		void      *tret;
+		
+		sleep(3);
+		ret = pthread_create(&scheduler_tid, NULL, scheduler, child_dc_cb);
+		if (ret != 0) {
+			perror("pthread_create scheduler:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("scheduler create successful\n"));
+		
+		/* wait for file session negotiation finish */
+		ret = pthread_join(scheduler_tid, &tret);
+		if (ret != 0) {
+			perror("pthread_join scheduler:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("scheduler join successful\n"));
+		
+		sleep(2);
+		(void) gettimeofday(&start, (struct timezone *)0);
 		
 		ret = pthread_create(&sender_tid, NULL, sender, child_dc_cb);
 		if (ret != 0) {
@@ -928,31 +975,39 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		}
 		DPRINTF(("sender create successful\n"));
 		
-		ret = pthread_create(&reader_tid, NULL, reader, child_dc_cb);
+		/* create multiple reader */
+		for (i = 0; i < opt.readernum; i ++) {
+			ret = pthread_create(&reader_tid[i], NULL, \
+				reader, child_dc_cb);
+			if (ret != 0) {
+				perror("pthread_create reader:");
+				exit(EXIT_FAILURE);
+			}
+		}
+		
+		ret = pthread_create(&monitor_tid, NULL, anabw, NULL);
 		if (ret != 0) {
-			perror("pthread_create reader:");
+			perror("pthread_create monitor:");
 			exit(EXIT_FAILURE);
 		}
-		DPRINTF(("reader create successful\n"));
+		DPRINTF(("monitor create successful\n"));
 		
-		/* wait for sender and reader finish */
-		ret = pthread_join(reader_tid, &tret);
+		/* join monitor */
+		ret = pthread_join(monitor_tid, &tret);
 		if (ret != 0) {
-			perror("pthread_join reader:");
+			perror("pthread_join monitor:");
 			exit(EXIT_FAILURE);
 		}
-		DPRINTF(("reader join successful: %ld bytes\n", (long) tret));
-
-		ret = pthread_join(sender_tid, &tret);
-		if (ret != 0) {
-			perror("pthread_join sender:");
-			exit(EXIT_FAILURE);
+		
+		/* cancel sender and reader
+		pthread_cancel(sender_tid); */
+		pthread_join(sender_tid, NULL);
+		
+		for (i = 0; i < opt.readernum; i ++) {
+			pthread_join(reader_tid[i], NULL);
 		}
-		DPRINTF(("sender join successful: %ld bytes\n", (long) tret));
 		
-		DPRINTF(("data transfer finished\n"));
-		
-		bytes = (long) tret;
+		bytes = (long) transtotallen;
 		
 		if (hash && (bytes > 0)) {
 			if (bytes < HASHBYTES)
@@ -1037,6 +1092,18 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	iperf_free_buffers(child_dc_cb);
 	iperf_free_qp(child_dc_cb);
 	DPRINTF(("free buffers and qp success\n"));
+	
+	/* disconnect dc channel */
+	RCINFO *item;
+	for (i = 0; i < opt.rcstreamnum; i++) {
+		item = TAILQ_FIRST(&rcif_tqh);
+		TAILQ_REMOVE(&rcif_tqh, item, entries);
+		
+		rdma_disconnect(item->cm_id);
+		rdma_destroy_id(item->cm_id);
+		free(item);
+	}
+	
 	
 	pthread_cancel(child_dc_cb->cqthread);
 	pthread_join(child_dc_cb->cqthread, NULL);
@@ -1613,72 +1680,78 @@ rdmarecvrequest(const char *cmd,
 	TAILQ_INIT(&free_tqh);
 	TAILQ_INIT(&sender_tqh);
 	TAILQ_INIT(&writer_tqh);
+	TAILQ_INIT(&waiting_tqh);
+	
+	TAILQ_INIT(&free_rmtaddr_tqh);
+	TAILQ_INIT(&rmtaddr_tqh);
+
+	TAILQ_INIT(&free_evwr_tqh);
+	TAILQ_INIT(&evwr_tqh);
+	
+	TAILQ_INIT(&recvwr_tqh);
+	
+	TAILQ_INIT(&dcqp_tqh);
+	
+	TAILQ_INIT(&schedule_tqh);
+	
+	TAILQ_INIT(&rcif_tqh);
 	
 	child_dc_cb->fd = fileno(fout);
 	tsf_setup_buf_list(child_dc_cb);
 	DPRINTF(("tsf_setup_buf_list success\n"));
 	
+	sleep(5);
+	
+	dc_conn_req(child_dc_cb);
+	
+	create_dc_stream_server(child_dc_cb, opt.rcstreamnum);
+	
+	
 	switch (curtype) {
-
+	
 	case TYPE_I:
 	case TYPE_L:
 		errno = d = 0;
 		
-		/* create recver and writer */
-		pthread_t recver_tid;
-		pthread_t writer_tid;
+		/* create writer */
+		pthread_t monitor_tid;
+		pthread_t writer_tid[200];
 		void      *tret;
 		
-		ret = pthread_create(&recver_tid, NULL, recver, child_dc_cb);
-		if (ret != 0) {
-			perror("pthread_create recver:");
-			exit(EXIT_FAILURE);
-		}
-		DPRINTF(("recver create successful\n"));
+		/* create multiple writer */
+		sleep(5);
 		
-		ret = pthread_create(&writer_tid, NULL, writer, child_dc_cb);
-		if (ret != 0) {
-			perror("pthread_create writer:");
-			exit(EXIT_FAILURE);
-		}
-		DPRINTF(("writer create successful\n"));
+		(void) gettimeofday(&start, (struct timezone *)0);
 		
-		/* wait for recver and writer finish */
-		ret = pthread_join(recver_tid, &tret);
-		if (ret != 0) {
-			perror("pthread_join recver:");
-			exit(EXIT_FAILURE);
-		}
-		DPRINTF(("recver join successful\n"));
-
-		ret = pthread_join(writer_tid, &tret);
-		if (ret != 0) {
-			perror("pthread_join writer:");
-			exit(EXIT_FAILURE);
-		}
-		DPRINTF(("writer join successful\n"));
-		
-/*		while ((c = read(fileno(din), buf, bufsize)) > 0) {
-			if ((d = write(fileno(fout), buf, c)) != c)
-				break;
-			bytes += c;
-			if (hash && is_retr) {
-				while (bytes >= hashbytes) {
-					(void) putchar('#');
-					hashbytes += HASHBYTES;
-				}
-				(void) fflush(stdout);
+		int i;
+		for (i = 0; i < opt.writernum; i ++) {
+			ret = pthread_create(&writer_tid[i], NULL, \
+				writer, dc_cb);
+			if (ret != 0) {
+				perror("pthread_create writer:");
+				exit(EXIT_FAILURE);
 			}
-			if (tick && (bytes >= hashbytes) && is_retr) {
-				(void) printf("\rBytes transferred: %ld",
-					bytes);
-				(void) fflush(stdout);
-				while (bytes >= hashbytes)
-					hashbytes += TICKBYTES;
-			}
-		} */
+		}
 		
-		bytes = (long) tret;
+		ret = pthread_create(&monitor_tid, NULL, anabw, NULL);
+		if (ret != 0) {
+			perror("pthread_create monitor:");
+			exit(EXIT_FAILURE);
+		}
+		DPRINTF(("monitor create successful\n"));
+		
+		/* join monitor */
+		ret = pthread_join(monitor_tid, &tret);
+		if (ret != 0) {
+			perror("pthread_join monitor:");
+			exit(EXIT_FAILURE);
+		}
+		
+		for (i = 0; i < opt.writernum; i ++) {
+			pthread_join(writer_tid[i], NULL);
+		}
+			
+		bytes = (long) transtotallen;
 		
 		if (hash && bytes > 0) {
 			if (bytes < HASHBYTES)
@@ -1690,18 +1763,7 @@ rdmarecvrequest(const char *cmd,
 			(void) printf("\rBytes transferred: %ld\n", bytes);
 			(void) fflush(stdout);
 		}
-/*		if (c < 0) {
-			if (errno != EPIPE)
-				perror("netin");
-			bytes = -1;
-		}
-		if (d < c) {
-			if (d < 0)
-				fprintf(stderr, "local: %s: %s\n", local,
-					strerror(errno));
-			else
-				fprintf(stderr, "%s: short write\n", local);
-		} */
+		
 		break;
 
 	case TYPE_A:
@@ -1795,6 +1857,7 @@ break2:
 	/* closes data as well, so discard it */
 	data = -1;
 	
+	tsf_waiting_to_free();
 	tsf_free_buf_list();
 	DPRINTF(("tsf_free_buf_list success\n"));
 	/* release the connected rdma_cm_id */
@@ -2198,14 +2261,14 @@ rdmadataconn(const char *lmode)
 	}
 	DPRINTF(("iperf_setup_buffers success\n"));
 
-	DPRINTF(("before ibv_post_recv\n"));
+/*	DPRINTF(("before ibv_post_recv\n"));
 	ret = ibv_post_recv(child_dc_cb->qp, &child_dc_cb->rq_wr, &bad_recv_wr);
 	if (ret) {
 		fprintf(stderr, "ibv_post_recv failed: %d (%d, %s)\n", \
 			ret, errno, strerror(errno));
 		goto err2;
 	}
-	DPRINTF(("ibv_post_recv success\n"));
+	DPRINTF(("ibv_post_recv success\n")); */
 
 	ret = pthread_create(&child_dc_cb->cqthread, NULL, cq_thread, child_dc_cb);
 	if (ret) {

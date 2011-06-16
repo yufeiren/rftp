@@ -138,7 +138,7 @@ typedef unsigned int useconds_t;
 #include "init.h"
 #include "utils.h"
 
-static char versionpre[] = "Version 6.4/OpenBSD/Linux";
+static char versionpre[] = "Version 0.13/Linux";
 static char version[sizeof(versionpre)+sizeof(pkg)];
 
 
@@ -213,6 +213,9 @@ int rdma_debug = 0;
 struct acptq acceptedTqh;
 
 struct options opt;
+
+/* it is not safe to create directory simutanuously  */
+pthread_mutex_t dir_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /*
  * Timeout intervals for retrying connections
@@ -421,7 +424,7 @@ DPRINTF(("2\n"));
 #ifndef LOG_FTP
 #define LOG_FTP LOG_DAEMON
 #endif
-	openlog("ftpd", LOG_PID | LOG_NDELAY, LOG_FTP);
+	openlog("rftpd", LOG_PID | LOG_NDELAY, LOG_FTP);
 DPRINTF(("3\n"));
 	if (daemon_mode) {
 		int ctl_sock, fd2;
@@ -708,7 +711,7 @@ void user(char *name)
 	}
 
 	guest = 0;
-	if (strcmp(name, "ftp") == 0 || strcmp(name, "anonymous") == 0 || strcmp(name, "rftp") == 0) {
+	if (strcmp(name, "ftp") == 0 || strcmp(name, "anonymous") == 0) {
 		if (checkuser(_PATH_FTPUSERS, "ftp") ||
 		    checkuser(_PATH_FTPUSERS, "anonymous"))
 			reply(530, "User %s access denied.", name);
@@ -1077,9 +1080,7 @@ void retrieve(const char *cmd, const char *name)
 		return;
 	}
 	byte_count = -1;
-	if (strcmp(name, "/dev/zero") == 0) {
-		st.st_size = opt.devzerosiz;
-	} else if (cmd == 0 && (fstat(fileno(fin), &st) < 0 || !S_ISREG(st.st_mode))) {
+	if (cmd == 0 && (fstat(fileno(fin), &st) < 0 || !S_ISREG(st.st_mode))) {
 		reply(550, "%s: not a plain file.", name);
 		goto done;
 	}
@@ -1128,7 +1129,7 @@ void rretrieve(const char *cmd, const char *name)
 	time_t start;
 	int ret;
 
-	if (cmd == 0) {
+/*	if (cmd == 0) {
 		fin = fopen(name, "r"), closefunc = fclose;
 		st.st_size = 0;
 	} else {
@@ -1150,9 +1151,7 @@ void rretrieve(const char *cmd, const char *name)
 		return;
 	}
 	byte_count = -1;
-	if (strcmp(name, "/dev/zero") == 0) {
-		st.st_size = opt.devzerosiz;
-	} else if (cmd == 0 && (fstat(fileno(fin), &st) < 0 || !S_ISREG(st.st_mode))) {
+	if (cmd == 0 && (fstat(fileno(fin), &st) < 0 || !S_ISREG(st.st_mode))) {
 		reply(550, "%s: not a plain file.", name);
 		goto done;
 	}
@@ -1175,13 +1174,36 @@ void rretrieve(const char *cmd, const char *name)
 			perror_reply(550, name);
 			goto done;
 		}
-	}
+	} */
 	
 /*	dout = dataconn(name, st.st_size, "w"); */
 	ret = rdmadataconn(name, st.st_size, "w");
 	if (ret != 0)
 		goto done;
 	time(&start);
+	
+	TAILQ_INIT(&free_tqh);
+	TAILQ_INIT(&sender_tqh);
+	TAILQ_INIT(&writer_tqh);
+	TAILQ_INIT(&waiting_tqh);
+	
+	TAILQ_INIT(&free_rmtaddr_tqh);
+	TAILQ_INIT(&rmtaddr_tqh);
+
+	TAILQ_INIT(&free_evwr_tqh);
+	TAILQ_INIT(&evwr_tqh);
+	
+	TAILQ_INIT(&recvwr_tqh);
+	
+	TAILQ_INIT(&dcqp_tqh);
+	
+	TAILQ_INIT(&schedule_tqh);
+	TAILQ_INIT(&finfo_tqh);
+	
+	TAILQ_INIT(&rcif_tqh);
+	
+	parsepath(name);
+	
 	rsend_data(fin, dout, st.st_blksize, st.st_size,
 		  (restart_point == 0 && cmd == 0 && S_ISREG(st.st_mode)));
 	if ((cmd == 0) && stats)
@@ -1192,7 +1214,6 @@ void rretrieve(const char *cmd, const char *name)
 done:
 	if (cmd == 0)
 		LOGBYTES("get", name, byte_count);
-	(*closefunc)(fin);
 }
 
 void store(const char *name, const char *mode, int unique)
@@ -1291,8 +1312,8 @@ void rstore(const char *name, const char *mode, int unique)
 		if (restart_point)
 			mode = "r+";
 		fout = fdopen(fd, mode);
-	} else
-		fout = fopen(name, mode);
+	} /* else
+		fout = fopen(name, mode); */
 
 	closefunc = fclose;
 	if (fout == NULL) {
@@ -1349,7 +1370,7 @@ void rstore(const char *name, const char *mode, int unique)
 	pdata = -1;
 done:
 	LOGBYTES(*mode == 'w' ? "put" : "append", name, byte_count);
-	(*closefunc)(fout);
+/*	(*closefunc)(fout); */
 }
 
 static FILE * getdatasock(const char *mode)
@@ -1663,11 +1684,11 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		goto err1;
 	}
 	
-	ret = ibv_post_recv(dc_cb->qp, &dc_cb->rq_wr, &bad_recv_wr);
+/*	ret = ibv_post_recv(dc_cb->qp, &dc_cb->rq_wr, &bad_recv_wr);
 	if (ret) {
 		syslog(LOG_ERR, "ibv_post_recv: %m");
 		goto err2;
-	}
+	} */
 	
 	ret = pthread_create(&dc_cb->cqthread, NULL, cq_thread, dc_cb);
 	if (ret) {
@@ -1681,6 +1702,9 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		syslog(LOG_ERR, "rdma_connect_client: %m");
 		goto err3;
 	}
+	
+	/* multiple streams
+	create_dc_stream_client(dc_cb, opt.rcstreamnum, &data_dest); */
 	
 	return (0);
 	
@@ -1847,19 +1871,20 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 	struct ibv_send_wr *bad_wr;
 	int ret;
 
-	pthread_t reader_tid;
+	pthread_t scheduler_tid;
 	pthread_t sender_tid;
+	pthread_t reader_tid[200];
+	
 	void      *tret;
 
-	TAILQ_INIT(&free_tqh);
-	TAILQ_INIT(&sender_tqh);
-	TAILQ_INIT(&writer_tqh);
-	
-	dc_cb->fd = fileno(instr);
-	dc_cb->filesize = filesize;
-	DPRINTF(("filesize is: %d\n", dc_cb->filesize));
+/*	dc_cb->fd = fileno(instr);
+	dc_cb->filesize = filesize; */
 	tsf_setup_buf_list(dc_cb);
 
+	/* wait for DC_CONNECTION_REQ */
+	sleep(5);
+	create_dc_stream_client(dc_cb, opt.rcstreamnum, &data_dest);
+	
 	transflag++;
 	if (setjmp(urgcatch)) {
 		transflag = 0;
@@ -1888,37 +1913,48 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 
 	case TYPE_I:
 	case TYPE_L:
+		/* create sender and reader */
+		sleep(3);
+		ret = pthread_create(&scheduler_tid, NULL, scheduler, dc_cb);
+		if (ret != 0) {
+			syslog(LOG_ERR, "pthread_create scheduler fail");
+			exit(EXIT_FAILURE);
+		}
+		
+		/* wait for file session negotiation finish */
+		ret = pthread_join(scheduler_tid, &tret);
+		if (ret != 0) {
+			syslog(LOG_ERR, "pthread_join scheduler fail");
+			exit(EXIT_FAILURE);
+		}
+		syslog(LOG_ERR, "join scheduler success");
+		
+		sleep(2);
 		
 		ret = pthread_create(&sender_tid, NULL, sender, dc_cb);
 		if (ret != 0) {
-			perror("pthread_create sender:");
+			syslog(LOG_ERR, "pthread_create sender fail");
 			exit(EXIT_FAILURE);
 		}
-		DPRINTF(("sender create successful\n"));
 		
-		ret = pthread_create(&reader_tid, NULL, reader, dc_cb);
-		if (ret != 0) {
-			perror("pthread_create reader:");
-			exit(EXIT_FAILURE);
+		/* create multiple reader */
+		int i;
+		for (i = 0; i < opt.readernum; i ++) {
+			ret = pthread_create(&reader_tid[i], NULL, \
+				reader, dc_cb);
+			if (ret != 0) {
+				syslog(LOG_ERR, "pthread_create reader fail");
+				exit(EXIT_FAILURE);
+			}
 		}
-		DPRINTF(("reader create successful\n"));
 		
-		/* wait for recver and writer finish */
-		ret = pthread_join(reader_tid, &tret);
-		if (ret != 0) {
-			perror("pthread_join reader:");
-			exit(EXIT_FAILURE);
+		pthread_join(sender_tid, NULL);
+		syslog(LOG_ERR, "join sender success");
+		
+		for (i = 0; i < opt.readernum; i ++) {
+			pthread_join(reader_tid[i], NULL);
+			syslog(LOG_ERR, "join reader[%d] success", i);
 		}
-		DPRINTF(("reader join successful\n"));
-		syslog(LOG_ERR, "reader join success: %ld bytes", (long) tret);
-
-		ret = pthread_join(sender_tid, &tret);
-		if (ret != 0) {
-			perror("pthread_join sender:");
-			exit(EXIT_FAILURE);
-		}
-		DPRINTF(("sender join successful\n"));
-		syslog(LOG_ERR, "sender join success: %ld bytes", (long) tret);
 		
 		/* release the connected rdma_cm_id */
 		/* cq_thread - cm_thread */
@@ -1943,71 +1979,7 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 		
 		free(dc_cb);
 		
-		/*
-		 * isreg is only set if we are not doing restart and we
-		 * are sending a regular file
-		 */
-/*		netfd = fileno(outstr);
-		filefd = fileno(instr);
-
-		if (isreg && filesize < (off_t)16 * 1024 * 1024) {
-			buf = mmap(0, filesize, PROT_READ, MAP_SHARED, filefd,
-				   (off_t)0);
-			if (buf==MAP_FAILED || buf==NULL) {
-				syslog(LOG_WARNING, "mmap(%lu): %m",
-				       (unsigned long)filesize);
-				goto oldway;
-			}
-			bp = buf;
-			len = filesize;
-			do {
-				cnt = write(netfd, bp, len);
-				len -= cnt;
-				bp += cnt;
-				if (cnt > 0) byte_count += cnt;
-			} while(cnt > 0 && len > 0);
-
-			transflag = 0;
-			munmap(buf, (size_t)filesize);
-			if (cnt < 0)
-				goto data_err;
-			reply(226, "Transfer complete.");
-			return;
-		}
-
-oldway:
-		size = blksize * 16; 
-	
-		if ((buf = malloc(size)) == NULL) {
-			transflag = 0;
-			perror_reply(451, "Local resource failure: malloc");
-			return;
-		}
-
-#ifdef TCP_CORK
-		{
-		int on = 1;
-		setsockopt(netfd, SOL_TCP, TCP_CORK, &on, sizeof on); */
-		/* failure is harmless */ 
-/*		}
-#endif	
-		while ((cnt = read(filefd, buf, size)) > 0 &&
-		    write(netfd, buf, cnt) == cnt)
-			byte_count += cnt;
-#ifdef TCP_CORK
-		{
-		int off = 0;
-		setsockopt(netfd, SOL_TCP, TCP_CORK, &off, sizeof off); 
-		}
-#endif	
-		transflag = 0;
-		(void)free(buf);
-		if (cnt != 0) {
-			if (cnt < 0)
-				goto file_err;
-			goto data_err;
-		}
-*/		reply(226, "Transfer complete.");
+		reply(226, "Transfer complete.");
 		return;
 	default:
 		transflag = 0;
@@ -2136,13 +2108,35 @@ static int rreceive_data(FILE *outstr)
 	/* for rdma */
 	struct ibv_send_wr *bad_wr;
 	int ret;
-
+	
 	TAILQ_INIT(&free_tqh);
 	TAILQ_INIT(&sender_tqh);
 	TAILQ_INIT(&writer_tqh);
+	TAILQ_INIT(&waiting_tqh);
+	
+	TAILQ_INIT(&free_rmtaddr_tqh);
+	TAILQ_INIT(&rmtaddr_tqh);
+
+	TAILQ_INIT(&free_evwr_tqh);
+	TAILQ_INIT(&evwr_tqh);
+	
+	TAILQ_INIT(&recvwr_tqh);
+	
+	TAILQ_INIT(&dcqp_tqh);
+	
+	TAILQ_INIT(&schedule_tqh);
+	TAILQ_INIT(&finfo_tqh);
+	
+	TAILQ_INIT(&rcif_tqh);
 	
 	dc_cb->fd = fileno(outstr);
 	tsf_setup_buf_list(dc_cb);
+	
+	/* wait for DC_CONNECTION_REQ */
+	sleep(5);
+	create_dc_stream_client(dc_cb, opt.rcstreamnum, &data_dest);
+	
+	int i;
 
 	transflag++;
 	if (setjmp(urgcatch)) {
@@ -2158,48 +2152,51 @@ static int rreceive_data(FILE *outstr)
 		/* create recver and writer */
 		
 		pthread_t recver_tid;
-		pthread_t writer_tid;
+		pthread_t writer_tid[200];
 		void      *tret;
 		
-		ret = pthread_create(&recver_tid, NULL, recver, dc_cb);
-		if (ret != 0) {
-			perror("pthread_create recver:");
-			exit(EXIT_FAILURE);
+		/* create multiple writer */
+		sleep(5);
+		for (i = 0; i < opt.writernum; i ++) {
+			ret = pthread_create(&writer_tid[i], NULL, \
+				writer, dc_cb);
+			if (ret != 0) {
+				perror("pthread_create reader:");
+				exit(EXIT_FAILURE);
+			}
 		}
-		DPRINTF(("recver create successful\n"));
 		
-		ret = pthread_create(&writer_tid, NULL, writer, dc_cb);
-		if (ret != 0) {
-			perror("pthread_create writer:");
-			exit(EXIT_FAILURE);
-		}
-		DPRINTF(("writer create successful\n"));
+		/* wait for disconnection event
+		sem_wait(&dc_cb->sem); */
 		
-		/* wait for recver and writer finish */
-		ret = pthread_join(recver_tid, &tret);
-		if (ret != 0) {
-			perror("pthread_join recver:");
-			exit(EXIT_FAILURE);
+		for (i = 0; i < opt.writernum; i ++) {
+/*			pthread_cancel(writer_tid[i]); */
+			pthread_join(writer_tid[i], NULL);
+			syslog(LOG_ERR, "join writer[%d] success", i);
 		}
-		DPRINTF(("recver join successful\n"));
-		syslog(LOG_ERR, "recver join success: %ld bytes", (long) tret);
-
-		ret = pthread_join(writer_tid, &tret);
-		if (ret != 0) {
-			perror("pthread_join writer:");
-			exit(EXIT_FAILURE);
-		}
-		DPRINTF(("writer join successful\n"));
-		syslog(LOG_ERR, "writer join success: %ld bytes", (long) tret);
 		
 		/* release the connected rdma_cm_id */
 		/* cq_thread - cm_thread */
+		tsf_waiting_to_free();
 		tsf_free_buf_list();
 		
 		rdma_disconnect(dc_cb->cm_id);
+		rdma_destroy_id(dc_cb->cm_id);
+		
 		iperf_free_buffers(dc_cb);
 		iperf_free_qp(dc_cb);
 		syslog(LOG_ERR, "free buffers and qp success");
+		
+		/* disconnect dc channel */
+		RCINFO *item;
+		for (i = 0; i < opt.rcstreamnum; i++) {
+			item = TAILQ_FIRST(&rcif_tqh);
+			TAILQ_REMOVE(&rcif_tqh, item, entries);
+			
+			rdma_disconnect(item->cm_id);
+			rdma_destroy_id(item->cm_id);
+			free(item);
+		}
 		
 		pthread_cancel(dc_cb->cqthread);
 		pthread_join(dc_cb->cqthread, NULL);
@@ -2209,47 +2206,11 @@ static int rreceive_data(FILE *outstr)
 		pthread_join(dc_cb->cmthread, NULL);
 		syslog(LOG_ERR, "pthread_join cmthread success");
 		
-		rdma_destroy_id(dc_cb->cm_id);
-		
 		sem_destroy(&dc_cb->sem);
+		syslog(LOG_ERR, "sem_destroy success");
 		
 		free(dc_cb);
-		
-		/* receive data via rdma connection
-		rmsgheader hdr;
-		
-		for ( ; ; ) { */
-			/* wait for the client send ADV - READ? WRITE?
-			sem_wait(&dc_cb->sem); */
-		
-			/* tell the peer where to write
-			dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
-			dc_cb->send_buf.stat = ACTIVE_WRITE_RESP;
-			ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
-			if (ret) {
-				syslog(LOG_ERR, "ibv_post_send: %m");
-				break;
-			} */
-			
-			/* wait the finish of rdma write
-			sem_wait(&dc_cb->sem); */
-			
-			/* write the data to the file
-			memcpy(&hdr, dc_cb->rdma_sink_buf, sizeof(rmsgheader));
-			cnt = hdr.dlen;
-			
-			writen(fileno(outstr), \
-				dc_cb->rdma_sink_buf + sizeof(rmsgheader), cnt);
-				 */
-			/* notify the client to go on
-			dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
-			dc_cb->send_buf.stat = ACTIVE_WRITE_FIN;
-			ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
-			if (ret) {
-				syslog(LOG_ERR, "ibv_post_send: %m");
-				break;
-			}
-		} */
+		syslog(LOG_ERR, "free success");
 		
 		return (0);
 
