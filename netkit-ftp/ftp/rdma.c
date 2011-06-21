@@ -99,15 +99,6 @@ extern struct options opt;
 
 extern pthread_mutex_t dir_mutex;
 
-static int max_not_finish;
-static int reqblknum;
-static int repblknum;
-static int sndbcknum;
-static int sendblknum;
-
-static int untag_send_num;
-static int untag_recv_num;
-
 static struct rdma_cb *tmpcb;
 /* static tmp; */
 
@@ -1873,7 +1864,6 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 {
 	struct Rcinfo *rcinfo;
 	int i;
-	struct wcm_id *item;
 	struct ibv_qp_init_attr init_attr;
 	struct rdma_conn_param conn_param;
 	int ret;
@@ -2178,7 +2168,6 @@ void create_dc_qp(struct rdma_cb *cb, int num, int isrequest)
 	
 	DATAQP *item;
 	
-	int ib_port = 1;
 	struct ibv_context *context;
 	struct ibv_device  *ib_dev = NULL;
 	
@@ -2527,7 +2516,9 @@ reader(void *arg)
 	TAILQ_INIT(&inner_tqh);
 	int innersize;
 	int seqnum;
-	int i;
+	
+	thislen = 0;
+	currlen = 0;
 	
 	for ( ; ; ) {
 		/* get file info block */
@@ -2627,18 +2618,12 @@ void *
 writer(void *arg)
 {
 	BUFDATBLK *bufblk;
-	rmsgheader rhdr;
 	off_t currlen;
 	int thislen;
 	
 	TAILQ_HEAD(, Bufdatblk) 	inner_tqh;
 	TAILQ_INIT(&inner_tqh);
 	
-	int innersize;
-	int seqnum;
-	
-	struct rdma_cb *cb = (struct rdma_cb *) arg;
-
 	for (currlen = 0 ; transcurrlen < transtotallen; currlen += thislen) {
 		/* get write block */
 		TAILQ_LOCK(&writer_tqh);
@@ -2674,11 +2659,6 @@ scheduler(void *arg)
 {
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	
-	BUFDATBLK *bufblk;
-	rmsgheader rhdr;
-	off_t currlen;
-	int thislen;
-	off_t totallen = 0;
 	int ret;
 	
 	FILEINFO *item;
