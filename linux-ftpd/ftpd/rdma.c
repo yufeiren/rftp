@@ -260,7 +260,10 @@ handle_file_session_req(void *arg)
 	memcpy(filename, recvbuf->addr, 32);
 	
 	pthread_mutex_lock(&dir_mutex);
+
 	parsedir(filename);
+	item->sessionid = ++ filesessionid;
+
 	pthread_mutex_unlock(&dir_mutex);
 	
 	/* compose file information */
@@ -274,8 +277,6 @@ handle_file_session_req(void *arg)
 		syslog(LOG_ERR, "Open failed %s", item->lf);
 		exit(EXIT_FAILURE);
 	}
-	
-	item->sessionid = ++ filesessionid;
 	
 	item->seqnum = 1;
 	
@@ -308,7 +309,7 @@ handle_file_session_req(void *arg)
 	evwr->ev_buf.stat = FILE_SESSION_ID_RESPONSE;
 	
 	strcpy(evwr->ev_buf.addr, filename);
-	memcpy(evwr->ev_buf.addr + 32, &filesessionid, 4);
+	memcpy(evwr->ev_buf.addr + 32, &item->sessionid, 4);
 	
 	/* post send response */
 	TAILQ_LOCK(&evwr_tqh);
@@ -2782,7 +2783,7 @@ parsepath(const char *path)
 		
 		transtotallen += item->fsize;
 		
-		syslog(LOG_ERR, "REG file: %s, size: %ld bytes\n", \
+		syslog(LOG_ERR, "REG file: %s, size: %ld\n", \
 			item->lf, item->fsize);
 		
 		TAILQ_INSERT_TAIL(&finfo_tqh, item, entries);
@@ -2803,18 +2804,18 @@ parsepath(const char *path)
 		
 		transtotallen += item->fsize;
 		
-		syslog(LOG_ERR, "CHR file: %s, size: %ld bytes\n", \
+		syslog(LOG_ERR, "CHR file: %s, size: %ld\n", \
 			item->lf, item->fsize);
 		
 		TAILQ_INSERT_TAIL(&finfo_tqh, item, entries);
 	} else if (S_ISBLK(st.st_mode)) {
-		printf("IS BLK\n");
+		syslog(LOG_ERR, "IS BLK\n");
 	} else if (S_ISLNK(st.st_mode)) {
-		printf("IS LNK\n");
+		syslog(LOG_ERR, "IS LNK\n");
 	} else if (S_ISSOCK(st.st_mode)) {
-		printf("IS SOCK\n");
+		syslog(LOG_ERR, "IS SOCK\n");
 	} else {
-		printf("unknown file type\n");
+		syslog(LOG_ERR, "unknown file type\n");
 	}
 	
 	return;
