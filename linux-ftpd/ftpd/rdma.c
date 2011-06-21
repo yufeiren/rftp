@@ -268,7 +268,9 @@ handle_file_session_req(void *arg)
 	
 	memcpy(filename, recvbuf->addr, 32);
 	
+	pthread_mutex_lock(&dir_mutex);
 	parsedir(filename);
+	pthread_mutex_unlock(&dir_mutex);
 	
 	/* compose file information */
 	strcpy(item->lf, filename);
@@ -290,7 +292,8 @@ handle_file_session_req(void *arg)
 	transtotallen += item->fsize;
 	
 	TAILQ_INIT(&item->pending_tqh);
-	syslog(LOG_ERR, "get file: %s, size: %ld\n", filename, item->fsize);
+	syslog(LOG_ERR, "file: %s, size: %ld, sid: %d\n", \
+		filename, item->fsize, item->sessionid);
 	
 	/* insert file info into finfo_tqh */
 	TAILQ_LOCK(&finfo_tqh);
@@ -368,8 +371,11 @@ handle_file_session_rep(void *arg)
 
 	TAILQ_REMOVE(&finfo_tqh, item, entries);
 	item->sessionid = sessionid;
-
+	
 	TAILQ_UNLOCK(&finfo_tqh);
+
+	syslog(LOG_ERR, "file: %s, size: %ld, sid: %d\n", \
+		item->lf, item->fsize, item->sessionid);
 	
 	TAILQ_LOCK(&schedule_tqh);
 	TAILQ_INSERT_TAIL(&schedule_tqh, item, entries);
@@ -1480,7 +1486,7 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 	
 	for (i = 0; i < opt.cbufnum; i++) {
 		if ( (item = (BUFDATBLK *) malloc(sizeof(BUFDATBLK))) == NULL) {
-			perror("tsf_setup_buf_list: malloc");
+			syslog(LOG_ERR, "tsf_setup_buf_list: malloc fail");
 			exit(EXIT_FAILURE);
 		}
 		
@@ -1490,14 +1496,14 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 		
 		if (opt.directio != true) {
 			if ( (item->rdma_buf = (char *) malloc(cb->size + sizeof(rmsgheader))) == NULL) {
-				perror("tsf_setup_buf_list: malloc 2");
+				syslog(LOG_ERR, "tsf_setup_buf_list: malloc 2");
 				exit(EXIT_FAILURE);
 			}
 		} else {
 			if ( posix_memalign(&item->rdma_buf, getpagesize(), cb->size + sizeof(rmsgheader)) != 0 ) {
 			        syslog(LOG_ERR, "tsf_setup_buf_list: memalign");
 			        exit(EXIT_FAILURE);
-			        }
+			}
 		}
 		
 		memset(item->rdma_buf, '\0', cb->size + sizeof(rmsgheader));
@@ -1508,7 +1514,7 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 				| IBV_ACCESS_REMOTE_READ
 				| IBV_ACCESS_REMOTE_WRITE);
 		if (!item->rdma_mr) {
-			perror("tsf_setup_buf_list: ibv_reg_mr");
+			syslog(LOG_ERR, "tsf_setup_buf_list: ibv_reg_mr");
 			exit(EXIT_FAILURE);
 		}
 		
@@ -1519,18 +1525,16 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 	
 	for (i = 0; i < opt.evbufnum; i++) {
 		if ( (evwritem = (EVENTWR *) malloc(sizeof(EVENTWR))) == NULL) {
-			perror("tsf_setup_buf_list: malloc");
+			syslog(LOG_ERR, "tsf_setup_buf_list: malloc");
 			exit(EXIT_FAILURE);
 		}
 		
 		memset(evwritem, '\0', sizeof(EVENTWR));
 		
 		evwritem->wr_id = (uint64_t) (i + 1) | WRIDEVENT;
-		syslog(LOG_ERR, "new EVENTWR wr_id: %ld", evwritem->wr_id);
 		
 		evwritem->ev_mr = ibv_reg_mr(cb->pd, &evwritem->ev_buf, sizeof(struct rdma_info_blk), 0);
 		if (!evwritem->ev_mr) {
-			fprintf(stderr, "ev_mr reg_mr failed\n");
 			syslog(LOG_ERR, "evwritem->ev_mr ibv_reg_mr send_mr");
 			exit(EXIT_FAILURE);
 		}
@@ -1552,7 +1556,7 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 	
 	for (i = 0; i < opt.rmtaddrnum; i++) {
 		if ( (rmtaddritem = (REMOTEADDR *) malloc(sizeof(REMOTEADDR))) == NULL) {
-			perror("tsf_setup_buf_list: malloc");
+			syslog(LOG_ERR, "tsf_setup_buf_list: malloc");
 			exit(EXIT_FAILURE);
 		}
 		
@@ -1566,18 +1570,16 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 	/* untagged recv buf list */
 	for (i = 0; i < opt.recvbufnum; i++) {
 		if ( (recvitem = (RECVWR *) malloc(sizeof(RECVWR))) == NULL) {
-			perror("tsf_setup_buf_list: malloc");
+			syslog(LOG_ERR, "tsf_setup_buf_list: malloc");
 			exit(EXIT_FAILURE);
 		}
 		
 		memset(recvitem, '\0', sizeof(RECVWR));
 		
 		recvitem->wr_id = (uint64_t) (i + 1) | WRIDRECV;
-		syslog(LOG_ERR, "new RECVDWR wr_id: %ld", recvitem->wr_id);
 		
 		recvitem->recv_mr = ibv_reg_mr(cb->pd, &recvitem->recv_buf, sizeof(struct rdma_info_blk), IBV_ACCESS_LOCAL_WRITE);
 		if (!recvitem->recv_mr) {
-			fprintf(stderr, "recv_mr reg_mr failed\n");
 			syslog(LOG_ERR, "recvitem->recv_mr ibv_reg_mr recv_mr");
 			exit(EXIT_FAILURE);
 		}
@@ -1597,7 +1599,6 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 			syslog(LOG_ERR, "ibv_post_recv fail: %m");
 			exit(EXIT_FAILURE);
 		}
-		DPRINTF(("ibv_post_recv success\n"));
 	}
 	
 	return 0;
