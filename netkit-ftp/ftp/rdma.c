@@ -339,8 +339,6 @@ handle_file_session_rep(void *arg)
 {
 	struct rdma_info_blk *recvbuf = (struct rdma_info_blk *) arg;
 	struct rdma_info_blk tmpbuf;
-	EVENTWR *evwr;
-	struct ibv_send_wr *bad_wr;
 	
 	pthread_detach(pthread_self());
 	
@@ -391,7 +389,6 @@ void *handle_qp_req(void *arg)
 	struct rdma_info_blk *recvbuf = (struct rdma_info_blk *) arg;
 	struct rdma_info_blk tmpbuf;
 	int i;
-	int ret;
 	int num, tmpnum;
 	union ibv_gid remote_gid;
 	
@@ -506,7 +503,6 @@ void *handle_qp_rep(void *arg)
 	struct rdma_info_blk *recvbuf = (struct rdma_info_blk *) arg;
 	struct rdma_info_blk tmpbuf;
 	int i;
-	int ret;
 	int num, tmpnum;
 	union ibv_gid remote_gid;
 	
@@ -645,7 +641,7 @@ recv_data(void *arg)
 	else {
 		syslog(LOG_ERR, "could not find comp buf %ld\n", ntohll(recvbuf->buf));
 		TAILQ_UNLOCK(&waiting_tqh);
-		return;
+		pthread_exit(NULL);
 	}
 	
 	TAILQ_UNLOCK(&waiting_tqh);
@@ -661,7 +657,7 @@ recv_data(void *arg)
 	if (finfo == NULL) {
 		syslog(LOG_ERR, "could not find file session %d", \
 			rhdr.sessionid);
-		return;
+		pthread_exit(NULL);
 	}
 	
 	bufblk->fd = finfo->fd;
@@ -973,13 +969,9 @@ void *cm_thread(void *arg) {
 int iperf_cq_event_handler(struct rdma_cb *cb)
 {
 	struct ibv_wc wc;
-	struct ibv_recv_wr *bad_wr;
 	int ret;
 	int compevnum = 0;
 	
-/*	DPRINTF(("2 cq_handler cb @ %x\n", (unsigned long)cb));
-	DPRINTF(("cq_handler sem_post @ %x\n", (unsigned long)&cb->sem));
-*/	
 	while ((ret = ibv_poll_cq(cb->cq, 1, &wc)) == 1) {
 		ret = 0;
 		compevnum ++;
@@ -1399,76 +1391,9 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 {
 	int ret;
 
-	DEBUG_LOG("rping_setup_buffers called on cb %p\n", cb);
-
-/* recv_mr
-	cb->recv_mr = ibv_reg_mr(cb->pd, &cb->recv_buf, sizeof cb->recv_buf,
-				 IBV_ACCESS_LOCAL_WRITE);
-	if (!cb->recv_mr) {
-		fprintf(stderr, "recv_buf reg_mr failed\n");
-		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr recv_mr");
-		return errno;
-	} */
-
-/* send_mr
-	cb->send_mr = ibv_reg_mr(cb->pd, &cb->send_buf, sizeof cb->send_buf, 0);
-	if (!cb->send_mr) {
-		fprintf(stderr, "send_buf reg_mr failed\n");
-		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr send_mr");
-		ret = errno;
-		goto err1;
-	} */
-
-/* rdma_sink_mr
-	cb->rdma_sink_buf = malloc(cb->size + sizeof(rmsgheader));
-	if (!cb->rdma_sink_buf) {
-		fprintf(stderr, "rdma_sink_buf malloc failed\n");
-		syslog(LOG_ERR, "iperf_setup_buffers malloc rdma_sink_buf");
-		ret = -ENOMEM;
-		goto err2;
-	}
-
-	cb->rdma_sink_mr = ibv_reg_mr(cb->pd, cb->rdma_sink_buf, cb->size + sizeof(rmsgheader), IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
-	if (!cb->rdma_sink_mr) {
-		fprintf(stderr, "rdma_sink_mr reg_mr failed\n");
-		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr rdma_sink_buf");
-		ret = errno;
-		goto err3;
-	} */
-
-/* rdma_source_mr
-	cb->rdma_source_buf = malloc(cb->size + sizeof(rmsgheader));
-	if (!cb->rdma_source_buf) {
-		fprintf(stderr, "rdma_source_buf malloc failed\n");
-		syslog(LOG_ERR, "iperf_setup_buffers malloc rdma_source_buf");
-		ret = -ENOMEM;
-		goto err4;
-	}
-
-	cb->rdma_source_mr = ibv_reg_mr(cb->pd, cb->rdma_source_buf, cb->size + sizeof(rmsgheader),
-				 IBV_ACCESS_LOCAL_WRITE |
-				 IBV_ACCESS_REMOTE_READ);
-	if (!cb->rdma_source_mr) {
-		fprintf(stderr, "rdma_source_mr reg_mr failed\n");
-		syslog(LOG_ERR, "iperf_setup_buffers ibv_reg_mr rdma_source_mr");
-		ret = errno;
-		goto err5;
-	} */
-
 	iperf_setup_wr(cb);
 	DEBUG_LOG("allocated & registered buffers...\n");
 	return 0;
-/*
-err5:
-	free(cb->rdma_source_buf);
-err4:
-	ibv_dereg_mr(cb->rdma_sink_mr);
-err3:
-	free(cb->rdma_sink_buf);
-err2:
-	ibv_dereg_mr(cb->send_mr); */
-err1:
-	return ret;
 }
 
 
@@ -1653,28 +1578,13 @@ tsf_free_buf_list(void)
 
 void iperf_free_buffers(struct rdma_cb *cb)
 {
-	DEBUG_LOG("free_buffers called on cb %p\n", cb);
-/*	ibv_dereg_mr(cb->rdma_sink_mr);
-	ibv_dereg_mr(cb->rdma_source_mr);
-	free(cb->rdma_sink_buf);
-	free(cb->rdma_source_buf); */
+	return;
 }
 
 
 void iperf_setup_wr(struct rdma_cb *cb)
 {
-/*
-	cb->rdma_sink_sgl.addr = (uint64_t) (unsigned long) cb->rdma_sink_buf;
-	cb->rdma_sink_sgl.lkey = cb->rdma_sink_mr->lkey;
-	cb->rdma_sink_sq_wr.send_flags = IBV_SEND_SIGNALED;
-	cb->rdma_sink_sq_wr.sg_list = &cb->rdma_sink_sgl;
-	cb->rdma_sink_sq_wr.num_sge = 1;
-	
-	cb->rdma_source_sgl.addr = (uint64_t) (unsigned long) cb->rdma_source_buf;
-	cb->rdma_source_sgl.lkey = cb->rdma_source_mr->lkey;
-	cb->rdma_source_sq_wr.send_flags = IBV_SEND_SIGNALED;
-	cb->rdma_source_sq_wr.sg_list = &cb->rdma_source_sgl;
-	cb->rdma_source_sq_wr.num_sge = 1; */
+	return;
 }
 
 void tsf_setup_wr(BUFDATBLK *bufblk)
