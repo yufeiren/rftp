@@ -1612,6 +1612,25 @@ rdmarecvrequest(const char *cmd,
 		changetype(type, 0);
 	}
 	
+	TAILQ_INIT(&free_tqh);
+	TAILQ_INIT(&sender_tqh);
+	TAILQ_INIT(&writer_tqh);
+	TAILQ_INIT(&waiting_tqh);
+	
+	TAILQ_INIT(&free_rmtaddr_tqh);
+	TAILQ_INIT(&rmtaddr_tqh);
+
+	TAILQ_INIT(&free_evwr_tqh);
+	TAILQ_INIT(&evwr_tqh);
+	
+	TAILQ_INIT(&recvwr_tqh);
+	
+	TAILQ_INIT(&dcqp_tqh);
+	
+	TAILQ_INIT(&schedule_tqh);
+	
+	TAILQ_INIT(&rcif_tqh);
+	
 	/* init listening port */
 	if (rdmainitconn()) {
 		(void) signal(SIGINT, oldintr);
@@ -1643,35 +1662,16 @@ rdmarecvrequest(const char *cmd,
 	
 	(void) gettimeofday(&start, (struct timezone *)0);
 	
-	TAILQ_INIT(&free_tqh);
-	TAILQ_INIT(&sender_tqh);
-	TAILQ_INIT(&writer_tqh);
-	TAILQ_INIT(&waiting_tqh);
-	
-	TAILQ_INIT(&free_rmtaddr_tqh);
-	TAILQ_INIT(&rmtaddr_tqh);
-
-	TAILQ_INIT(&free_evwr_tqh);
-	TAILQ_INIT(&evwr_tqh);
-	
-	TAILQ_INIT(&recvwr_tqh);
-	
-	TAILQ_INIT(&dcqp_tqh);
-	
-	TAILQ_INIT(&schedule_tqh);
-	
-	TAILQ_INIT(&rcif_tqh);
-	
 	child_dc_cb->fd = fileno(fout);
 	tsf_setup_buf_list(child_dc_cb);
-	fprintf(stderr, "tsf_setup_buf_list success");
+	fprintf(stderr, "tsf_setup_buf_list success\n");
 	sleep(5);
 	
-	fprintf(stderr, "start send connection request");
+	fprintf(stderr, "start send connection request\n");
 	dc_conn_req(child_dc_cb);
 	
 	create_dc_stream_server(child_dc_cb, opt.rcstreamnum);
-	fprintf(stderr, "create_dc_stream_server finish");
+	fprintf(stderr, "create_dc_stream_server finish\n");
 	
 	switch (curtype) {
 	
