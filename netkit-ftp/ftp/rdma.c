@@ -884,15 +884,13 @@ int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 			fprintf(stderr, "Out of Memory\n");
 			exit(EXIT_FAILURE);
 		}
-		
 		item->child_cm_id = cma_id;
-		
 		TAILQ_INSERT_TAIL(&acceptedTqh, item, entries);
 		
 		TAILQ_UNLOCK(&acceptedTqh);
 		TAILQ_SIGNAL(&acceptedTqh);
 		cb->child_cm_id = cma_id;
-		syslog(LOG_ERR, "get a new connection: %p", cma_id);
+		syslog(LOG_ERR, "accept a new connection: %p", cma_id);
 //		sem_post(&cb->sem);
 		break;
 
@@ -1871,7 +1869,6 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 	for (i = 0; i < num; i ++) {
 		rcinfo = (RCINFO *) malloc(sizeof(RCINFO));
 		if (rcinfo == NULL) {
-			perror("malloc fail");
 			syslog(LOG_ERR, "malloc fail");
 			exit(EXIT_FAILURE);
 		}
@@ -1879,22 +1876,17 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 		/* create channel */
 		rcinfo->cm_channel = rdma_create_event_channel();
 		if (!rcinfo->cm_channel) {
-			perror("rdma_create_event_channel");
 			syslog(LOG_ERR, "rdma_create_event_channel fail: %m");
 			exit(EXIT_FAILURE);
 		}
 
 		ret = rdma_create_id(rcinfo->cm_channel, &rcinfo->cm_id, rcinfo, RDMA_PS_TCP);
 		if (ret) {
-			perror("rdma_create_id");
 			syslog(LOG_ERR, "rdma_create_id fail: %m");
 			rdma_destroy_event_channel(rcinfo->cm_channel);
 			exit(EXIT_FAILURE);
 		}
 	
-/*		if (pthread_create(&cb->cmthread, NULL, cm_thread, cb) != 0)
-			perror("pthread_create"); */
-		
 		/* resolve addr */
 		ret = rdma_resolve_addr(rcinfo->cm_id, NULL, \
 			(struct sockaddr *) dest, 2000);
@@ -1925,7 +1917,7 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 		/* create pd ????????????? */
 		rcinfo->pd = ibv_alloc_pd(rcinfo->cm_id->verbs);
 		if (!rcinfo->pd) {
-			fprintf(stderr, "ibv_alloc_pd failed\n");
+			syslog(LOG_ERR, "ibv_alloc_pd failed\n");
 			exit(EXIT_FAILURE);
 		}
 		
@@ -1939,12 +1931,11 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 		init_attr.send_cq = cb->cq;
 		init_attr.recv_cq = cb->cq;
 		
-		DPRINTF(("before rdma_create_qp\n"));
 		ret = rdma_create_qp(rcinfo->cm_id, cb->pd, &init_attr);
 		if (!ret)
 			rcinfo->qp = rcinfo->cm_id->qp;
 		else {
-			fprintf(stderr, "rdma_create_qp fail\n");
+			syslog(LOG_ERR, "rdma_create_qp fail\n");
 			exit(EXIT_FAILURE);
 		}
 		
@@ -1972,7 +1963,7 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 		
 	}
 	
-
+syslog(LOG_ERR, "established %d connections", i);
 	return;
 }
 
@@ -1984,7 +1975,6 @@ get_next_channel_event(struct rdma_event_channel *channel, enum rdma_cm_event_ty
 	
 	ret = rdma_get_cm_event(channel, &event);
 	if (ret) {
-		perror("rdma_get_cm_event");
 		syslog(LOG_ERR, "rdma_get_cm_event %m");
 		exit(ret);
 	}
