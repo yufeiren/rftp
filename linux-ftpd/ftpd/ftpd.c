@@ -1129,53 +1129,6 @@ void rretrieve(const char *cmd, const char *name)
 	time_t start;
 	int ret;
 
-/*	if (cmd == 0) {
-		fin = fopen(name, "r"), closefunc = fclose;
-		st.st_size = 0;
-	} else {
-		char line[BUFSIZ];
-
-		(void) snprintf(line, sizeof(line), cmd, name);
-		name = line;
-		fin = ftpd_popen(line, "r"), closefunc = ftpd_pclose;
-		st.st_size = -1;
-		st.st_blksize = BUFSIZ;
-	}
-	if (fin == NULL) {
-		if (errno != 0) {
-			perror_reply(550, name);
-			if (cmd == 0) {
-				LOGCMD("get", name);
-			}
-		}
-		return;
-	}
-	byte_count = -1;
-	if (cmd == 0 && (fstat(fileno(fin), &st) < 0 || !S_ISREG(st.st_mode))) {
-		reply(550, "%s: not a plain file.", name);
-		goto done;
-	}
-	if (restart_point) {
-		if (type == TYPE_A) {
-			off_t i, n;
-			int c;
-
-			n = restart_point;
-			i = 0;
-			while (i++ < n) {
-				if ((c=getc(fin)) == EOF) {
-					perror_reply(550, name);
-					goto done;
-				}
-				if (c == '\n')
-					i++;
-			}
-		} else if (lseek(fileno(fin), restart_point, SEEK_SET) < 0) {
-			perror_reply(550, name);
-			goto done;
-		}
-	} */
-	
 /*	dout = dataconn(name, st.st_size, "w"); */
 	ret = rdmadataconn(name, st.st_size, "w");
 	if (ret != 0)

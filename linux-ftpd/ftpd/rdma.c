@@ -2663,12 +2663,15 @@ scheduler(void *arg)
 	int ret;
 	
 	FILEINFO *item;
+	FILEINFO *next;
 	EVENTWR *evwr;
 	struct ibv_send_wr *bad_wr;
 	
-	TAILQ_FOREACH(item, &finfo_tqh, entries) {
-		/* get a file block */
-		
+	item = TAILQ_FIRST(&finfo_tqh);
+	
+	do {
+		next = TAILQ_NEXT(item, entries);
+
 		/* get a send buf */
 		TAILQ_LOCK(&free_evwr_tqh);
 		while (TAILQ_EMPTY(&free_evwr_tqh)) {
@@ -2695,8 +2698,10 @@ scheduler(void *arg)
 		if (ret) {
 			syslog(LOG_ERR, "post send error %d\n", ret);
 		}
-	}
-
+		
+		item = next;
+	} while (item != NULL);
+	
 	pthread_exit(NULL);
 }
 
