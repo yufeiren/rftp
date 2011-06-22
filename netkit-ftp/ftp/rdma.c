@@ -1648,25 +1648,6 @@ void iperf_format_send(struct rdma_cb *cb, char *buf, struct ibv_mr *mr)
 	info->rkey = htonl(mr->rkey);
 	info->size = htonl(cb->size + sizeof(rmsgheader));
 	
-/*	switch ( cb->trans_mode ) {
-	case kRdmaTrans_ActRead:
-		info->mode = htonl(MODE_RDMA_ACTRD);
-		break;
-	case kRdmaTrans_ActWrte:
-		info->mode = htonl(MODE_RDMA_ACTWR);
-		break;
-	case kRdmaTrans_PasRead:
-		info->mode = htonl(MODE_RDMA_PASRD);
-		break;
-	case kRdmaTrans_PasWrte:
-		info->mode = htonl(MODE_RDMA_PASWR);
-		break;
-	default:
-		fprintf(stderr, "unrecognize transfer mode %d\n", \
-			cb->trans_mode);
-		break;
-	}
-*/
 	DEBUG_LOG("RDMA addr %" PRIx64" rkey %x len %d\n",
 		  ntohll(info->buf), ntohl(info->rkey), ntohl(info->size));
 }

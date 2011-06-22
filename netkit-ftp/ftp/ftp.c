@@ -1664,14 +1664,14 @@ rdmarecvrequest(const char *cmd,
 	
 	child_dc_cb->fd = fileno(fout);
 	tsf_setup_buf_list(child_dc_cb);
-	syslog(LOG_ERR, "tsf_setup_buf_list success");
+	fprintf(stderr, "tsf_setup_buf_list success");
 	sleep(5);
 	
-	syslog(LOG_ERR, "start send connection request");
+	fprintf(stderr, "start send connection request");
 	dc_conn_req(child_dc_cb);
 	
 	create_dc_stream_server(child_dc_cb, opt.rcstreamnum);
-	syslog(LOG_ERR, "create_dc_stream_server finish");
+	fprintf(stderr, "create_dc_stream_server finish");
 	
 	switch (curtype) {
 	
