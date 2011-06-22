@@ -1297,10 +1297,9 @@ int iperf_setup_qp(struct rdma_cb *cb, struct rdma_cm_id *cm_id)
 	}
 	DEBUG_LOG("created channel %p\n", cb->channel);
 
-	cb->cq = ibv_create_cq(cm_id->verbs, opt.rdma_qp_rq_depth * 2, cb,
+	cb->cq = ibv_create_cq(cm_id->verbs, opt.rdma_cq_depth, cb,
 				cb->channel, 0);
 	if (!cb->cq) {
-		fprintf(stderr, "ibv_create_cq failed\n");
 		syslog(LOG_ERR, "ibv_create_cq failed: %m");
 		ret = errno;
 		goto err2;

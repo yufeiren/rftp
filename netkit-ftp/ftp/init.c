@@ -96,8 +96,9 @@ static const struct {
 	{ "ibdevname",     &opt.ib_devname,        cmd_string },
 	{ "ioengine",      &opt.ioengine,          cmd_string },
 	{ "rcstreamnum",   &opt.rcstreamnum,       cmd_number },
-	{ "rdmaqprqdepth", &opt.rdma_qp_rq_depth, cmd_number },
-	{ "rdmaqpsqdepth", &opt.rdma_qp_sq_depth, cmd_number },
+	{ "rdmacqdepth",   &opt.rdma_cq_depth,     cmd_number },
+	{ "rdmaqprqdepth", &opt.rdma_qp_rq_depth,  cmd_number },
+	{ "rdmaqpsqdepth", &opt.rdma_qp_sq_depth,  cmd_number },
 	{ "readernum",     &opt.readernum,         cmd_number },
 	{ "recvbufnum",    &opt.recvbufnum,        cmd_number },
 	{ "rmtaddrnum",    &opt.rmtaddrnum,        cmd_number },
@@ -161,6 +162,8 @@ defaults (void)
   
   opt.rdma_qp_rq_depth = 64;
   opt.rdma_qp_sq_depth = 64;
+  
+  opt.rdma_cq_depth = 32;
 }
 
 /* Return the user's home directory (strdup-ed), or NULL if none is

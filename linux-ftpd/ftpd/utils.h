@@ -127,6 +127,7 @@ struct options {
 	int    writernum;	/* number of writer if recv data */
 	char   *ioengine;
 	bool   directio;
+	int    rdma_cq_depth;
 	int    rdma_qp_rq_depth;
 	int    rdma_qp_sq_depth;
 };
