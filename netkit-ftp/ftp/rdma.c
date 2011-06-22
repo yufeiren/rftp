@@ -203,6 +203,7 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 		case DC_CONNECTION_REQ:
 			memcpy(&opt.rcstreamnum, recvwr->recv_buf.addr, 4);
 			syslog(LOG_ERR, "dc conn num is %d", opt.rcstreamnum);
+			sem_post(&cb->sem);
 			break;
 		default:
 			fprintf(stderr, "unrecognized stat %d\n", cb->recv_buf.stat);
@@ -371,6 +372,8 @@ handle_file_session_rep(void *arg)
 	TAILQ_INSERT_TAIL(&schedule_tqh, item, entries);
 	TAILQ_UNLOCK(&schedule_tqh);
 	TAILQ_SIGNAL(&schedule_tqh);
+	
+	sem_post(&tmpcb->sem); /* notify scheduler */
 	
 	pthread_exit(NULL);
 }
@@ -1029,7 +1032,6 @@ enum ibv_wc_status {
 		case IBV_WC_RDMA_READ:
 			DEBUG_LOG("rdma read completion\n");
 			cb->state = RDMA_READ_COMPLETE;
-			sem_post(&cb->sem);
 			break;
 
 		case IBV_WC_RECV:
@@ -1043,14 +1045,6 @@ enum ibv_wc_status {
 				fprintf(stderr, "recv wc error: %d\n", ret);
 				goto error;
 			}
-			/*
-			ret = ibv_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
-			if (ret) {
-				fprintf(stderr, "post recv error: %d\n", ret);
-				goto error;
-			}
-
-			sem_post(&cb->sem); */
 			DPRINTF(("IBV_WC_RECV success\n"));
 			break;
 
@@ -1378,64 +1372,13 @@ void iperf_free_qp(struct rdma_cb *cb)
 
 int iperf_setup_buffers(struct rdma_cb *cb)
 {
-	int ret;
-
-	iperf_setup_wr(cb);
-	DEBUG_LOG("allocated & registered buffers...\n");
-	return 0;
-}
-
-
-int tsf_setup_buf_list(struct rdma_cb *cb)
-{
-/* init rdma_mr and insert into the free list */
 	int i;
-	BUFDATBLK *item;
 	REMOTEADDR *rmtaddritem;
 	EVENTWR *evwritem;
-	
 	RECVWR *recvitem;
+
 	struct ibv_recv_wr *bad_recv_wr;
 	int ret;
-	
-	for (i = 0; i < opt.cbufnum; i++) {
-		if ( (item = (BUFDATBLK *) malloc(sizeof(BUFDATBLK))) == NULL) {
-			syslog(LOG_ERR, "tsf_setup_buf_list: malloc fail");
-			exit(EXIT_FAILURE);
-		}
-		
-		memset(item, '\0', sizeof(BUFDATBLK));
-		
-		item->wr_id = (uint64_t) (i + 1) | WRIDBUFFER;
-		
-		if (opt.directio != true) {
-			if ( (item->rdma_buf = (char *) malloc(cb->size + sizeof(rmsgheader))) == NULL) {
-				syslog(LOG_ERR, "tsf_setup_buf_list: malloc 2");
-				exit(EXIT_FAILURE);
-			}
-		} else {
-			if ( posix_memalign(&item->rdma_buf, getpagesize(), cb->size + sizeof(rmsgheader)) != 0 ) {
-			        syslog(LOG_ERR, "tsf_setup_buf_list: memalign");
-			        exit(EXIT_FAILURE);
-			}
-		}
-		
-		memset(item->rdma_buf, '\0', cb->size + sizeof(rmsgheader));
-		
-		item->rdma_mr = ibv_reg_mr(cb->pd, item->rdma_buf, \
-				cb->size + sizeof(rmsgheader), \
-				IBV_ACCESS_LOCAL_WRITE
-				| IBV_ACCESS_REMOTE_READ
-				| IBV_ACCESS_REMOTE_WRITE);
-		if (!item->rdma_mr) {
-			syslog(LOG_ERR, "tsf_setup_buf_list: ibv_reg_mr");
-			exit(EXIT_FAILURE);
-		}
-		
-		item->buflen = cb->size + sizeof(rmsgheader);
-		
-		TAILQ_INSERT_TAIL(&free_tqh, item, entries);
-	}
 	
 	for (i = 0; i < opt.evbufnum; i++) {
 		if ( (evwritem = (EVENTWR *) malloc(sizeof(EVENTWR))) == NULL) {
@@ -1515,6 +1458,62 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 		}
 	}
 	
+	return 0;
+}
+
+
+int tsf_setup_buf_list(struct rdma_cb *cb)
+{
+/* init rdma_mr and insert into the free list */
+	int i;
+	BUFDATBLK *item;
+	REMOTEADDR *rmtaddritem;
+	EVENTWR *evwritem;
+	
+	RECVWR *recvitem;
+	struct ibv_recv_wr *bad_recv_wr;
+	int ret;
+	
+	for (i = 0; i < opt.cbufnum; i++) {
+		if ( (item = (BUFDATBLK *) malloc(sizeof(BUFDATBLK))) == NULL) {
+			syslog(LOG_ERR, "tsf_setup_buf_list: malloc fail");
+			exit(EXIT_FAILURE);
+		}
+		
+		memset(item, '\0', sizeof(BUFDATBLK));
+		
+		item->wr_id = (uint64_t) (i + 1) | WRIDBUFFER;
+		
+		if (opt.directio != true) {
+			if ( (item->rdma_buf = (char *) malloc(cb->size + sizeof(rmsgheader))) == NULL) {
+				syslog(LOG_ERR, "tsf_setup_buf_list: malloc 2");
+				exit(EXIT_FAILURE);
+			}
+		} else {
+			if ( posix_memalign(&item->rdma_buf, getpagesize(), cb->size + sizeof(rmsgheader)) != 0 ) {
+			        syslog(LOG_ERR, "tsf_setup_buf_list: memalign");
+			        exit(EXIT_FAILURE);
+			}
+		}
+		
+		memset(item->rdma_buf, '\0', cb->size + sizeof(rmsgheader));
+		
+		item->rdma_mr = ibv_reg_mr(cb->pd, item->rdma_buf, \
+				cb->size + sizeof(rmsgheader), \
+				IBV_ACCESS_LOCAL_WRITE
+				| IBV_ACCESS_REMOTE_READ
+				| IBV_ACCESS_REMOTE_WRITE);
+		if (!item->rdma_mr) {
+			syslog(LOG_ERR, "tsf_setup_buf_list: ibv_reg_mr");
+			exit(EXIT_FAILURE);
+		}
+		
+		item->buflen = cb->size + sizeof(rmsgheader);
+		
+		TAILQ_INSERT_TAIL(&free_tqh, item, entries);
+	}
+	
+
 	return 0;
 }
 
@@ -1960,7 +1959,6 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 		syslog(LOG_ERR, "new connection: cma_id %p", rcinfo->cm_id);
 		
 		TAILQ_INSERT_TAIL(&rcif_tqh, rcinfo, entries);
-		
 	}
 	
 syslog(LOG_ERR, "established %d connections", i);
@@ -2689,6 +2687,10 @@ scheduler(void *arg)
 		}
 		
 		item = next;
+		
+		/* wait this request finish */
+		sem_wait(&cb->sem);
+		
 	} while (item != NULL);
 	
 	pthread_exit(NULL);

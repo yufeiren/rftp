@@ -1607,17 +1607,19 @@ rdmarecvrequest(const char *cmd,
 	if (!is_retr) {
 		if (curtype != TYPE_A)
 			changetype(TYPE_A, 0);
-	} 
+	}
 	else if (curtype != type) {
 		changetype(type, 0);
 	}
 	
+	/* init listening port */
 	if (rdmainitconn()) {
 		(void) signal(SIGINT, oldintr);
 		code = -1;
 		return;
 	}
 	
+	/* command RRTR info */
 	if (sigsetjmp(recvabort, 1))
 		goto abort;
 	if (is_retr && restart_point &&
@@ -1628,7 +1630,7 @@ rdmarecvrequest(const char *cmd,
 			(void) signal(SIGINT, oldintr);
 			return;
 		}
-	} 
+	}
 	else {
 		if (command("%s", cmd) != PRELIM) {
 			(void) signal(SIGINT, oldintr);
@@ -1636,9 +1638,8 @@ rdmarecvrequest(const char *cmd,
 		}
 	}
 	
-	DPRINTF(("rdmadataconn start\n"));
+	/* get established connection */
 	rdmadataconn("r");
-	DPRINTF(("rdmadataconn successful\n"));
 	
 	(void) gettimeofday(&start, (struct timezone *)0);
 	
@@ -1663,14 +1664,14 @@ rdmarecvrequest(const char *cmd,
 	
 	child_dc_cb->fd = fileno(fout);
 	tsf_setup_buf_list(child_dc_cb);
-	DPRINTF(("tsf_setup_buf_list success\n"));
-sleep(20);	
+	syslog(LOG_ERR, "tsf_setup_buf_list success");
 	sleep(5);
 	
+	syslog(LOG_ERR, "start send connection request");
 	dc_conn_req(child_dc_cb);
 	
 	create_dc_stream_server(child_dc_cb, opt.rcstreamnum);
-	
+	syslog(LOG_ERR, "create_dc_stream_server finish");
 	
 	switch (curtype) {
 	
@@ -1684,7 +1685,6 @@ sleep(20);
 		void      *tret;
 		
 		/* create multiple writer */
-sleep(60);
 		sleep(5);
 		
 		(void) gettimeofday(&start, (struct timezone *)0);
@@ -2168,7 +2168,6 @@ dataconn(const char *lmode)
 static void
 rdmadataconn(const char *lmode)
 {
-/*	struct ibv_send_wr *bad_send_wr; */
 	struct ibv_recv_wr *bad_recv_wr;
 	int ret;
 

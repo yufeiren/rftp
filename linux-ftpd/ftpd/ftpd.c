@@ -1129,12 +1129,6 @@ void rretrieve(const char *cmd, const char *name)
 	time_t start;
 	int ret;
 
-/*	dout = dataconn(name, st.st_size, "w"); */
-	ret = rdmadataconn(name, st.st_size, "w");
-	if (ret != 0)
-		goto done;
-	time(&start);
-	
 	TAILQ_INIT(&free_tqh);
 	TAILQ_INIT(&sender_tqh);
 	TAILQ_INIT(&writer_tqh);
@@ -1156,6 +1150,12 @@ void rretrieve(const char *cmd, const char *name)
 	TAILQ_INIT(&rcif_tqh);
 	
 	parsepath(name);
+
+	/* establish data connection */
+	ret = rdmadataconn(name, st.st_size, "w");
+	if (ret != 0)
+		goto done;
+	time(&start);
 	
 	rsend_data(fin, dout, st.st_blksize, st.st_size,
 		  (restart_point == 0 && cmd == 0 && S_ISREG(st.st_mode)));
@@ -1567,17 +1567,6 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	if (usedefault)
 		data_dest = his_addr;
 	usedefault = 1;
-/*	file = getdatasock(mode);
-	if (file == NULL) {
-		reply(425, "Can't create data socket (%s,%d): %s.",
-		    inet_ntoa(data_source.sin_addr),
-		    ntohs(data_source.sin_port), strerror(errno));
-		return (NULL);
-	}
-	data = fileno(file);
-*/
-	reply(150, "Opening %s mode data connection for '%s'%s.",
-	     type == TYPE_A ? "ASCII" : "BINARY", name, sizebuf);
 	
 	dc_cb = (rdma_cb *) malloc(sizeof(rdma_cb));
 	if (dc_cb == NULL) {
@@ -1619,6 +1608,7 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	}
 	
 	sem_wait(&dc_cb->sem);
+	
 	if (dc_cb->state != ROUTE_RESOLVED) {
 		syslog(LOG_ERR, "waiting for addr/route resolution state %d\n", 
 			dc_cb->state);
@@ -1637,17 +1627,21 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		goto err1;
 	}
 	
-/*	ret = ibv_post_recv(dc_cb->qp, &dc_cb->rq_wr, &bad_recv_wr);
-	if (ret) {
-		syslog(LOG_ERR, "ibv_post_recv: %m");
-		goto err2;
-	} */
-	
 	ret = pthread_create(&dc_cb->cqthread, NULL, cq_thread, dc_cb);
 	if (ret) {
 		syslog(LOG_ERR, "pthread_create: %m");
 		goto err2;
 	}
+	
+	/* setup buffers */
+	tsf_setup_buf_list(dc_cb);
+	syslog(LOG_ERR, "tsf_setup_buf_list finish\n");
+	
+	/* multiple streams
+	create_dc_stream_client(dc_cb, opt.rcstreamnum, &data_dest); */
+	
+	reply(150, "Opening %s mode data connection for '%s'%s.",
+	     type == TYPE_A ? "ASCII" : "BINARY", name, sizebuf);
 	
 	/* rdma connect */
 	ret = rdma_connect_client(dc_cb);
@@ -1655,9 +1649,6 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		syslog(LOG_ERR, "rdma_connect_client: %m");
 		goto err3;
 	}
-	
-	/* multiple streams
-	create_dc_stream_client(dc_cb, opt.rcstreamnum, &data_dest); */
 	
 	return (0);
 	
@@ -1830,12 +1821,9 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 	
 	void      *tret;
 
-/*	dc_cb->fd = fileno(instr);
-	dc_cb->filesize = filesize; */
-	tsf_setup_buf_list(dc_cb);
-
 	/* wait for DC_CONNECTION_REQ */
-	sleep(5);
+	sem_wait(&dc_cb->sem);
+	syslog(LOG_ERR, "start connection num: %d", opt.rcstreamnum);
 	create_dc_stream_client(dc_cb, opt.rcstreamnum, &data_dest);
 	
 	transflag++;
