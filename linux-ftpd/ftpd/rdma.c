@@ -242,6 +242,7 @@ handle_file_session_req(void *arg)
 	struct rdma_info_blk tmpbuf;
 	EVENTWR *evwr;
 	struct ibv_send_wr *bad_wr;
+	struct stat st;
 	
 	int ret;
 	
@@ -271,7 +272,9 @@ handle_file_session_req(void *arg)
 	/* compose file information */
 	strcpy(item->lf, filename);
 	
-	if (opt.directio == true)
+	/* /dev/null don't support O_DIRECT */
+	if (   (opt.directio == true)
+	    && (stat(item->lf, &st) < 0 || S_ISREG(st.st_mode)))
 		item->fd = open(item->lf, O_WRONLY | O_CREAT | O_DIRECT, 0666);
 	else
 		item->fd = open(item->lf, O_WRONLY | O_CREAT, 0666);
@@ -286,8 +289,8 @@ handle_file_session_req(void *arg)
 	transtotallen += item->fsize;
 	
 	TAILQ_INIT(&item->pending_tqh);
-	syslog(LOG_ERR, "file: %s, size: %ld, sid: %d\n", \
-		filename, item->fsize, item->sessionid);
+/*	syslog(LOG_ERR, "file: %s, size: %ld, sid: %d\n", \
+		filename, item->fsize, item->sessionid); */
 	
 	/* insert file info into finfo_tqh */
 	TAILQ_LOCK(&finfo_tqh);
@@ -366,8 +369,8 @@ handle_file_session_rep(void *arg)
 	
 	TAILQ_UNLOCK(&finfo_tqh);
 
-	syslog(LOG_ERR, "file: %s, size: %ld, sid: %d\n", \
-		item->lf, item->fsize, item->sessionid);
+/*	syslog(LOG_ERR, "file: %s, size: %ld, sid: %d\n", \
+		item->lf, item->fsize, item->sessionid); */
 	
 	TAILQ_LOCK(&schedule_tqh);
 	TAILQ_INSERT_TAIL(&schedule_tqh, item, entries);
@@ -2487,6 +2490,8 @@ reader(void *arg)
 	int innersize;
 	int seqnum;
 	
+	struct stat st;
+	
 	thislen = 0;
 	currlen = 0;
 	
@@ -2503,12 +2508,13 @@ reader(void *arg)
 		
 		TAILQ_UNLOCK(&schedule_tqh);
 		
-		if (opt.directio == true)
+		if (   (opt.directio == true)
+		    && (stat(item->lf, &st) < 0 || S_ISREG(st.st_mode)))
 			item->fd = open(item->lf, O_RDONLY | O_DIRECT);
 		else
 			item->fd = open(item->lf, O_RDONLY);
 		if (item->fd < 0) {
-			perror("Open failed");
+			perror("Open failed %s", item->lf);
 			exit(EXIT_FAILURE);
 		}
 		
@@ -2716,7 +2722,7 @@ parsepath(const char *path)
 	struct dirent *entry;
 	
 	if (stat(path, &st) != 0) {
-		fprintf(stderr, "lstat fail: %d(%s)", errno, strerror(errno));
+		syslog(LOG_ERR, "lstat fail: %d(%s)", errno, strerror(errno));
 		return;
 	}
 	
@@ -2724,7 +2730,7 @@ parsepath(const char *path)
 		char newpath[1024];
 		
 		if((dp = opendir(path)) == NULL) {
-			fprintf(stderr,"cannot open directory: %s\n", path);
+			syslog(LOG_ERR, "cannot open directory: %s\n", path);
 			return;
 		}
 		
@@ -2761,9 +2767,6 @@ parsepath(const char *path)
 		
 		transtotallen += item->fsize;
 		
-		syslog(LOG_ERR, "REG file: %s, size: %ld\n", \
-			item->lf, item->fsize);
-		
 		TAILQ_INSERT_TAIL(&finfo_tqh, item, entries);
 	} else if (S_ISCHR(st.st_mode)) {
 		/* suppose this is /dev/zero */
@@ -2781,9 +2784,6 @@ parsepath(const char *path)
 		item->fsize = opt.devzerosiz;
 		
 		transtotallen += item->fsize;
-		
-		syslog(LOG_ERR, "CHR file: %s, size: %ld\n", \
-			item->lf, item->fsize);
 		
 		TAILQ_INSERT_TAIL(&finfo_tqh, item, entries);
 	} else if (S_ISBLK(st.st_mode)) {

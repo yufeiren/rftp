@@ -1664,14 +1664,10 @@ rdmarecvrequest(const char *cmd,
 	
 	child_dc_cb->fd = fileno(fout);
 	tsf_setup_buf_list(child_dc_cb);
-	fprintf(stderr, "tsf_setup_buf_list success\n");
-	sleep(5);
-	
-	fprintf(stderr, "start send connection request\n");
+
 	dc_conn_req(child_dc_cb);
 	
 	create_dc_stream_server(child_dc_cb, opt.rcstreamnum);
-	fprintf(stderr, "create_dc_stream_server finish\n");
 	
 	switch (curtype) {
 	
@@ -1685,8 +1681,6 @@ rdmarecvrequest(const char *cmd,
 		void      *tret;
 		
 		/* create multiple writer */
-		sleep(5);
-		
 		(void) gettimeofday(&start, (struct timezone *)0);
 		
 		int i;
