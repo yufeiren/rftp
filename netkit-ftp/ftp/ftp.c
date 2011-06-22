@@ -1664,7 +1664,7 @@ rdmarecvrequest(const char *cmd,
 	child_dc_cb->fd = fileno(fout);
 	tsf_setup_buf_list(child_dc_cb);
 	DPRINTF(("tsf_setup_buf_list success\n"));
-	
+sleep(20);	
 	sleep(5);
 	
 	dc_conn_req(child_dc_cb);
@@ -1684,6 +1684,7 @@ rdmarecvrequest(const char *cmd,
 		void      *tret;
 		
 		/* create multiple writer */
+sleep(60);
 		sleep(5);
 		
 		(void) gettimeofday(&start, (struct timezone *)0);
