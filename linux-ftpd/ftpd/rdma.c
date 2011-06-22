@@ -968,6 +968,7 @@ int iperf_cq_event_handler(struct rdma_cb *cb)
 	struct ibv_wc wc;
 	int ret;
 	int compevnum = 0;
+	char *errmsg;
 	
 	while ((ret = ibv_poll_cq(cb->cq, 1, &wc)) == 1) {
 		ret = 0;
@@ -1001,8 +1002,16 @@ enum ibv_wc_status {
 
 */
 		if (wc.status) {
-                        syslog(LOG_ERR, "cq completion failed status %d(%s), opcode: %d, wr id: %ld", \
-                                wc.status, ibv_wc_status_str(wc.status), wc.opcode, wc.wr_id);
+			if (wc.wr_id & WRIDEVENT)
+				errmsg = "SEND buffer";
+			else if (wc.wr_id & WRIDRECV)
+				errmsg = "RECV buffer";
+			else if (wc.wr_id & WRIDBUFFER)
+				errmsg = "RDMA buffer";
+			else
+				errmsg = "uknow buffer type";
+                        syslog(LOG_ERR, "cq completion failed status %d(%s), opcode: %d, wr type: %s", \
+                                wc.status, ibv_wc_status_str(wc.status), wc.opcode, errmsg);
 
 			// IBV_WC_WR_FLUSH_ERR == 5
 			if (wc.status != IBV_WC_WR_FLUSH_ERR)
@@ -2649,10 +2658,9 @@ scheduler(void *arg)
 
 		/* get a send buf */
 		TAILQ_LOCK(&free_evwr_tqh);
-		while (TAILQ_EMPTY(&free_evwr_tqh)) {
+		while (TAILQ_EMPTY(&free_evwr_tqh))
 			if (TAILQ_WAIT(&free_evwr_tqh) != 0)
 				continue;	/* goto while */
-		}
 		
 		evwr = TAILQ_FIRST(&free_evwr_tqh);
 		TAILQ_REMOVE(&free_evwr_tqh, evwr, entries);
@@ -2670,15 +2678,13 @@ scheduler(void *arg)
 		TAILQ_UNLOCK(&evwr_tqh);
 		
 		ret = ibv_post_send(cb->qp, &evwr->ev_wr, &bad_wr);
-		if (ret) {
+		if (ret)
 			syslog(LOG_ERR, "post send error %d\n", ret);
-		}
 		
 		item = next;
 		
 		/* wait this request finish */
 		sem_wait(&cb->sem);
-		
 	} while (item != NULL);
 	
 	pthread_exit(NULL);

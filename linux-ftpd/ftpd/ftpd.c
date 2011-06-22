@@ -1823,9 +1823,9 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 
 	/* wait for DC_CONNECTION_REQ */
 	sem_wait(&dc_cb->sem);
-	syslog(LOG_ERR, "start connection num: %d", opt.rcstreamnum);
+/*	syslog(LOG_ERR, "start connection num: %d", opt.rcstreamnum);
 	create_dc_stream_client(dc_cb, opt.rcstreamnum, &data_dest);
-	
+*/	
 	transflag++;
 	if (setjmp(urgcatch)) {
 		transflag = 0;
@@ -1855,7 +1855,6 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 	case TYPE_I:
 	case TYPE_L:
 		/* create sender and reader */
-		sleep(3);
 		ret = pthread_create(&scheduler_tid, NULL, scheduler, dc_cb);
 		if (ret != 0) {
 			syslog(LOG_ERR, "pthread_create scheduler fail");
@@ -1870,7 +1869,8 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 		}
 		syslog(LOG_ERR, "join scheduler success");
 		
-		sleep(2);
+		syslog(LOG_ERR, "start connection num: %d", opt.rcstreamnum);
+		create_dc_stream_client(dc_cb, opt.rcstreamnum, &data_dest);
 		
 		ret = pthread_create(&sender_tid, NULL, sender, dc_cb);
 		if (ret != 0) {
