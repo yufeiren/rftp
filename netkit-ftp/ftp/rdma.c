@@ -194,6 +194,7 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 			}
 			break;
 		case FILE_SESSION_ID_RESPONSE:
+			tmpcb = cb;
 			ret = pthread_create(&tid, NULL, handle_file_session_rep, &recvwr->recv_buf);
 			if (ret != 0) {
 				perror("pthread_create handle_file_session_rep:");
