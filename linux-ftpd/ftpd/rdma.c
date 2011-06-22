@@ -2514,7 +2514,7 @@ reader(void *arg)
 		else
 			item->fd = open(item->lf, O_RDONLY);
 		if (item->fd < 0) {
-			perror("Open failed %s", item->lf);
+			syslog(LOG_ERR, "Open failed %s", item->lf);
 			exit(EXIT_FAILURE);
 		}
 		
