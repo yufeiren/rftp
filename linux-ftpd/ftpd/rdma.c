@@ -93,6 +93,13 @@
 #include "errors.h"
 #include "utils.h"
 
+/*
+#include <sys/syscall.h>
+pid_t gettid()
+{
+     return syscall(SYS_gettid);
+}*/
+
 extern struct acptq acceptedTqh;
 
 extern struct options opt;
@@ -132,7 +139,6 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 	memset(newbuf, '\0', sizeof(struct rdma_info_blk));
 	memcpy(newbuf, &recvwr->recv_buf, sizeof(struct rdma_info_blk));
 	
-/*	if (cb->recv_buf.mode == kRdmaTrans_ActWrte) { */
 	if (recvwr->recv_buf.mode == kRdmaTrans_ActWrte) {
 		switch (recvwr->recv_buf.stat) {
 		case ACTIVE_WRITE_ADV:
@@ -147,7 +153,6 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 			break;
 		case ACTIVE_WRITE_FIN:
 			/* take the block out */
-	/*		recv_data(&recvwr->recv_buf); */
 			ret = pthread_create(&tid, NULL, recv_data, newbuf);
 			if (ret != 0) {
 				perror("pthread_create recv_data:");
@@ -634,7 +639,6 @@ recv_data(void *arg)
 		if ((uint64_t) (unsigned long)bufblk->rdma_buf == ntohll(recvbuf->buf))
 			break;
 
-
 	if (bufblk != NULL)
 		TAILQ_REMOVE(&waiting_tqh, bufblk, entries);
 	else {
@@ -694,7 +698,7 @@ TAILQ_LOCK(&finfo->pending_tqh);
 		}
 TAILQ_UNLOCK(&finfo->pending_tqh);
 		
-	} else { /* insert into  */
+	} else { /* insert into pending list */
 		TAILQ_LOCK(&finfo->pending_tqh);
 		TAILQ_FOREACH(tmpblk, &finfo->pending_tqh, entries)
 			if (tmpblk->seqnum > bufblk->seqnum) {
@@ -1395,7 +1399,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 	
 	for (i = 0; i < opt.evbufnum; i++) {
 		if ( (evwritem = (EVENTWR *) malloc(sizeof(EVENTWR))) == NULL) {
-			syslog(LOG_ERR, "tsf_setup_buf_list: malloc");
+			syslog(LOG_ERR, "iperf_setup_buffers: malloc");
 			exit(EXIT_FAILURE);
 		}
 		
