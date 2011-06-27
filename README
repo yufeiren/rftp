@@ -1,4 +1,5 @@
-RDMA FTP client (rcftp) and server (rftpd) is a set of tools for high performance data transfer using RDMA technology based on ftp protocol.
+RDMA FTP client (rcftp) and server (rftpd) is a set of tools for high
+performance data transfer using RDMA technology based on ftp protocol.
 
 New Features
 ==

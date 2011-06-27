@@ -1,4 +1,4 @@
-# This is a sample spec file for rftp
+# This is the spec file for rcftp
 
 %define _topdir         /home/ren/rftp
 %define name                    rcftp
