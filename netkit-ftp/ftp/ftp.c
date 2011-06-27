@@ -815,7 +815,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		}
 		closefunc = pclose;
 	} else {
-		fin = fopen(local, "r");
+/*		fin = fopen(local, "r");
 		if (fin == NULL) {
 			fprintf(stderr, "local: %s: %s\n", local,
 				strerror(errno));
@@ -823,7 +823,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			code = -1;
 			return;
 		}
-		closefunc = fclose;
+		closefunc = fclose; */
 	}
 	
 	TAILQ_INIT(&free_tqh);
