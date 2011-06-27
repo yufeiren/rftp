@@ -2,7 +2,7 @@
 
 %define _topdir         /home/ren/rftp
 %define name                    rcftp
-%define release         1
+%define release         2
 %define version         0.13
 %define buildroot %{_topdir}/%{name}-%{version}-root
 
@@ -43,6 +43,9 @@ rm -rf %{buildroot}
 /usr/bin/rcftp
 
 %changelog
+*Mon Jun 27 2011 <renyufei83@gmail.com>
+--bug repair: load parameter, initialization steps
+
 *Tue Jun 15 2011 <renyufei83@gmail.com>
 --RFTP version information
 --support multiple channel data transfer
