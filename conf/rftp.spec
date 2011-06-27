@@ -4,7 +4,7 @@
 %define name                    rcftp
 %define release         2
 %define version         0.13
-%define buildroot %{_topdir}/%{name}-%{version}-root
+%define buildroot %{_topdir}/%{name}-%{version}-%{release}-root
 
 BuildRoot:      %{buildroot}
 Summary:                GPL rcftp
@@ -12,7 +12,7 @@ License:                GPL
 Name:                   %{name}
 Version:                %{version}
 Release:                %{release}
-Source:                 %{name}-%{version}.tar.gz
+Source:                 %{name}-%{version}-%{release}.tar.gz
 Prefix:                 /usr
 Group:                  Development/Tools
 
