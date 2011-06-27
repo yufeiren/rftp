@@ -98,7 +98,7 @@
 pid_t gettid()
 {
      return syscall(SYS_gettid);
-}*/
+} */
 
 extern struct acptq acceptedTqh;
 

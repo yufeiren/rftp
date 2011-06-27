@@ -95,6 +95,13 @@ Configuration
 Usage
 =====
 
+0. Before launch rcftp/rftpd, please confirm the following value of your system
+ $ ulimit -l    # max locked memory
+   RDMA kernel bypass technology has to pin memory before rNIC operate on that memroy. So, please give the application enough locked memory. At lease, it must be larger than (cbufsiz * cbufnum).
+ $ ulimit -n    # open files
+   RFTP supports directory hirarchy transfer. You should confirm the number of files you want to transfer is less than this limitation. Otherwise, a 'can not open file' error will occur.
+
+   
 1. Startup server manually
  # /usr/sbin/rftpd -D &
 

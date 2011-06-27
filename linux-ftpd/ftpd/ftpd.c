@@ -1252,7 +1252,27 @@ void rstore(const char *name, const char *mode, int unique)
 	struct stat st;
 	int fd;
 	int ret;
+	
+	TAILQ_INIT(&free_tqh);
+	TAILQ_INIT(&sender_tqh);
+	TAILQ_INIT(&writer_tqh);
+	TAILQ_INIT(&waiting_tqh);
+	
+	TAILQ_INIT(&free_rmtaddr_tqh);
+	TAILQ_INIT(&rmtaddr_tqh);
 
+	TAILQ_INIT(&free_evwr_tqh);
+	TAILQ_INIT(&evwr_tqh);
+	
+	TAILQ_INIT(&recvwr_tqh);
+	
+	TAILQ_INIT(&dcqp_tqh);
+	
+	TAILQ_INIT(&schedule_tqh);
+	TAILQ_INIT(&finfo_tqh);
+	
+	TAILQ_INIT(&rcif_tqh);
+	
 	if (unique && stat(name, &st) == 0) {
 		char *nam;
 
@@ -1309,8 +1329,6 @@ void rstore(const char *name, const char *mode, int unique)
 	if (ret != 0)
 		goto done;
 	
-/*	if (din == NULL)
-		goto done; */
 	if (rreceive_data(fout) == 0) {
 		if (unique)
 			reply(226, "Transfer complete (unique file name:%s).",
@@ -1318,7 +1336,6 @@ void rstore(const char *name, const char *mode, int unique)
 		else
 			reply(226, "Transfer complete.");
 	}
-/*	(void) fclose(din);*/
 	data = -1;
 	pdata = -1;
 done:
@@ -2050,31 +2067,10 @@ static int rreceive_data(FILE *outstr)
 	struct ibv_send_wr *bad_wr;
 	int ret;
 	
-	TAILQ_INIT(&free_tqh);
-	TAILQ_INIT(&sender_tqh);
-	TAILQ_INIT(&writer_tqh);
-	TAILQ_INIT(&waiting_tqh);
-	
-	TAILQ_INIT(&free_rmtaddr_tqh);
-	TAILQ_INIT(&rmtaddr_tqh);
-
-	TAILQ_INIT(&free_evwr_tqh);
-	TAILQ_INIT(&evwr_tqh);
-	
-	TAILQ_INIT(&recvwr_tqh);
-	
-	TAILQ_INIT(&dcqp_tqh);
-	
-	TAILQ_INIT(&schedule_tqh);
-	TAILQ_INIT(&finfo_tqh);
-	
-	TAILQ_INIT(&rcif_tqh);
-	
-	dc_cb->fd = fileno(outstr);
-	tsf_setup_buf_list(dc_cb);
+/*	tsf_setup_buf_list(dc_cb); */
 	
 	/* wait for DC_CONNECTION_REQ */
-	sleep(5);
+	sem_wait(&dc_cb->sem);
 	create_dc_stream_client(dc_cb, opt.rcstreamnum, &data_dest);
 	
 	int i;
@@ -2091,13 +2087,11 @@ static int rreceive_data(FILE *outstr)
 		signal (SIGALRM, lostconn);
 		
 		/* create recver and writer */
-		
 		pthread_t recver_tid;
 		pthread_t writer_tid[200];
 		void      *tret;
 		
 		/* create multiple writer */
-		sleep(5);
 		for (i = 0; i < opt.writernum; i ++) {
 			ret = pthread_create(&writer_tid[i], NULL, \
 				writer, dc_cb);

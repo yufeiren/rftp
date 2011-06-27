@@ -824,20 +824,27 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			return;
 		}
 		closefunc = fclose;
-/* 		if (strcmp(local, "/dev/zero") == 0) {
-			st.st_size = 107374182400;
-		} else if (strcmp(local, "zero") == 0) { ==> /dev/zero
-			st.st_size = 107374182400; */
-/*		} else if (fstat(fileno(fin), &st) < 0 ||
-		    (st.st_mode&S_IFMT) != S_IFREG) {
-			fprintf(stdout, "%s: not a plain file.\n", local);
-			(void) signal(SIGINT, oldintr);
-			fclose(fin);
-			code = -1;
-			return;
-		}*/
 	}
-	DPRINTF(("rdmainitconn start\n"));
+	
+	TAILQ_INIT(&free_tqh);
+	TAILQ_INIT(&sender_tqh);
+	TAILQ_INIT(&writer_tqh);
+	TAILQ_INIT(&waiting_tqh);
+	TAILQ_INIT(&schedule_tqh);
+	
+	TAILQ_INIT(&free_rmtaddr_tqh);
+	TAILQ_INIT(&rmtaddr_tqh);
+
+	TAILQ_INIT(&free_evwr_tqh);
+	TAILQ_INIT(&evwr_tqh);
+	
+	TAILQ_INIT(&recvwr_tqh);
+	
+	TAILQ_INIT(&dcqp_tqh);
+	
+	TAILQ_INIT(&rcif_tqh);
+	
+	DPRINTF(("rdmainitconn listening\n"));
 	if (rdmainitconn()) {
 		(void) signal(SIGINT, oldintr);
 		if (oldintp)
@@ -893,42 +900,18 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		}
 	DPRINTF(("%s %s successful\n", cmd, remote));
 /*	dout = dataconn(lmode); */
-	DPRINTF(("rdmadataconn start\n"));
+	DPRINTF(("rdmadataconn accepting connection\n"));
 	rdmadataconn(lmode);
 	DPRINTF(("rdmadataconn successful\n"));
 	
-/*	if (dout == NULL)
-		goto abort; */
-	
-	TAILQ_INIT(&free_tqh);
-	TAILQ_INIT(&sender_tqh);
-	TAILQ_INIT(&writer_tqh);
-	TAILQ_INIT(&waiting_tqh);
-	TAILQ_INIT(&schedule_tqh);
-	
-	TAILQ_INIT(&free_rmtaddr_tqh);
-	TAILQ_INIT(&rmtaddr_tqh);
-
-	TAILQ_INIT(&free_evwr_tqh);
-	TAILQ_INIT(&evwr_tqh);
-	
-	TAILQ_INIT(&recvwr_tqh);
-	
-	TAILQ_INIT(&dcqp_tqh);
-	
-	TAILQ_INIT(&rcif_tqh);
-	
-	child_dc_cb->fd = fileno(fin);
+/*	child_dc_cb->fd = fileno(fin);
 	child_dc_cb->filesize = st.st_size;
-	DPRINTF(("file size is %ld\n", child_dc_cb->filesize));
+	DPRINTF(("file size is %ld\n", child_dc_cb->filesize)); */
 	tsf_setup_buf_list(child_dc_cb);
 	DPRINTF(("tsf_setup_buf_list success\n"));
 	
-	sleep(5);
-	
-	dc_conn_req(child_dc_cb);
-	
-	create_dc_stream_server(child_dc_cb, opt.rcstreamnum);
+/*	dc_conn_req(child_dc_cb);
+	create_dc_stream_server(child_dc_cb, opt.rcstreamnum); */
 
 	(void) gettimeofday(&start, (struct timezone *)0);
 	oldintp = signal(SIGPIPE, SIG_IGN);
@@ -949,7 +932,6 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		
 		void      *tret;
 		
-		sleep(3);
 		ret = pthread_create(&scheduler_tid, NULL, scheduler, child_dc_cb);
 		if (ret != 0) {
 			perror("pthread_create scheduler:");
@@ -965,7 +947,9 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 		}
 		DPRINTF(("scheduler join successful\n"));
 		
-		sleep(2);
+		dc_conn_req(child_dc_cb);
+		create_dc_stream_server(child_dc_cb, opt.rcstreamnum);
+		
 		(void) gettimeofday(&start, (struct timezone *)0);
 		
 		ret = pthread_create(&sender_tid, NULL, sender, child_dc_cb);
