@@ -366,7 +366,7 @@ initialize (void)
     return;
   ok &= run_rftprc (file);
 
-  /* If there were errors processing either `.wgetrc', abort. */
+  /* If there were errors processing either `.rcftp' or `.rftpd', abort. */
   if (!ok)
     exit (2);
 

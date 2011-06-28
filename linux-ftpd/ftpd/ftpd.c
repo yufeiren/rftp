@@ -315,9 +315,7 @@ main(int argc, char *argv[], char **envp)
 	struct hostent *hp;
 
 #ifdef __linux__
-DPRINTF(("1\n"));
 	initsetproctitle(argc, argv, envp);
-DPRINTF(("2\n"));
 	srandom(time(NULL)^(getpid()<<8));
 
 	/*
@@ -425,29 +423,27 @@ DPRINTF(("2\n"));
 #define LOG_FTP LOG_DAEMON
 #endif
 	openlog("rftpd", LOG_PID | LOG_NDELAY, LOG_FTP);
-DPRINTF(("3\n"));
 	if (daemon_mode) {
 		int ctl_sock, fd2;
 		struct servent *sv;
-DPRINTF(("4\n"));
 		/*
 		 * Detach from parent.
-		 
+		 */
 		if (daemon(1, 1) < 0) {
 			syslog(LOG_ERR, "failed to become a daemon");
 			exit(1);
-		}*/
-DPRINTF(("4.1\n"));
+		}
 		(void) signal(SIGCHLD, reapchild);
 		/*
 		 * Get port number for ftp/tcp.
+		 * resolve /etc/services		 
 		 */
 		sv = getservbyname("ftp", "tcp");
 		if (sv == NULL) {
 			syslog(LOG_ERR, "getservbyname for ftp failed");
 			exit(1);
 		}
-DPRINTF(("4.2\n"));
+
 		/*
 		 * Open a socket, bind it to the FTP port, and start
 		 * listening.
@@ -469,24 +465,18 @@ DPRINTF(("4.2\n"));
 		initialize();
 		/* set new listening port */
 		server_addr.sin_port = htons((short)opt.srvcomport);
-		DPRINTF(("opt.cbufsiz = %d\n", opt.cbufsiz));
-		DPRINTF(("opt.cbufnum = %d\n", opt.cbufnum));
-		DPRINTF(("opt.srvcomport = %d\n", ntohs(server_addr.sin_port)));
 		
-DPRINTF(("4.3\n"));
-DPRINTF(("bind sinport: %d\n", ntohs(server_addr.sin_port)));
 		if (bind(ctl_sock, (struct sockaddr *)&server_addr,
 			 sizeof(server_addr))) {
-DPRINTF(("bind error: %d %s\n", errno, strerror(errno)));
 			syslog(LOG_ERR, "control bind: %m");
 			exit(1);
 		}
-DPRINTF(("4.4\n"));
+
 		if (listen(ctl_sock, 32) < 0) {
 			syslog(LOG_ERR, "control listen: %m");
 			exit(1);
 		}
-DPRINTF(("5\n"));
+
 		/*
 		 * Loop forever accepting connection requests and forking off
 		 * children to handle them.
@@ -496,7 +486,6 @@ DPRINTF(("5\n"));
 			fd2 = accept(ctl_sock, (struct sockaddr *)&his_addr,
 				    &addrlen);
 			if (fork() == 0) {
-DPRINTF(("server get a new conn %d\n", fd2));
 				/* child */
 				(void) dup2(fd2, 0);
 				(void) dup2(fd2, 1);

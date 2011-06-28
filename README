@@ -29,12 +29,22 @@ Configuration
 * You could copy the sample configration(rcftprc and rftpdrc) files to /etc directory.
 
 * Configuration file lookup:
- load default value
+ 1 load default value
+ 2 load system configuration
+ if env SYSTEM_RCFTPRC or env SYSTEM_RFTPDRC exist
+     system configuration = env SYSTEM_RCFTPRC or env SYSTEM_RFTPDRC
+ else
+     system configuration = /etc/rcftprc (client) or /etc/rftpdrc (server)
  if (system configuration exist)
-     load /etc/rcftprc (client) or /etc/rftpdrc (server)
- if (user specific configuration exist)
-     override system configuration with
-     $HOME/.rcftprc (client) or $HOME/.rftpdrc (server)
+     load system configuration
+ 3 load user configuration
+ if env RCFTPRC or env RFTPDRC exist
+     user configuration = env RCFTPRC or env RFTPDRC
+ else
+     user configuration = $HOME/.rcftprc (client) or $HOME/.rftpdrc (server)
+ if (user configuration exist)
+     load user configuration
+     override system configuration with user configuration
 
 * The application both client and server could be configured with several parameters as follows,
 
