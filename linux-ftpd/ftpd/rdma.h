@@ -351,8 +351,9 @@ TAILQ_HEAD(acptq, wcm_id);
 typedef struct rmsgheader {
 	uint32_t sessionid;
 	uint32_t seqnum;
+	uint64_t offset;
 	uint32_t dlen;
-	char blank[4084];	/* getpagesize minus 12 = 4096 - 12 */
+	char blank[4076];	/* getpagesize minus 24 = 4096 - 20 */
 } rmsgheader;
 
 /* prototype - defined in rdma.c*/

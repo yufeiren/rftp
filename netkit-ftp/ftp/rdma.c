@@ -631,6 +631,7 @@ recv_data(void *arg)
 	FILEINFO *finfo;
 	
 	bufblk = NULL;
+	long pgsz;
 	
 	/* event finish */
 	TAILQ_LOCK(&waiting_tqh);
@@ -665,8 +666,23 @@ recv_data(void *arg)
 	
 	bufblk->fd = finfo->fd;
 	bufblk->seqnum = rhdr.seqnum;
-	bufblk->offset = finfo->offset;
+	bufblk->offset = rhdr.offset;
 	bufblk->buflen = rhdr.dlen + sizeof(rhdr);
+	
+	/* non-odirect */
+	pgsz = getpagesize();
+	
+	if (  (opt.directio == true)
+	   && (rhdr.dlen % pgsz != 0) ) {
+		/* open - lseek - read - close */
+		bufblk->fd = open(finfo->lf, O_WRONLY | O_CREAT, 0666);
+		if (bufblk->fd < 0) {
+			syslog(LOG_ERR, "Open failed %s", finfo->lf);
+			exit(EXIT_FAILURE);
+		}
+		
+		lseek(bufblk->fd, bufblk->offset, SEEK_CUR);
+	}
 	
 	BUFDATBLK *tmpblk;
 	
@@ -2489,6 +2505,7 @@ reader(void *arg)
 {
 	off_t totallen;
 	off_t currlen;
+	off_t leftlen;
 	int thislen;
 	BUFDATBLK *bufblk;
 	rmsgheader rhdr;
@@ -2503,10 +2520,14 @@ reader(void *arg)
 	int innersize;
 	int seqnum;
 	
+	long pgsz;
+	
 	struct stat st;
 	
 	thislen = 0;
 	currlen = 0;
+	
+	pgsz = getpagesize();
 	
 	for ( ; ; ) {
 		/* get file info block */
@@ -2544,7 +2565,7 @@ reader(void *arg)
 			while (TAILQ_EMPTY(&free_tqh))
 				if (TAILQ_WAIT(&free_tqh) != 0)
 					continue;
-	
+
 			innersize = 0;
 			while (!TAILQ_EMPTY(&free_tqh) && ++innersize < 10) {
 				bufblk = TAILQ_FIRST(&free_tqh);
@@ -2560,8 +2581,22 @@ reader(void *arg)
 			bufblk = TAILQ_FIRST(&inner_tqh);
 			TAILQ_REMOVE(&inner_tqh, bufblk, entries);
 			
-			bufblk->fd = item->fd;
-			thislen = load_dat_blk(bufblk);
+			leftlen = item->fsize - currlen;
+			if (  (opt.directio == true)
+			   && (leftlen < (bufblk->buflen - sizeof(rmsgheader)))
+			   && (leftlen % pgsz != 0) ) {
+				/* open - lseek - read - close */
+				bufblk->fd = open(item->lf, O_RDONLY);
+				
+				lseek(bufblk->fd, currlen, SEEK_CUR);
+				
+				readn(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), leftlen);
+				
+				close(bufblk->fd);
+			} else {
+				bufblk->fd = item->fd;
+				thislen = load_dat_blk(bufblk);
+			}
 			DPRINTF(("load %d bytes\n", thislen));
 			
 			if (thislen <= 0) {
@@ -2571,6 +2606,7 @@ reader(void *arg)
 			
 			rhdr.sessionid = item->sessionid;
 			rhdr.seqnum = ++ seqnum;
+			rhdr.offset = currlen;
 			rhdr.dlen = thislen;
 			
 			currlen += thislen;
@@ -2624,7 +2660,7 @@ writer(void *arg)
 		TAILQ_REMOVE(&writer_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&writer_tqh);
-			
+		
 		thislen = offload_dat_blk(bufblk);
 		
 		/* insert to free list */
@@ -2834,25 +2870,6 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 	/* setup wr */
 	tsf_setup_wr(bufblk);
 	
-	/* talk to peer what type of transfer to use
-	dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
-	dc_cb->send_buf.stat = ACTIVE_WRITE_ADV;
-	ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
-	if (ret) {
-		fprintf(stderr, "post send error %d\n", ret);
-		return 0;
-	}
-	dc_cb->state = ACTIVE_WRITE_ADV; */
-	
-	/* wait the peer tell me where should i write to
-	sem_wait(&dc_cb->sem); */
-/*	if (child_dc_cb->state != ACTIVE_WRITE_RESP) {
-		fprintf(stderr, \
-			"wait for ACTIVE_WRITE_RESP state %d\n", \
-			child_dc_cb->state);
-		return;
-	} */
-	
 	/* start data transfer using RDMA_WRITE */
 	bufblk->rdma_sq_wr.opcode = IBV_WR_RDMA_WRITE;
 	bufblk->rdma_sq_wr.wr.rdma.rkey = rmt->rkey;
@@ -2869,10 +2886,6 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 		  bufblk->rdma_sq_wr.sg_list->addr,
 		  bufblk->rdma_sq_wr.sg_list->length);
 */
-/*	DATAQP *item;
-	item = TAILQ_FIRST(&dcqp_tqh);
-	TAILQ_REMOVE(&dcqp_tqh, item, entries);;
-	TAILQ_INSERT_TAIL(&dcqp_tqh, item, entries); */
 	
 	RCINFO *item;
 	item = TAILQ_FIRST(&rcif_tqh);
@@ -2893,33 +2906,6 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 	/* wait the finish of RDMA_WRITE
 	sem_wait(&dc_cb->sem); */
 	DPRINTF(("sem_wait finish of RDMA_WRITE success\n"));
-/*			if (child_dc_cb->state != ACTIVE_WRITE_FIN) {
-		fprintf(stderr, \
-			"wait for ACTIVE_WRITE_FIN state %d\n", \
-			child_dc_cb->state);
-		return;
-	} */
-	
-	/* tell the peer transfer finished
-	dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
-	dc_cb->send_buf.stat = ACTIVE_WRITE_FIN;
-	ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
-	if (ret) {
-		fprintf(stderr, "post send error %d\n", ret);
-		return 0;
-	}
-	DPRINTF(("send_dat_blk: ibv_post_send finish 2\n")); */
-	
-/*	if (tick && (bytes >= hashbytes)) {
-		printf("\rBytes transferred: %ld", bytes);
-		(void) fflush(stdout);
-		while (bytes >= hashbytes)
-			hashbytes += TICKBYTES;
-	} */
-	
-	/* wait the client to notify next round data transfer
-	sem_wait(&dc_cb->sem);
-	DPRINTF(("wait notify next round data transfer success\n")); */
 	
 	return rhdr.dlen;
 }
