@@ -2581,16 +2581,26 @@ reader(void *arg)
 			bufblk = TAILQ_FIRST(&inner_tqh);
 			TAILQ_REMOVE(&inner_tqh, bufblk, entries);
 			
-			leftlen = item->fsize - currlen;
+			if ((leftlen = item->fsize - currlen) <= 0) {
+				TAILQ_INSERT_TAIL(&inner_tqh, bufblk, entries);
+				thislen = 0;
+				break;
+			}
+			
 			if (  (opt.directio == true)
 			   && (leftlen < (bufblk->buflen - sizeof(rmsgheader)))
 			   && (leftlen % pgsz != 0) ) {
 				/* open - lseek - read - close */
 				bufblk->fd = open(item->lf, O_RDONLY);
+				if (bufblk->fd < 0) {
+					syslog(LOG_ERR, "can not open %s", \
+						item->lf);
+					exit(EXIT_FAILURE);
+				}
 				
 				lseek(bufblk->fd, currlen, SEEK_CUR);
 				
-				readn(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), leftlen);
+				thislen = readn(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), leftlen);
 				
 				close(bufblk->fd);
 			} else {
