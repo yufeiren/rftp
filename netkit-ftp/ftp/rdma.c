@@ -2902,7 +2902,7 @@ tcp_recver(void *arg)
 			sf_splice(fd, conn, offset, filesize);
 		} else
 		do {
-			(void) alarm ((unsigned) timeout);
+			(void) alarm ((unsigned) 900);
 			cnt = read(conn, buf, sizeof(buf));
 			(void) alarm (0);
 
@@ -2914,7 +2914,7 @@ tcp_recver(void *arg)
 	}
 	
 	/* close the connection */
-	close(sock);
+	close(conn);
 	
 	/* data read finished */
 	pthread_exit((void *) currlen);
