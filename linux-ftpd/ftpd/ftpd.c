@@ -1158,6 +1158,76 @@ done:
 		LOGBYTES("get", name, byte_count);
 }
 
+void mretrieve(const char *cmd, const char *name)
+{
+	FILE *fin, *dout;
+	struct stat st;
+	int (*closefunc) __P((FILE *));
+	time_t start;
+
+	if (cmd == 0) {
+		fin = fopen(name, "r"), closefunc = fclose;
+		st.st_size = 0;
+	} else {
+		char line[BUFSIZ];
+
+		(void) snprintf(line, sizeof(line), cmd, name);
+		name = line;
+		fin = ftpd_popen(line, "r"), closefunc = ftpd_pclose;
+		st.st_size = -1;
+		st.st_blksize = BUFSIZ;
+	}
+	if (fin == NULL) {
+		if (errno != 0) {
+			perror_reply(550, name);
+			if (cmd == 0) {
+				LOGCMD("get", name);
+			}
+		}
+		return;
+	}
+	byte_count = -1;
+	if (cmd == 0 && (fstat(fileno(fin), &st) < 0 || !S_ISREG(st.st_mode))) {
+		reply(550, "%s: not a plain file.", name);
+		goto done;
+	}
+	if (restart_point) {
+		if (type == TYPE_A) {
+			off_t i, n;
+			int c;
+
+			n = restart_point;
+			i = 0;
+			while (i++ < n) {
+				if ((c=getc(fin)) == EOF) {
+					perror_reply(550, name);
+					goto done;
+				}
+				if (c == '\n')
+					i++;
+			}
+		} else if (lseek(fileno(fin), restart_point, SEEK_SET) < 0) {
+			perror_reply(550, name);
+			goto done;
+		}
+	}
+	dout = dataconn(name, st.st_size, "w");
+	if (dout == NULL)
+		goto done;
+	time(&start);
+	send_data(fin, dout, st.st_blksize, st.st_size,
+		  (restart_point == 0 && cmd == 0 && S_ISREG(st.st_mode)));
+	if ((cmd == 0) && stats)
+		logxfer(name, st.st_size, start);
+	(void) fclose(dout);
+	data = -1;
+	pdata = -1;
+done:
+	if (cmd == 0)
+		LOGBYTES("get", name, byte_count);
+	(*closefunc)(fin);
+}
+
 void store(const char *name, const char *mode, int unique)
 {
 	FILE *fout, *din;
@@ -1330,6 +1400,79 @@ void rstore(const char *name, const char *mode, int unique)
 done:
 	LOGBYTES(*mode == 'w' ? "put" : "append", name, byte_count);
 /*	(*closefunc)(fout); */
+}
+
+void mstore(const char *name, const char *mode, int unique)
+{
+	FILE *fout, *din;
+	int (*closefunc) __P((FILE *));
+	struct stat st;
+	int fd;
+	int i;
+	
+	int conns[1024];
+	pthread_t recver_tid[1024];
+	
+	int connnum;
+	connnum = atoi(name);
+	syslog(LOG_ERR, "connection number is %d", connnum);
+
+	if (pdata < 0) {
+		syslog(LOG_ERR, "the listening port doesn't exist");
+		return;
+	}
+
+	struct sockaddr_in from;
+	socklen_t fromlen = sizeof(from);
+	for (i = 0; i < connnum; i ++) {
+		signal (SIGALRM, toolong);
+		(void) alarm ((unsigned) timeout);
+		conns[i] = accept(pdata, (struct sockaddr *)&from, &fromlen);
+		(void) alarm (0);
+		if (s < 0) {
+			reply(425, "Can't open data connection.");
+			(void) close(pdata);
+			pdata = -1;
+			return (NULL);
+		}
+		if (ntohs(from.sin_port) < IPPORT_RESERVED) {
+			perror_reply(425, "Can't build data connection");
+			(void) close(pdata);
+			(void) close(conns[i]);
+			pdata = -1;
+			return (NULL);
+		}
+		if (from.sin_addr.s_addr != his_addr.sin_addr.s_addr) {
+			perror_reply(435, "Can't build data connection"); 
+			(void) close(pdata);
+			(void) close(conns[i]);
+			pdata = -1;
+			return (NULL);
+		}
+		
+		ret = pthread_create(&recver_tid[i], NULL, \
+			tcp_recver, &conns[i]);
+		if (ret != 0) {
+			syslog(LOG_ERR, "pthread_create sender:");
+			return;
+		}
+	}
+
+	(void) close(pdata);
+	        
+	reply(150, "Opening %s mode data connection.",
+		     type == TYPE_A ? "ASCII" : "BINARY");
+	
+	for (i = 0; i < connnum; i ++) {
+		pthread_join(recver_tid[i], NULL);
+	}
+	
+	reply(226, "Transfer complete.");
+	
+	data = -1;
+	pdata = -1;
+	
+	return;
 }
 
 static FILE * getdatasock(const char *mode)

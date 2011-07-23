@@ -148,10 +148,12 @@ int command(const char *fmt, ...);
 void sendrequest(const char *cmd, char *local, char *remote, int printnames);
 void rdmasendrequest(const char *cmd, char *local, char *remote,
 		 int printnames);
+void mssendrequest(const char *cmd, char *local, char *remote, int printnames);
 void recvrequest(const char *cmd, char *local, char *remote, 
 		 const char *lmode, int printnames);
 void rdmarecvrequest(const char *cmd, char *local, char *remote, 
 		 const char *lmode, int printnames);
+void msrecvrequest(const char *cmd, char *local, char *remote, int printnames);
 int another(int *pargc, char ***pargv, const char *prompt);
 void blkfree(char **av0);
 void fatal(const char *msg);

@@ -753,6 +753,162 @@ abort:
 }
 
 void
+mssendrequest(const char *cmd, char *local, char *remote, int printnames)
+{
+	struct stat st;
+	struct timeval start, stop;
+	register int c, d;
+	FILE *volatile fin, *volatile dout = 0;
+	int (*volatile closefunc)(FILE *);
+	void (*volatile oldintr)(int);
+	void (*volatile oldintp)(int);
+	volatile long bytes = 0, hashbytes = HASHBYTES;
+	char buf[BUFSIZ], *bufp;
+	const char *volatile lmode;
+	u_long a1,a2,a3,a4,p1,p2;
+	int i;
+	int ret;
+	
+	if (verbose && printnames) {
+		if (local && *local != '-')
+			printf("local: %s ", local);
+		if (remote)
+			printf("remote: %s\n", remote);
+	}
+	if (proxy) {
+		proxtrans(cmd, local, remote);
+		return;
+	}
+	if (curtype != type)
+		changetype(type, 0);
+	closefunc = NULL;
+	oldintr = NULL;
+	oldintp = NULL;
+	lmode = "w";
+	if (sigsetjmp(sendabort, 1)) {
+		while (cpend) {
+			(void) getreply(0);
+		}
+		if (data >= 0) {
+			(void) close(data);
+			data = -1;
+		}
+		if (oldintr)
+			(void) signal(SIGINT,oldintr);
+		if (oldintp)
+			(void) signal(SIGPIPE,oldintp);
+		code = -1;
+		return;
+	}
+	oldintr = signal(SIGINT, abortsend);
+	
+	/* PASV */
+	if (command("PASV") != COMPLETE) {
+		printf("Passive mode refused.\n");
+		return;
+	}
+	
+	if (sscanf(pasv,"%ld,%ld,%ld,%ld,%ld,%ld",
+			   &a1,&a2,&a3,&a4,&p1,&p2)
+	    != 6) 
+	{
+		printf("Passive mode address scan failure.\n");
+		return;
+	}
+	
+	data_addr.sin_family = AF_INET;
+	data_addr.sin_addr.s_addr = htonl((a1 << 24) | (a2 << 16) |
+					  (a3 << 8) | a4);
+	data_addr.sin_port = htons((p1 << 8) | p2);
+	
+	int conns[1024];
+	pthread_t sender_tid[1024];
+	
+	for (i = 0; i < opt.rcstreamnum; i ++) {
+		conns[i] = socket(AF_INET, SOCK_STREAM, 0);
+		if (conns[i] < 0) {
+			perror("ftp: socket");
+			return;
+		}
+		
+		if (connect(conns[i], (struct sockaddr *) &data_addr,
+			sizeof(data_addr)) < 0) {
+			perror("ftp: connect");
+			return;
+		}
+
+	}
+	
+	if (sigsetjmp(sendabort, 1))
+		goto abort;
+		
+	/* MSTR [num of connection] */
+	if (command("%s %d", cmd, opt.rcstreamnum) != PRELIM) {
+		(void) signal(SIGINT, oldintr);
+		if (oldintp)
+			(void) signal(SIGPIPE, oldintp);
+		if (closefunc != NULL)
+			(*closefunc)(fin);
+		return;
+	}
+
+	(void) gettimeofday(&start, (struct timezone *)0);
+	oldintp = signal(SIGPIPE, SIG_IGN);
+	
+	/* create tcp_sender(int conn) */
+	for (i = 0; i < opt.rcstreamnum; i ++) {
+		ret = pthread_create(&sender_tid[i], NULL, \
+			tcp_sender, &conns[i]);
+		if (ret != 0) {
+			perror("pthread_create sender:");
+			return;
+		}
+	}
+	
+	/* join tcp_sender() */
+	for (i = 0; i < opt.rcstreamnum; i ++) {
+		pthread_join(sender_tid[i], NULL);
+	}
+	
+	bytes = (long) transtotallen;
+	
+	(void) gettimeofday(&stop, (struct timezone *)0);
+	
+	/* closes data as well, so discard it */
+	data = -1;
+	(void) getreply(0);
+	(void) signal(SIGINT, oldintr);
+	if (oldintp)
+		(void) signal(SIGPIPE, oldintp);
+	if (bytes > 0)
+		ptransfer("sent", bytes, &start, &stop);
+	return;
+abort:
+	(void) gettimeofday(&stop, (struct timezone *)0);
+	(void) signal(SIGINT, oldintr);
+	if (oldintp)
+		(void) signal(SIGPIPE, oldintp);
+	if (!cpend) {
+		code = -1;
+		return;
+	}
+	if (dout) {
+		(void) fclose(dout);
+	}
+	if (data >= 0) {
+		/* if it just got closed with dout, again won't hurt */
+		(void) close(data);
+		data = -1;
+	}
+	(void) getreply(0);
+	code = -1;
+	if (closefunc != NULL && fin != NULL)
+		(*closefunc)(fin);
+	if (bytes > 0)
+		ptransfer("sent", bytes, &start, &stop);
+}
+
+void
 rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 {
 	struct stat st;

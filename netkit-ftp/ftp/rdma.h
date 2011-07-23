@@ -431,6 +431,10 @@ void	*writer(void *);
 
 void	*scheduler(void *);
 
+/* for tcp */
+void	*tcp_sender(void *);
+void	*tcp_recver(void *);
+
 int load_dat_blk(BUFDATBLK *);
 
 int offload_dat_blk(BUFDATBLK *);

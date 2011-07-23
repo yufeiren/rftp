@@ -2740,6 +2740,182 @@ scheduler(void *arg)
 	pthread_exit(NULL);
 }
 
+void *
+tcp_sender(void *arg)
+{
+	off_t totallen;
+	off_t currlen;
+	off_t leftlen;
+	int thislen;
+	BUFDATBLK *bufblk;
+	rmsgheader rhdr;
+	
+	int conn = *((int *) arg);
+	
+	FILEINFO *item;
+	
+	long pgsz;
+	
+	struct stat st;
+	
+	thislen = 0;
+	currlen = 0;
+	
+	pgsz = getpagesize();
+	
+	char buf[16*1024];
+	off_t filelen;
+	off_t n;
+	char *bufp;
+	register int c, d;
+	
+	for ( ; ; ) {
+		/* get file info block */
+		TAILQ_LOCK(&finfo_tqh);
+		if (TAILQ_EMPTY(&finfo_tqh)) {
+			TAILQ_UNLOCK(&finfo_tqh);
+			break;
+		}
+		
+		item = TAILQ_FIRST(&finfo_tqh);
+		TAILQ_REMOVE(&finfo_tqh, item, entries);
+		
+		TAILQ_UNLOCK(&finfo_tqh);
+		
+		if (   (opt.directio == true)
+		    && (stat(item->lf, &st) < 0 || S_ISREG(st.st_mode)))
+			item->fd = open(item->lf, O_RDONLY | O_DIRECT);
+		else
+			item->fd = open(item->lf, O_RDONLY);
+		if (item->fd < 0) {
+			syslog(LOG_ERR, "Open failed %s", item->lf);
+			exit(EXIT_FAILURE);
+		}
+		
+		/* file information(1032) = file path(1024) + file size (8) */
+		memset(buf, '\0', 16 * 1024);
+		memcpy(buf, item->rf, strlen(item->rf));
+		filelen = htonll(item->fsize);
+		memcpy(buf + 1024, &filelen, 8);
+		if (writen(conn, buf, 1032) != 1032) {
+			syslog(LOG_ERR, "writen fail");
+			break;
+		}
+		
+		/* deal with one file with the size item->fsize */
+		if (opt.usesplice == true) {
+		printf("use splice to transfer data\n");
+			off_t offset;
+			offset = 0;
+			fs_splice(conn, item->fd, offset, item->fsize);
+		} else if (opt.usesendfile == true) { /* sendfile */
+		printf("use sendfile to transfer data\n");
+			off_t offset;
+			offset = 0;
+			sendfilen(conn, item->fd, offset, item->fsize);
+		} else
+		while ((c = read(item->fd, buf, sizeof (buf))) > 0) {
+			for (bufp = buf; c > 0; c -= d, bufp += d)
+				if ((d = write(conn, bufp, c)) <= 0)
+					break;
+		}
+	}
+	
+	/* close the connection */
+	close(conn);
+	
+	/* data read finished */
+	pthread_exit((void *) NULL);
+}
+
+void *
+tcp_recver(void *arg)
+{
+	off_t totallen;
+	off_t currlen;
+	off_t leftlen;
+	int thislen;
+	BUFDATBLK *bufblk;
+	rmsgheader rhdr;
+	
+	int conn = *((int *) arg);
+	
+	FILEINFO *item;
+	
+	int innersize;
+	int seqnum;
+	
+	long pgsz;
+	
+	struct stat st;
+	
+	thislen = 0;
+	currlen = 0;
+	
+	pgsz = getpagesize();
+	
+	char buf[16*1024];
+	char filename[1024];
+	char tmp[32];
+	off_t filesize;
+	int cnt;
+	int fd;
+	
+	for ( ; ; ) {
+		/* recv header */
+		if (readn(conn, buf, 1032) != 1032)
+			break;
+		
+		memset(filename, '\0', 1024);
+		memset(tmp, '\0', 32);
+
+		strncpy(filename, buf, 1024);
+		memcpy(tmp, buf + 1024, 8);
+		filesize = ntohll(tmp);
+		syslog(LOG_ERR, "got a new file %s, size %ld", \
+			filename, filesize);
+		
+		pthread_mutex_lock(&dir_mutex);
+		parsedir(filename);
+		pthread_mutex_unlock(&dir_mutex);
+		
+		/* open file */
+		if (   (opt.directio == true)
+		    && (stat(filename, &st) < 0 || S_ISREG(st.st_mode)))
+			fd = open(filename, O_WRONLY | O_CREAT| O_DIRECT, 0666);
+		else
+			fd = open(filename, O_WRONLY | O_CREAT, 0666);
+		if (fd < 0) {
+			syslog(LOG_ERR, "Open failed %s", filename);
+			exit(EXIT_FAILURE);
+		}
+		
+		/* recv payload */
+		if (opt.usesplice == true) {
+			off_t offset;
+			offset = 0;
+			syslog(LOG_ERR, "start sf_splice");
+			sf_splice(fd, conn, offset, filesize);
+		} else
+		do {
+			(void) alarm ((unsigned) timeout);
+			cnt = read(conn, buf, sizeof(buf));
+			(void) alarm (0);
+
+			if (cnt > 0) {
+				if (writen(fd, buf, cnt) != cnt)
+					break;
+			}
+		} while (cnt > 0);
+	}
+	
+	/* close the connection */
+	close(sock);
+	
+	/* data read finished */
+	pthread_exit((void *) currlen);
+}
+
 void
 parsedir(const char *dir)
 {

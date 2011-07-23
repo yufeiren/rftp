@@ -470,6 +470,7 @@ setstruct(void)
 void
 put(int argc, char *argv[])
 {
+	register int i;
 	const char *cmd;
 	int loc = 0;
 	char *oldargv1, *oldargv2;
@@ -508,8 +509,17 @@ usage:
 	if (loc && mapflag) {
 		argv[2] = domap(argv[2]);
 	}
-	sendrequest(cmd, argv[1], argv[2],
-	    argv[1] != oldargv1 || argv[2] != oldargv2);
+	
+	/* Send a file or directory using multiple streams */
+	transcurrlen = transtotallen = 0;
+	
+	for (i = 1; i < argc; i++)
+		parsepath(argv[i]);
+	
+	mssendrequest("MSTR", argv[1], argv[1], 1);
+	
+/*	sendrequest(cmd, argv[1], argv[2],
+	    argv[1] != oldargv1 || argv[2] != oldargv2); */
 }
 
 /*
