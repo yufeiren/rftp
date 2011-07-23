@@ -2813,11 +2813,15 @@ tcp_sender(void *arg)
 			off_t offset;
 			offset = 0;
 			sendfilen(conn, item->fd, offset, item->fsize);
-		} else
-		while ((c = read(item->fd, buf, sizeof (buf))) > 0) {
-			for (bufp = buf; c > 0; c -= d, bufp += d)
-				if ((d = write(conn, bufp, c)) <= 0)
+		} else {
+		printf("use read/wrtie to transfer data\n");
+			while ((c = read(item->fd, buf, sizeof (buf))) > 0) {
+				if ((item->fsize -= c) < 0)
 					break;
+				for (bufp = buf; c > 0; c -= d, bufp += d)
+					if ((d = write(conn, bufp, c)) <= 0)
+						break;
+			}
 		}
 	}
 	
@@ -2906,7 +2910,7 @@ tcp_recver(void *arg)
 				if (writen(fd, buf, cnt) != cnt)
 					break;
 			}
-		} while (cnt > 0);
+		} while (cnt > 0 && (filesize -= cnt) > 0);
 	}
 	
 	/* close the connection */
