@@ -1409,7 +1409,7 @@ void mstore(const char *name, const char *mode, int unique)
 	struct stat st;
 	int fd;
 	int i;
-	
+	int ret;
 	int conns[1024];
 	pthread_t recver_tid[1024];
 	
