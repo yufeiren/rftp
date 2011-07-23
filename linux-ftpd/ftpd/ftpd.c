@@ -1429,7 +1429,7 @@ void mstore(const char *name, const char *mode, int unique)
 		(void) alarm ((unsigned) timeout);
 		conns[i] = accept(pdata, (struct sockaddr *)&from, &fromlen);
 		(void) alarm (0);
-		if (s < 0) {
+		if (conns[i] < 0) {
 			reply(425, "Can't open data connection.");
 			(void) close(pdata);
 			pdata = -1;
