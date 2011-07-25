@@ -1837,7 +1837,8 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 				// Just skip to the top of the loop and try again
 				continue;
 			}
-			perror("splice");
+			syslog(LOG_ERR, "splice fail: %d[%s]", \
+				errno, strerror(errno));
 			close(pipefd[0]);
 			close(pipefd[1]);
 			return -1;
@@ -2796,11 +2797,14 @@ tcp_sender(void *arg)
 		memset(buf, '\0', 16 * 1024);
 		memcpy(buf, item->rf, strlen(item->rf));
 		filelen = htonll(item->fsize);
+		syslog(LOG_ERR, "file length is: %ld", item->fsize);
 		memcpy(buf + 1024, &filelen, 8);
 		if (writen(conn, buf, 1032) != 1032) {
 			syslog(LOG_ERR, "writen fail");
 			break;
 		}
+		syslog(LOG_ERR, "start file: %s, size: %ld", \
+			item->rf, item->fsize);
 		
 		/* deal with one file with the size item->fsize */
 		if (opt.usesplice == true) {
@@ -2875,8 +2879,8 @@ tcp_recver(void *arg)
 
 		strncpy(filename, buf, 1024);
 		memcpy(tmp, buf + 1024, 8);
-		filesize = ntohll(tmp);
-		syslog(LOG_ERR, "got a new file %s, size %ld", \
+		filesize = ntohll(atoll(tmp));
+		syslog(LOG_ERR, "a new file: %s, size: %ld", \
 			filename, filesize);
 		
 		pthread_mutex_lock(&dir_mutex);
