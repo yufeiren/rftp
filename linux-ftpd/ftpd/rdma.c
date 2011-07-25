@@ -1763,7 +1763,7 @@ fs_splice(int out_fd, int in_fd, off_t offset, size_t count)
 	size_t total_bytes_sent = 0;
 
 	if ( pipe(pipefd) < 0 ) {
-		perror("pipe");
+		syslog(LOG_ERR, "pipe fail");
 		return -1;
 	}
 	
@@ -1773,13 +1773,14 @@ fs_splice(int out_fd, int in_fd, off_t offset, size_t count)
 	while (total_bytes_sent < count) {
 		if ((bytes_sent = splice(in_fd, NULL, pipefd[1], NULL,
 			splice_block_size,
-			SPLICE_F_MORE | SPLICE_F_MOVE)) <= 0) {
+			SPLICE_F_MOVE)) <= 0) {
 			if (errno == EINTR || errno == EAGAIN) {
 				// Interrupted system call/try again
 				// Just skip to the top of the loop and try again
 				continue;
 			}
-			perror("splice");
+			syslog(LOG_ERR, "splice file2pipe fail: %d[%s]", \
+				errno, strerror(errno));
 			close(pipefd[0]);
 			close(pipefd[1]);
 			return -1;
@@ -1789,13 +1790,15 @@ fs_splice(int out_fd, int in_fd, off_t offset, size_t count)
 		bytes_in_pipe = bytes_sent;
 		while (bytes_in_pipe > 0) {
 			if ((bytes = splice(pipefd[0], NULL, out_fd, NULL, bytes_in_pipe,
-				SPLICE_F_MORE | SPLICE_F_MOVE)) <= 0) {
+				SPLICE_F_MOVE)) <= 0) {
 				if (errno == EINTR || errno == EAGAIN) {
 					// Interrupted system call/try again
 					// Just skip to the top of the loop and try again
 					continue;
 				}
-				perror("splice");
+				syslog(LOG_ERR, \
+					"splice pipe2sock fail: %d[%s]", \
+					errno, strerror(errno));
 				close(pipefd[0]);
 				close(pipefd[1]);
 				return -1;
@@ -1821,7 +1824,7 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 	size_t total_bytes_recv = 0;
 
 	if ( pipe(pipefd) < 0 ) {
-		perror("pipe");
+		syslog(LOG_ERR, "pipe fail");
 		return -1;
 	}
 	
@@ -1831,13 +1834,13 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 	while ((count == 0) || (total_bytes_recv < count)) {
 		if ((bytes_recv = splice(in_fd, NULL, pipefd[1], NULL,
 			splice_block_size,
-			SPLICE_F_MORE | SPLICE_F_MOVE)) < 0) {
+			SPLICE_F_MOVE)) < 0) {
 			if (errno == EINTR || errno == EAGAIN) {
 				// Interrupted system call/try again
 				// Just skip to the top of the loop and try again
 				continue;
 			}
-			syslog(LOG_ERR, "splice fail: %d[%s]", \
+			syslog(LOG_ERR, "splice sock2pipe fail: %d[%s]", \
 				errno, strerror(errno));
 			close(pipefd[0]);
 			close(pipefd[1]);
@@ -1848,18 +1851,21 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 		// Splice the data from the pipe into out_fd
 		bytes_in_pipe = bytes_recv;
 		while (bytes_in_pipe > 0) {
-			if ((bytes = splice(pipefd[0], NULL, out_fd, &offset, bytes_in_pipe,
-				SPLICE_F_MORE | SPLICE_F_MOVE)) <= 0) {
+			if ((bytes = splice(pipefd[0], NULL, out_fd, NULL, bytes_in_pipe,
+				SPLICE_F_MOVE)) <= 0) {
 				if (errno == EINTR || errno == EAGAIN) {
 					// Interrupted system call/try again
 					// Just skip to the top of the loop and try again
 					continue;
 				}
-				perror("splice");
+				syslog(LOG_ERR, \
+					"splice pipe2file fail: %d[%s]", \
+					errno, strerror(errno));
 				close(pipefd[0]);
 				close(pipefd[1]);
 				return -1;
 			}
+			/* offset += bytes; */
 			bytes_in_pipe -= bytes;
 		}
 	
@@ -2766,6 +2772,7 @@ tcp_sender(void *arg)
 	
 	char buf[16*1024];
 	off_t filelen;
+	off_t sendsize;
 	off_t n;
 	char *bufp;
 	register int c, d;
@@ -2797,7 +2804,6 @@ tcp_sender(void *arg)
 		memset(buf, '\0', 16 * 1024);
 		memcpy(buf, item->rf, strlen(item->rf));
 		filelen = htonll(item->fsize);
-		syslog(LOG_ERR, "file length is: %ld", item->fsize);
 		memcpy(buf + 1024, &filelen, 8);
 		if (writen(conn, buf, 1032) != 1032) {
 			syslog(LOG_ERR, "writen fail");
@@ -2811,7 +2817,10 @@ tcp_sender(void *arg)
 		printf("use splice to transfer data\n");
 			off_t offset;
 			offset = 0;
-			fs_splice(conn, item->fd, offset, item->fsize);
+			syslog(LOG_ERR, "fs_splice from disk to socket");
+			sendsize = fs_splice(conn, item->fd, offset, item->fsize);
+			syslog(LOG_ERR, "fs_splice %s %ld bytes", \
+				item->rf, sendsize);
 		} else if (opt.usesendfile == true) { /* sendfile */
 		printf("use sendfile to transfer data\n");
 			off_t offset;
@@ -2827,6 +2836,8 @@ tcp_sender(void *arg)
 						break;
 			}
 		}
+		
+		close(item->fd);
 	}
 	
 	/* close the connection */
@@ -2864,8 +2875,8 @@ tcp_recver(void *arg)
 	
 	char buf[16*1024];
 	char filename[1024];
-	char tmp[32];
 	off_t filesize;
+	off_t recvsize;
 	int cnt;
 	int fd;
 	
@@ -2875,11 +2886,10 @@ tcp_recver(void *arg)
 			break;
 		
 		memset(filename, '\0', 1024);
-		memset(tmp, '\0', 32);
 
-		strncpy(filename, buf, 1024);
-		memcpy(tmp, buf + 1024, 8);
-		filesize = ntohll(atoll(tmp));
+		memcpy(filename, buf, 1024);
+		memcpy(&filesize, buf + 1024, 8);
+		filesize = ntohll(filesize);
 		syslog(LOG_ERR, "a new file: %s, size: %ld", \
 			filename, filesize);
 		
@@ -2902,8 +2912,10 @@ tcp_recver(void *arg)
 		if (opt.usesplice == true) {
 			off_t offset;
 			offset = 0;
-			syslog(LOG_ERR, "start sf_splice");
-			sf_splice(fd, conn, offset, filesize);
+			syslog(LOG_ERR, "sf_splice from socket to disk");
+			recvsize = sf_splice(fd, conn, offset, filesize);
+			syslog(LOG_ERR, "sf_splice %s %ld bytes", \
+				filename, recvsize);
 		} else
 		do {
 			(void) alarm ((unsigned) 900);
@@ -2915,6 +2927,8 @@ tcp_recver(void *arg)
 					break;
 			}
 		} while (cnt > 0 && (filesize -= cnt) > 0);
+		
+		close(fd);
 	}
 	
 	/* close the connection */

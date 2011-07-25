@@ -2836,6 +2836,8 @@ tcp_sender(void *arg)
 						break;
 			}
 		}
+		
+		close(item->fd);
 	}
 	
 	/* close the connection */
