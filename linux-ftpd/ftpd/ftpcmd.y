@@ -760,6 +760,10 @@ byte_size
 	: NUMBER
 	;
 
+conn_number
+	: NUMBER
+	;
+
 host_port
 	: NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA
 		NUMBER COMMA NUMBER
