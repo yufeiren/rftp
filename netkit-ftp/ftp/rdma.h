@@ -422,6 +422,10 @@ ssize_t fs_splice(int out_fd, int in_fd, off_t offset, size_t count);
 /* socket to file */
 ssize_t sf_splice(int out_fd, int in_fd, off_t offset, size_t count);
 
+ssize_t fs_splice1(int out_fd, int in_fd, off_t offset, size_t count);
+ssize_t sf_splice1(int out_fd, int in_fd, off_t offset, size_t count);
+
+
 /* start_routine for thread */
 
 void	*sender(void *);
