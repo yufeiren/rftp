@@ -1900,7 +1900,7 @@ fs_splice1(int out_fd, int in_fd, off_t offset, size_t count)
 				// Just skip to the top of the loop and try again
 				continue;
 			}
-			perror("splice");
+			syslog(LOG_ERR, "splice");
 			close(pipefd[0]);
 			close(pipefd[1]);
 			return -1;
@@ -1916,7 +1916,7 @@ fs_splice1(int out_fd, int in_fd, off_t offset, size_t count)
 					// Just skip to the top of the loop and try again
 					continue;
 				}
-				perror("splice");
+				syslog(LOG_ERR, "splice");
 				close(pipefd[0]);
 				close(pipefd[1]);
 				return -1;
@@ -1958,7 +1958,7 @@ sf_splice1(int out_fd, int in_fd, off_t offset, size_t count)
 				// Just skip to the top of the loop and try again
 				continue;
 			}
-			perror("splice");
+			syslog(LOG_ERR, "splice");
 			close(pipefd[0]);
 			close(pipefd[1]);
 			return -1;
@@ -1975,7 +1975,7 @@ sf_splice1(int out_fd, int in_fd, off_t offset, size_t count)
 					// Just skip to the top of the loop and try again
 					continue;
 				}
-				perror("splice");
+				syslog(LOG_ERR, "splice");
 				close(pipefd[0]);
 				close(pipefd[1]);
 				return -1;
