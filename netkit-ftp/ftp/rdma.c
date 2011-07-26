@@ -1790,7 +1790,7 @@ fs_splice(int out_fd, int in_fd, off_t offset, size_t count)
 		bytes_in_pipe = bytes_sent;
 		while (bytes_in_pipe > 0) {
 			if ((bytes = splice(pipefd[0], NULL, out_fd, NULL, bytes_in_pipe,
-				SPLICE_F_MOVE)) <= 0) {
+				SPLICE_F_MORE | SPLICE_F_MOVE)) <= 0) {
 				if (errno == EINTR || errno == EAGAIN) {
 					// Interrupted system call/try again
 					// Just skip to the top of the loop and try again

@@ -513,8 +513,8 @@ usage:
 	/* Send a file or directory using multiple streams */
 	transcurrlen = transtotallen = 0;
 	
-	for (i = 1; i < argc; i++)
-		parsepath(argv[i]);
+	/* for (i = 1; i < argc; i++) */
+	parsepath(argv[1]);
 	
 	mssendrequest("MSTR", argv[1], argv[1], 1);
 	
