@@ -836,12 +836,11 @@ mssendrequest(const char *cmd, char *local, char *remote, int printnames)
 			perror("ftp: connect");
 			return;
 		}
-
 	}
 	
 	if (sigsetjmp(sendabort, 1))
 		goto abort;
-		
+	
 	/* MSTR [num of connection] */
 	if (command("%s %d", cmd, opt.rcstreamnum) != PRELIM) {
 		(void) signal(SIGINT, oldintr);
@@ -1609,6 +1608,218 @@ break2:
 		(void) signal(SIGPIPE, oldintp);
 	(void) gettimeofday(&stop, (struct timezone *)0);
 	(void) fclose(din);
+	/* closes data as well, so discard it */
+	data = -1;
+	(void) getreply(0);
+	if (bytes > 0 && is_retr)
+		ptransfer("received", bytes, &start, &stop);
+	return;
+abort:
+
+/* abort using RFC959 recommended IP,SYNC sequence  */
+
+	(void) gettimeofday(&stop, (struct timezone *)0);
+	if (oldintp)
+		(void) signal(SIGPIPE, oldintp);
+	(void) signal(SIGINT, SIG_IGN);
+	if (!cpend) {
+		code = -1;
+		(void) signal(SIGINT, oldintr);
+		return;
+	}
+
+	abort_remote(din);
+	code = -1;
+	if (closefunc != NULL && fout != NULL)
+		(*closefunc)(fout);
+	if (din) {
+		(void) fclose(din);
+	}
+	if (data >= 0) {
+		/* if it just got closed with din, again won't hurt */
+		(void) close(data);
+		data = -1;
+	}
+	if (bytes > 0)
+		ptransfer("received", bytes, &start, &stop);
+	(void) signal(SIGINT, oldintr);
+}
+
+void
+msrecvrequest(const char *cmd, 
+	    char *volatile local, char *remote, 
+	    const char *lmode, int printnames)
+{
+	FILE *volatile fout, *volatile din = 0;
+	int (*volatile closefunc)(FILE *);
+	void (*volatile oldintp)(int);
+	void (*volatile oldintr)(int);
+	volatile int is_retr, tcrflag, bare_lfs = 0;
+	static unsigned bufsize;
+	static char *buf;
+	volatile long bytes = 0, hashbytes = HASHBYTES;
+	register int c, d;
+	struct timeval start, stop;
+	struct stat st;
+	int i;
+	int ret;
+	
+	is_retr = strcmp(cmd, "MRTR") == 0;
+	if (is_retr && verbose && printnames) {
+		if (local && *local != '-')
+			printf("local: %s ", local);
+		if (remote)
+			printf("remote: %s\n", remote);
+	}
+	if (proxy && is_retr) {
+		proxtrans(cmd, local, remote);
+		return;
+	}
+	closefunc = NULL;
+	oldintr = NULL;
+	oldintp = NULL;
+	tcrflag = !crflag && is_retr;
+	if (sigsetjmp(recvabort, 1)) {
+		while (cpend) {
+			(void) getreply(0);
+		}
+		if (data >= 0) {
+			(void) close(data);
+			data = -1;
+		}
+		if (oldintr)
+			(void) signal(SIGINT, oldintr);
+		code = -1;
+		return;
+	}
+	oldintr = signal(SIGINT, abortrecv);
+	if (strcmp(local, "-") && *local != '|') {
+		if (access(local, W_OK) < 0) {
+			char *dir = rindex(local, '/');
+
+			if (errno != ENOENT && errno != EACCES) {
+				fprintf(stderr, "local: %s: %s\n", local,
+					strerror(errno));
+				(void) signal(SIGINT, oldintr);
+				code = -1;
+				return;
+			}
+			if (dir != NULL)
+				*dir = 0;
+			d = access(dir ? local : ".", W_OK);
+			if (dir != NULL)
+				*dir = '/';
+			if (d < 0) {
+				fprintf(stderr, "local: %s: %s\n", local,
+					strerror(errno));
+				(void) signal(SIGINT, oldintr);
+				code = -1;
+				return;
+			}
+			if (!runique && errno == EACCES &&
+			    chmod(local, 0600) < 0) {
+				fprintf(stderr, "local: %s: %s\n", local,
+					strerror(errno));
+				/*
+				 * Believe it or not, this was actually
+				 * repeated in the original source.
+				 */
+				(void) signal(SIGINT, oldintr);
+				/*(void) signal(SIGINT, oldintr);*/
+				code = -1;
+				return;
+			}
+			if (runique && errno == EACCES &&
+			   (local = gunique(local)) == NULL) {
+				(void) signal(SIGINT, oldintr);
+				code = -1;
+				return;
+			}
+		}
+		else if (runique && (local = gunique(local)) == NULL) {
+			(void) signal(SIGINT, oldintr);
+			code = -1;
+			return;
+		}
+	}
+	if (!is_retr) {
+		if (curtype != TYPE_A)
+			changetype(TYPE_A, 0);
+	} 
+	else if (curtype != type) {
+		changetype(type, 0);
+	}
+	
+	/* PASV */
+	if (command("PASV") != COMPLETE) {
+		printf("Passive mode refused.\n");
+		return;
+	}
+	
+	if (sscanf(pasv,"%ld,%ld,%ld,%ld,%ld,%ld",
+			   &a1,&a2,&a3,&a4,&p1,&p2)
+	    != 6) 
+	{
+		printf("Passive mode address scan failure.\n");
+		return;
+	}
+	
+	data_addr.sin_family = AF_INET;
+	data_addr.sin_addr.s_addr = htonl((a1 << 24) | (a2 << 16) |
+					  (a3 << 8) | a4);
+	data_addr.sin_port = htons((p1 << 8) | p2);
+	
+	int conns[1024];
+	pthread_t recver_tid[1024];
+	
+	for (i = 0; i < opt.rcstreamnum; i ++) {
+		conns[i] = socket(AF_INET, SOCK_STREAM, 0);
+		if (conns[i] < 0) {
+			perror("ftp: socket");
+			return;
+		}
+		
+		if (connect(conns[i], (struct sockaddr *) &data_addr,
+			sizeof(data_addr)) < 0) {
+			perror("ftp: connect");
+			return;
+		}
+	}
+	
+	if (sigsetjmp(recvabort, 1))
+		goto abort;
+	
+	/* MRTR [number of connection] [dir or file] */
+	if (command("%s %d %s", cmd, opt.rcstreamnum, remote) != PRELIM) {
+		(void) signal(SIGINT, oldintr);
+		if (oldintp)
+			(void) signal(SIGPIPE, oldintp);
+		if (closefunc != NULL)
+			(*closefunc)(fin);
+		return;
+	}
+	
+	(void) gettimeofday(&start, (struct timezone *)0);
+	
+	/* create tcp_recver(int conn) */
+	for (i = 0; i < opt.rcstreamnum; i ++) {
+		ret = pthread_create(&recver_tid[i], NULL, \
+			tcp_recver, &conns[i]);
+		if (ret != 0) {
+			perror("pthread_create sender:");
+			return;
+		}
+	}
+	
+	/* join tcp_sender() */
+	for (i = 0; i < opt.rcstreamnum; i ++) {
+		pthread_join(recver_tid[i], NULL);
+	}
+	
+	bytes = (long) transtotallen;
+	
+	(void) gettimeofday(&stop, (struct timezone *)0);
+
 	/* closes data as well, so discard it */
 	data = -1;
 	(void) getreply(0);

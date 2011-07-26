@@ -1825,14 +1825,14 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 		return -1;
 	}
 	
-	size_t splice_block_size = 1024;	/* 1K */
+	size_t splice_block_size = 4096;
 	
 	// Splice the data from in_fd into the pipe
 	while ((count == 0) || (total_bytes_recv < count)) {
-		if (count - total_bytes_recv < 1024)
+		if (count - total_bytes_recv < 4096)
 			splice_block_size = count - total_bytes_recv;
 		else
-			splice_block_size = 1024;
+			splice_block_size = 4096;
 		if ((bytes_recv = splice(in_fd, NULL, pipefd[1], NULL,
 			splice_block_size,
 			SPLICE_F_MORE | SPLICE_F_MOVE)) < 0) {

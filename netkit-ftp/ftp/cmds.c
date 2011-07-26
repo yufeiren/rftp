@@ -928,8 +928,13 @@ usage:
 		}
 	}
 
-	recvrequest("RETR", argv[2], argv[1], modestr,
+	transcurrlen = transtotallen = 0;
+	
+	msrecvrequest("MRTR", argv[2], argv[1], modestr,
 		    argv[1] != oldargv1 || argv[2] != oldargv2);
+
+/*	recvrequest("RETR", argv[2], argv[1], modestr,
+		    argv[1] != oldargv1 || argv[2] != oldargv2); */
 	restart_point = 0;
 	return (0);
 }

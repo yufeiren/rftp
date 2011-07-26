@@ -223,7 +223,7 @@ struct tab sitetab[] = {
 %type	<i> check_login octal_number byte_size
 %type	<i> struct_code mode_code type_code form_code
 %type	<s> pathstring pathname password username
-%type	<i> host_port
+%type	<i> host_port conn_number
 
 %start	cmd_list
 
@@ -403,12 +403,12 @@ cmd
 			if ($4 != NULL)
 				free($4);
 		}
-	| MRTR check_login SP pathname CRLF
+	| MRTR check_login SP conn_number SP pathname CRLF
 		{
-			if ($2 && $4 != NULL)
-				mretrieve((char *) 0, $4);
-			if ($4 != NULL)
-				free($4);
+			if ($2 && $6 != NULL)
+				mretrieve((char *) 0, $6, $4);
+			if ($6 != NULL)
+				free($6);
 		}
 	| STOR check_login SP pathname CRLF
 		{
