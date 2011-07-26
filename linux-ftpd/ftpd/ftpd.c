@@ -1182,7 +1182,7 @@ void mretrieve(const char *cmd, const char *name, int conn_number)
 
 	struct sockaddr_in from;
 	socklen_t fromlen = sizeof(from);
-	for (i = 0; i < connnum; i ++) {
+	for (i = 0; i < conn_number; i ++) {
 		signal (SIGALRM, toolong);
 		(void) alarm ((unsigned) timeout);
 		conns[i] = accept(pdata, (struct sockaddr *)&from, &fromlen);
@@ -1221,7 +1221,7 @@ void mretrieve(const char *cmd, const char *name, int conn_number)
 	reply(150, "Opening %s mode data connection.",
 		     type == TYPE_A ? "ASCII" : "BINARY");
 	
-	for (i = 0; i < connnum; i ++) {
+	for (i = 0; i < conn_number; i ++) {
 		pthread_join(sender_tid[i], NULL);
 	}
 	
