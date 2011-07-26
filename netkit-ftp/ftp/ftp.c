@@ -1796,7 +1796,7 @@ msrecvrequest(const char *cmd,
 		if (oldintp)
 			(void) signal(SIGPIPE, oldintp);
 		if (closefunc != NULL)
-			(*closefunc)(fin);
+			(*closefunc)(fout);
 		return;
 	}
 	
