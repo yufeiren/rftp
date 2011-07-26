@@ -1661,6 +1661,7 @@ msrecvrequest(const char *cmd,
 	register int c, d;
 	struct timeval start, stop;
 	struct stat st;
+	u_long a1,a2,a3,a4,p1,p2;
 	int i;
 	int ret;
 	
