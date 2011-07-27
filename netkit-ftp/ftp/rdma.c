@@ -2894,6 +2894,7 @@ tcp_recver(void *arg)
 		
 		pthread_mutex_lock(&dir_mutex);
 		parsedir(filename);
+		transtotallen += filesize;
 		pthread_mutex_unlock(&dir_mutex);
 		
 		/* open file */
