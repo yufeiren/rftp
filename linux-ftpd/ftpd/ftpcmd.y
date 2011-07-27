@@ -142,7 +142,7 @@ struct tab cmdtab[] = {		/* In order defined in RFC 765 */
 	{ "MODE", MODE, ARGS, 1,	"(specify transfer mode)" },
 	{ "RETR", RETR, STR1, 1,	"<sp> file-name" },
 	{ "RRTR", RRTR, STR1, 1,	"<sp> file-name" },
-	{ "MRTR", MRTR, STR1, 1,	"<sp> file-name" },
+	{ "MRTR", MRTR, NSTR, 1,	"<sp> connections file-name" },
 	{ "STOR", STOR, STR1, 1,	"<sp> file-name" },
 	{ "RSTR", RSTR, STR1, 1,	"<sp> file-name" },
 	{ "MSTR", MSTR, STR1, 1,	"<sp> file-name" },
