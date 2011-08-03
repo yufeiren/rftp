@@ -351,8 +351,9 @@ TAILQ_HEAD(acptq, wcm_id);
 typedef struct rmsgheader {
 	uint32_t sessionid;
 	uint32_t seqnum;
+	uint64_t offset;
 	uint32_t dlen;
-	char blank[4084];	/* getpagesize minus 12 = 4096 - 12 */
+	char blank[4076];	/* getpagesize minus 24 = 4096 - 20 */
 } rmsgheader;
 
 /* prototype - defined in rdma.c*/
@@ -421,6 +422,7 @@ ssize_t fs_splice(int out_fd, int in_fd, off_t offset, size_t count);
 /* socket to file */
 ssize_t sf_splice(int out_fd, int in_fd, off_t offset, size_t count);
 
+
 /* start_routine for thread */
 
 void	*sender(void *);
@@ -429,6 +431,10 @@ void	*reader(void *);
 void	*writer(void *);
 
 void	*scheduler(void *);
+
+/* for tcp */
+void	*tcp_sender(void *);
+void	*tcp_recver(void *);
 
 int load_dat_blk(BUFDATBLK *);
 

@@ -1158,6 +1158,81 @@ done:
 		LOGBYTES("get", name, byte_count);
 }
 
+void mretrieve(const char *cmd, const char *name, int conn_number)
+{
+	FILE *fin, *dout;
+	struct stat st;
+	int (*closefunc) __P((FILE *));
+	time_t start;
+	int fd;
+	int i;
+	int ret;
+	int conns[1024];
+	pthread_t sender_tid[1024];
+	
+	TAILQ_INIT(&finfo_tqh);
+	parsepath(name);
+	
+	syslog(LOG_ERR, "connection number is %d", conn_number);
+
+	if (pdata < 0) {
+		syslog(LOG_ERR, "the listening port doesn't exist");
+		return;
+	}
+
+	struct sockaddr_in from;
+	socklen_t fromlen = sizeof(from);
+	for (i = 0; i < conn_number; i ++) {
+		signal (SIGALRM, toolong);
+		(void) alarm ((unsigned) timeout);
+		conns[i] = accept(pdata, (struct sockaddr *)&from, &fromlen);
+		(void) alarm (0);
+		if (conns[i] < 0) {
+			reply(425, "Can't open data connection.");
+			(void) close(pdata);
+			pdata = -1;
+			return (NULL);
+		}
+		if (ntohs(from.sin_port) < IPPORT_RESERVED) {
+			perror_reply(425, "Can't build data connection");
+			(void) close(pdata);
+			(void) close(conns[i]);
+			pdata = -1;
+			return (NULL);
+		}
+		if (from.sin_addr.s_addr != his_addr.sin_addr.s_addr) {
+			perror_reply(435, "Can't build data connection"); 
+			(void) close(pdata);
+			(void) close(conns[i]);
+			pdata = -1;
+			return (NULL);
+		}
+		
+		ret = pthread_create(&sender_tid[i], NULL, \
+			tcp_sender, &conns[i]);
+		if (ret != 0) {
+			syslog(LOG_ERR, "pthread_create sender:");
+			return;
+		}
+	}
+
+	(void) close(pdata);
+	
+	reply(150, "Opening %s mode data connection.",
+		     type == TYPE_A ? "ASCII" : "BINARY");
+	
+	for (i = 0; i < conn_number; i ++) {
+		pthread_join(sender_tid[i], NULL);
+	}
+	
+	reply(226, "Transfer complete.");
+	
+	data = -1;
+	pdata = -1;
+	
+	return;
+}
+
 void store(const char *name, const char *mode, int unique)
 {
 	FILE *fout, *din;
@@ -1330,6 +1405,79 @@ void rstore(const char *name, const char *mode, int unique)
 done:
 	LOGBYTES(*mode == 'w' ? "put" : "append", name, byte_count);
 /*	(*closefunc)(fout); */
+}
+
+void mstore(const char *name, const char *mode, int unique)
+{
+	FILE *fout, *din;
+	int (*closefunc) __P((FILE *));
+	struct stat st;
+	int fd;
+	int i;
+	int ret;
+	int conns[1024];
+	pthread_t recver_tid[1024];
+	
+	int connnum;
+	connnum = atoi(name);
+	syslog(LOG_ERR, "connection number is %d", connnum);
+
+	if (pdata < 0) {
+		syslog(LOG_ERR, "the listening port doesn't exist");
+		return;
+	}
+
+	struct sockaddr_in from;
+	socklen_t fromlen = sizeof(from);
+	for (i = 0; i < connnum; i ++) {
+		signal (SIGALRM, toolong);
+		(void) alarm ((unsigned) timeout);
+		conns[i] = accept(pdata, (struct sockaddr *)&from, &fromlen);
+		(void) alarm (0);
+		if (conns[i] < 0) {
+			reply(425, "Can't open data connection.");
+			(void) close(pdata);
+			pdata = -1;
+			return (NULL);
+		}
+		if (ntohs(from.sin_port) < IPPORT_RESERVED) {
+			perror_reply(425, "Can't build data connection");
+			(void) close(pdata);
+			(void) close(conns[i]);
+			pdata = -1;
+			return (NULL);
+		}
+		if (from.sin_addr.s_addr != his_addr.sin_addr.s_addr) {
+			perror_reply(435, "Can't build data connection"); 
+			(void) close(pdata);
+			(void) close(conns[i]);
+			pdata = -1;
+			return (NULL);
+		}
+		
+		ret = pthread_create(&recver_tid[i], NULL, \
+			tcp_recver, &conns[i]);
+		if (ret != 0) {
+			syslog(LOG_ERR, "pthread_create sender:");
+			return;
+		}
+	}
+
+	(void) close(pdata);
+	        
+	reply(150, "Opening %s mode data connection.",
+		     type == TYPE_A ? "ASCII" : "BINARY");
+	
+	for (i = 0; i < connnum; i ++) {
+		pthread_join(recver_tid[i], NULL);
+	}
+	
+	reply(226, "Transfer complete.");
+	
+	data = -1;
+	pdata = -1;
+	
+	return;
 }
 
 static FILE * getdatasock(const char *mode)

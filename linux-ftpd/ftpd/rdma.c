@@ -631,6 +631,7 @@ recv_data(void *arg)
 	FILEINFO *finfo;
 	
 	bufblk = NULL;
+	long pgsz;
 	
 	/* event finish */
 	TAILQ_LOCK(&waiting_tqh);
@@ -665,8 +666,23 @@ recv_data(void *arg)
 	
 	bufblk->fd = finfo->fd;
 	bufblk->seqnum = rhdr.seqnum;
-	bufblk->offset = finfo->offset;
+	bufblk->offset = rhdr.offset;
 	bufblk->buflen = rhdr.dlen + sizeof(rhdr);
+	
+	/* non-odirect */
+	pgsz = getpagesize();
+	
+	if (  (opt.directio == true)
+	   && (rhdr.dlen % pgsz != 0) ) {
+		/* open - lseek - read - close */
+		bufblk->fd = open(finfo->lf, O_WRONLY | O_CREAT, 0666);
+		if (bufblk->fd < 0) {
+			syslog(LOG_ERR, "Open failed %s", finfo->lf);
+			exit(EXIT_FAILURE);
+		}
+		
+		lseek(bufblk->fd, bufblk->offset, SEEK_CUR);
+	}
 	
 	BUFDATBLK *tmpblk;
 	
@@ -1737,7 +1753,6 @@ sendfilen(int out_fd, int in_fd, off_t offset, size_t count)
 	return total_bytes_sent;
 }
 
-
 ssize_t
 fs_splice(int out_fd, int in_fd, off_t offset, size_t count)
 {
@@ -1747,28 +1762,27 @@ fs_splice(int out_fd, int in_fd, off_t offset, size_t count)
 	size_t total_bytes_sent = 0;
 
 	if ( pipe(pipefd) < 0 ) {
-		perror("pipe");
+		syslog(LOG_ERR, "pipe fail");
 		return -1;
 	}
-	
-	size_t splice_block_size = 16384;	/* 16K */
 	
 	// Splice the data from in_fd into the pipe
 	while (total_bytes_sent < count) {
 		if ((bytes_sent = splice(in_fd, NULL, pipefd[1], NULL,
-			splice_block_size,
+			count - total_bytes_sent,
 			SPLICE_F_MORE | SPLICE_F_MOVE)) <= 0) {
 			if (errno == EINTR || errno == EAGAIN) {
 				// Interrupted system call/try again
 				// Just skip to the top of the loop and try again
 				continue;
 			}
-			perror("splice");
+			syslog(LOG_ERR, "splice file2pipe fail: %d[%s]",
+				errno, strerror(errno));
 			close(pipefd[0]);
 			close(pipefd[1]);
 			return -1;
 		}
-		
+	
 		// Splice the data from the pipe into out_fd
 		bytes_in_pipe = bytes_sent;
 		while (bytes_in_pipe > 0) {
@@ -1779,7 +1793,9 @@ fs_splice(int out_fd, int in_fd, off_t offset, size_t count)
 					// Just skip to the top of the loop and try again
 					continue;
 				}
-				perror("splice");
+				syslog(LOG_ERR, \
+					"splice pipe2sock fail: %d[%s]", \
+					errno, strerror(errno));
 				close(pipefd[0]);
 				close(pipefd[1]);
 				return -1;
@@ -1805,14 +1821,18 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 	size_t total_bytes_recv = 0;
 
 	if ( pipe(pipefd) < 0 ) {
-		perror("pipe");
+		syslog(LOG_ERR, "pipe fail");
 		return -1;
 	}
 	
-	size_t splice_block_size = 16384;	/* 16KB */
+	size_t splice_block_size = 4096;
 	
 	// Splice the data from in_fd into the pipe
 	while ((count == 0) || (total_bytes_recv < count)) {
+		if (count - total_bytes_recv < 4096)
+			splice_block_size = count - total_bytes_recv;
+		else
+			splice_block_size = 4096;
 		if ((bytes_recv = splice(in_fd, NULL, pipefd[1], NULL,
 			splice_block_size,
 			SPLICE_F_MORE | SPLICE_F_MOVE)) < 0) {
@@ -1821,7 +1841,8 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 				// Just skip to the top of the loop and try again
 				continue;
 			}
-			perror("splice");
+			syslog(LOG_ERR, "splice sock2pipe fail: %d[%s]", \
+				errno, strerror(errno));
 			close(pipefd[0]);
 			close(pipefd[1]);
 			return -1;
@@ -1838,7 +1859,9 @@ sf_splice(int out_fd, int in_fd, off_t offset, size_t count)
 					// Just skip to the top of the loop and try again
 					continue;
 				}
-				perror("splice");
+				syslog(LOG_ERR, \
+					"splice pipe2file fail: %d[%s]", \
+					errno, strerror(errno));
 				close(pipefd[0]);
 				close(pipefd[1]);
 				return -1;
@@ -2489,6 +2512,7 @@ reader(void *arg)
 {
 	off_t totallen;
 	off_t currlen;
+	off_t leftlen;
 	int thislen;
 	BUFDATBLK *bufblk;
 	rmsgheader rhdr;
@@ -2503,10 +2527,14 @@ reader(void *arg)
 	int innersize;
 	int seqnum;
 	
+	long pgsz;
+	
 	struct stat st;
 	
 	thislen = 0;
 	currlen = 0;
+	
+	pgsz = getpagesize();
 	
 	for ( ; ; ) {
 		/* get file info block */
@@ -2544,7 +2572,7 @@ reader(void *arg)
 			while (TAILQ_EMPTY(&free_tqh))
 				if (TAILQ_WAIT(&free_tqh) != 0)
 					continue;
-	
+
 			innersize = 0;
 			while (!TAILQ_EMPTY(&free_tqh) && ++innersize < 10) {
 				bufblk = TAILQ_FIRST(&free_tqh);
@@ -2560,8 +2588,32 @@ reader(void *arg)
 			bufblk = TAILQ_FIRST(&inner_tqh);
 			TAILQ_REMOVE(&inner_tqh, bufblk, entries);
 			
-			bufblk->fd = item->fd;
-			thislen = load_dat_blk(bufblk);
+			if ((leftlen = item->fsize - currlen) <= 0) {
+				TAILQ_INSERT_TAIL(&inner_tqh, bufblk, entries);
+				thislen = 0;
+				break;
+			}
+			
+			if (  (opt.directio == true)
+			   && (leftlen < (bufblk->buflen - sizeof(rmsgheader)))
+			   && (leftlen % pgsz != 0) ) {
+				/* open - lseek - read - close */
+				bufblk->fd = open(item->lf, O_RDONLY);
+				if (bufblk->fd < 0) {
+					syslog(LOG_ERR, "can not open %s", \
+						item->lf);
+					exit(EXIT_FAILURE);
+				}
+				
+				lseek(bufblk->fd, currlen, SEEK_CUR);
+				
+				thislen = readn(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), leftlen);
+				
+				close(bufblk->fd);
+			} else {
+				bufblk->fd = item->fd;
+				thislen = load_dat_blk(bufblk);
+			}
 			DPRINTF(("load %d bytes\n", thislen));
 			
 			if (thislen <= 0) {
@@ -2571,6 +2623,7 @@ reader(void *arg)
 			
 			rhdr.sessionid = item->sessionid;
 			rhdr.seqnum = ++ seqnum;
+			rhdr.offset = currlen;
 			rhdr.dlen = thislen;
 			
 			currlen += thislen;
@@ -2624,7 +2677,7 @@ writer(void *arg)
 		TAILQ_REMOVE(&writer_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&writer_tqh);
-			
+		
 		thislen = offload_dat_blk(bufblk);
 		
 		/* insert to free list */
@@ -2692,6 +2745,197 @@ scheduler(void *arg)
 	} while (item != NULL);
 	
 	pthread_exit(NULL);
+}
+
+void *
+tcp_sender(void *arg)
+{
+	off_t totallen;
+	off_t currlen;
+	off_t leftlen;
+	int thislen;
+	BUFDATBLK *bufblk;
+	rmsgheader rhdr;
+	
+	int conn = *((int *) arg);
+	
+	FILEINFO *item;
+	
+	long pgsz;
+	
+	struct stat st;
+	
+	thislen = 0;
+	currlen = 0;
+	
+	pgsz = getpagesize();
+	
+	char buf[16*1024];
+	off_t filelen;
+	off_t sendsize;
+	off_t n;
+	char *bufp;
+	register int c, d;
+	
+	for ( ; ; ) {
+		/* get file info block */
+		TAILQ_LOCK(&finfo_tqh);
+		if (TAILQ_EMPTY(&finfo_tqh)) {
+			TAILQ_UNLOCK(&finfo_tqh);
+			break;
+		}
+		
+		item = TAILQ_FIRST(&finfo_tqh);
+		TAILQ_REMOVE(&finfo_tqh, item, entries);
+		
+		TAILQ_UNLOCK(&finfo_tqh);
+		
+		if (   (opt.directio == true)
+		    && (stat(item->lf, &st) < 0 || S_ISREG(st.st_mode)))
+			item->fd = open(item->lf, O_RDONLY | O_DIRECT);
+		else
+			item->fd = open(item->lf, O_RDONLY);
+		if (item->fd < 0) {
+			syslog(LOG_ERR, "Open failed %s", item->lf);
+			exit(EXIT_FAILURE);
+		}
+		
+		/* file information(1032) = file path(1024) + file size (8) */
+		memset(buf, '\0', 16 * 1024);
+		memcpy(buf, item->rf, strlen(item->rf));
+		filelen = htonll(item->fsize);
+		memcpy(buf + 1024, &filelen, 8);
+		if (writen(conn, buf, 1032) != 1032) {
+			syslog(LOG_ERR, "writen fail");
+			break;
+		}
+		syslog(LOG_ERR, "start send file: %s, size: %ld", \
+			item->rf, item->fsize);
+		
+		/* deal with one file with the size item->fsize */
+		if (opt.usesplice == true) {
+			off_t offset;
+			offset = 0;
+			syslog(LOG_ERR, "ioengine: splice");
+			sendsize = fs_splice(conn, item->fd, offset, item->fsize);
+			syslog(LOG_ERR, "fs_splice file %s %ld bytes", \
+				item->rf, sendsize);
+		} else if (opt.usesendfile == true) { /* sendfile */
+			syslog(LOG_ERR, "ioengine: sendfile");
+			off_t offset;
+			offset = 0;
+			sendfilen(conn, item->fd, offset, item->fsize);
+		} else {
+			syslog(LOG_ERR, "ioengine: sync(read/write)");
+			while ((c = read(item->fd, buf, sizeof (buf))) > 0) {
+				if ((item->fsize -= c) < 0)
+					break;
+				for (bufp = buf; c > 0; c -= d, bufp += d)
+					if ((d = write(conn, bufp, c)) <= 0)
+						break;
+			}
+		}
+		
+		close(item->fd);
+	}
+	
+	/* close the connection */
+	close(conn);
+	
+	/* data read finished */
+	pthread_exit((void *) NULL);
+}
+
+void *
+tcp_recver(void *arg)
+{
+	off_t totallen;
+	off_t currlen;
+	off_t leftlen;
+	int thislen;
+	BUFDATBLK *bufblk;
+	rmsgheader rhdr;
+	
+	int conn = *((int *) arg);
+	
+	FILEINFO *item;
+	
+	int innersize;
+	int seqnum;
+	
+	long pgsz;
+	
+	struct stat st;
+	
+	thislen = 0;
+	currlen = 0;
+	
+	pgsz = getpagesize();
+	
+	char buf[16*1024];
+	char filename[1024];
+	off_t filesize;
+	off_t recvsize;
+	int cnt;
+	int fd;
+	
+	for ( ; ; ) {
+		/* recv header */
+		if (readn(conn, buf, 1032) != 1032)
+			break;
+		
+		memset(filename, '\0', 1024);
+
+		memcpy(filename, buf, 1024);
+		memcpy(&filesize, buf + 1024, 8);
+		filesize = ntohll(filesize);
+		syslog(LOG_ERR, "start store a new file: %s, size: %ld", \
+			filename, filesize);
+		
+		pthread_mutex_lock(&dir_mutex);
+		parsedir(filename);
+		transtotallen += filesize;
+		pthread_mutex_unlock(&dir_mutex);
+		
+		/* open file */
+		if (   (opt.directio == true)
+		    && (stat(filename, &st) < 0 || S_ISREG(st.st_mode)))
+			fd = open(filename, O_WRONLY | O_CREAT| O_DIRECT, 0666);
+		else
+			fd = open(filename, O_WRONLY | O_CREAT, 0666);
+		if (fd < 0) {
+			syslog(LOG_ERR, "Open failed %s", filename);
+			exit(EXIT_FAILURE);
+		}
+		
+		/* recv payload */
+		if (opt.usesplice == true) {
+			off_t offset;
+			offset = 0;
+			syslog(LOG_ERR, "ioengine: splice");
+			recvsize = sf_splice(fd, conn, offset, filesize);
+			syslog(LOG_ERR, "sf_splice file %s %ld bytes", \
+				filename, recvsize);
+		} else
+		do {
+			(void) alarm ((unsigned) 900);
+			cnt = read(conn, buf, sizeof(buf));
+			(void) alarm (0);
+
+			if (cnt > 0) {
+				if (writen(fd, buf, cnt) != cnt)
+					break;
+			}
+		} while (cnt > 0 && (filesize -= cnt) > 0);
+		
+		close(fd);
+	}
+	
+	/* close the connection */
+	close(conn);
+	
+	/* data read finished */
+	pthread_exit((void *) currlen);
 }
 
 void
@@ -2834,25 +3078,6 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 	/* setup wr */
 	tsf_setup_wr(bufblk);
 	
-	/* talk to peer what type of transfer to use
-	dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
-	dc_cb->send_buf.stat = ACTIVE_WRITE_ADV;
-	ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
-	if (ret) {
-		fprintf(stderr, "post send error %d\n", ret);
-		return 0;
-	}
-	dc_cb->state = ACTIVE_WRITE_ADV; */
-	
-	/* wait the peer tell me where should i write to
-	sem_wait(&dc_cb->sem); */
-/*	if (child_dc_cb->state != ACTIVE_WRITE_RESP) {
-		fprintf(stderr, \
-			"wait for ACTIVE_WRITE_RESP state %d\n", \
-			child_dc_cb->state);
-		return;
-	} */
-	
 	/* start data transfer using RDMA_WRITE */
 	bufblk->rdma_sq_wr.opcode = IBV_WR_RDMA_WRITE;
 	bufblk->rdma_sq_wr.wr.rdma.rkey = rmt->rkey;
@@ -2869,10 +3094,6 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 		  bufblk->rdma_sq_wr.sg_list->addr,
 		  bufblk->rdma_sq_wr.sg_list->length);
 */
-/*	DATAQP *item;
-	item = TAILQ_FIRST(&dcqp_tqh);
-	TAILQ_REMOVE(&dcqp_tqh, item, entries);;
-	TAILQ_INSERT_TAIL(&dcqp_tqh, item, entries); */
 	
 	RCINFO *item;
 	item = TAILQ_FIRST(&rcif_tqh);
@@ -2893,33 +3114,6 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 	/* wait the finish of RDMA_WRITE
 	sem_wait(&dc_cb->sem); */
 	DPRINTF(("sem_wait finish of RDMA_WRITE success\n"));
-/*			if (child_dc_cb->state != ACTIVE_WRITE_FIN) {
-		fprintf(stderr, \
-			"wait for ACTIVE_WRITE_FIN state %d\n", \
-			child_dc_cb->state);
-		return;
-	} */
-	
-	/* tell the peer transfer finished
-	dc_cb->send_buf.mode = kRdmaTrans_ActWrte;
-	dc_cb->send_buf.stat = ACTIVE_WRITE_FIN;
-	ret = ibv_post_send(dc_cb->qp, &dc_cb->sq_wr, &bad_wr);
-	if (ret) {
-		fprintf(stderr, "post send error %d\n", ret);
-		return 0;
-	}
-	DPRINTF(("send_dat_blk: ibv_post_send finish 2\n")); */
-	
-/*	if (tick && (bytes >= hashbytes)) {
-		printf("\rBytes transferred: %ld", bytes);
-		(void) fflush(stdout);
-		while (bytes >= hashbytes)
-			hashbytes += TICKBYTES;
-	} */
-	
-	/* wait the client to notify next round data transfer
-	sem_wait(&dc_cb->sem);
-	DPRINTF(("wait notify next round data transfer success\n")); */
 	
 	return rhdr.dlen;
 }

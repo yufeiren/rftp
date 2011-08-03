@@ -153,8 +153,8 @@ Issues
 
 * splice has higher priority than sendfile. so if 'usesplice' and 'usesendfile' are both set as 'yes', the application will use splice to send data.
 
-* If concurrent clients are wanted, we suggest you could take scripts for convenient to do repeatable task. For example, if you want to transfer some large file, you could do as follows,
- # /root/bin/rcftp -n -i < [script]
+* If concurrent clients are wanted, you could compose scripts for convenient to do repeatable task. For example, if you want to transfer some large file, you could do as follows,
+ # rcftp -n -i < [script]
  in the script file, you could write some task as you want,
 ------------
 open server-addr port

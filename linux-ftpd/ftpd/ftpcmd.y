@@ -142,8 +142,10 @@ struct tab cmdtab[] = {		/* In order defined in RFC 765 */
 	{ "MODE", MODE, ARGS, 1,	"(specify transfer mode)" },
 	{ "RETR", RETR, STR1, 1,	"<sp> file-name" },
 	{ "RRTR", RRTR, STR1, 1,	"<sp> file-name" },
+	{ "MRTR", MRTR, NSTR, 1,	"<sp> connections file-name" },
 	{ "STOR", STOR, STR1, 1,	"<sp> file-name" },
 	{ "RSTR", RSTR, STR1, 1,	"<sp> file-name" },
+	{ "MSTR", MSTR, STR1, 1,	"<sp> file-name" },
 	{ "APPE", APPE, STR1, 1,	"<sp> file-name" },
 	{ "MLFL", MLFL, OSTR, 0,	"(mail file)" },
 	{ "MAIL", MAIL, OSTR, 0,	"(mail to user)" },
@@ -209,7 +211,7 @@ struct tab sitetab[] = {
 	ABOR	DELE	CWD	LIST	NLST	SITE
 	STAT	HELP	NOOP	MKD	RMD	PWD
 	CDUP	STOU	SMNT	SYST	SIZE	MDTM
-	RADR	RPSV	RSTR    RRTR
+	RADR	RPSV	RSTR    RRTR    MSTR    MRTR
 
 	UMASK	IDLE	CHMOD
 
@@ -221,7 +223,7 @@ struct tab sitetab[] = {
 %type	<i> check_login octal_number byte_size
 %type	<i> struct_code mode_code type_code form_code
 %type	<s> pathstring pathname password username
-%type	<i> host_port
+%type	<i> host_port conn_number
 
 %start	cmd_list
 
@@ -401,6 +403,13 @@ cmd
 			if ($4 != NULL)
 				free($4);
 		}
+	| MRTR check_login SP conn_number SP pathname CRLF
+		{
+			if ($2 && $6 != NULL)
+				mretrieve((char *) 0, $6, $4);
+			if ($6 != NULL)
+				free($6);
+		}
 	| STOR check_login SP pathname CRLF
 		{
 			if ($2 && $4 != NULL)
@@ -412,6 +421,13 @@ cmd
 		{
 			if ($2 && $4 != NULL)
 				rstore($4, "w", 0);
+			if ($4 != NULL)
+				free($4);
+		}
+	| MSTR check_login SP pathname CRLF
+		{
+			if ($2 && $4 != NULL)
+				mstore($4, "w", 0);
 			if ($4 != NULL)
 				free($4);
 		}
@@ -741,6 +757,10 @@ password
 	;
 
 byte_size
+	: NUMBER
+	;
+
+conn_number
 	: NUMBER
 	;
 
