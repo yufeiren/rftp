@@ -2,8 +2,8 @@
 
 %define _topdir         /home/ren/rftp
 %define name                    rftpd
-%define release         2
-%define version         0.13
+%define release         rc1
+%define version         0.14
 %define buildroot %{_topdir}/%{name}-%{version}-%{release}-root
 
 BuildRoot:      %{buildroot}
@@ -43,6 +43,10 @@ rm -rf %{buildroot}
 /usr/sbin/rftpd
 
 %changelog
+*Tue Aug 02 2011 <renyufei83@gmail.com>
+--support multiple tcp streams for 'get' and 'put'
+--multiple streams with splice/sendfile/read-write
+
 *Mon Jun 27 2011 <renyufei83@gmail.com>
 --bug repair: load parameter, initialization steps
 

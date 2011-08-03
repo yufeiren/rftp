@@ -2,8 +2,8 @@
 
 GITSRCDIR=$HOME/git/rftp
 RPMDIR=$HOME/rftp
-VERSION=0.13
-RELEASE=2
+VERSION=0.14
+RELEASE=rc1
 
 TAG=v$VERSION-$RELEASE
 
@@ -11,7 +11,7 @@ TAG=v$VERSION-$RELEASE
 rm -rf $RPMDIR/BUILD/*
 
 # cp configuration file
-cp $GITSRCDIR/conf/rftp.spec $RPMDIR/SPECS/
+cp $GITSRCDIR/conf/rcftp.spec $RPMDIR/SPECS/
 cp $GITSRCDIR/conf/rftpd.spec $RPMDIR/SPECS/
 
 # client: git archive
@@ -22,7 +22,7 @@ git archive --format=tar --prefix=rcftp-$VERSION/ $TAG | gzip -9 > $RPMDIR/SOURC
 
 # build client
 cd $RPMDIR/SPECS/
-rpmbuild -ba rftp.spec
+rpmbuild -ba rcftp.spec
 
 # server: git archive
 cd $GITSRCDIR/linux-ftpd
