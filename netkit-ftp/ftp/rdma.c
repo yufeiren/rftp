@@ -3084,8 +3084,8 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 	
 	ret = ibv_post_send(item->qp, &bufblk->rdma_sq_wr, &bad_wr);
 	if (ret) {
-		syslog(LOG_ERR, "send_dat_blk ibv_post_send fail: %d(%s)", \
-			errno, strerror(errno));
+		syslog(LOG_ERR, "send_dat_blk ibv_post_send fail: %d: %d(%s)", \
+		       ret, errno, strerror(errno));
 		return 0;
 	}
 	
