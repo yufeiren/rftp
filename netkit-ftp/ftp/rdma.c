@@ -2369,17 +2369,6 @@ sender(void *arg)
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	totallen = cb->filesize;
 
-/*
-	DPRINTF(("start create_dc_qp\n"));
-	create_dc_qp(cb, 4, 1);
-	DPRINTF(("finish create_dc_qp\n")); */
-	
-	/* establish new RC connection
-	DPRINTF(("start create_dc_stream_server\n"));
-	create_dc_stream_server(child_dc_cb, 1);
-	DPRINTF(("finish create_dc_stream_server\n")); */
-
-/*	for (currlen = 0; currlen < totallen; currlen += thislen) { */
 	for (currlen = 0; transcurrlen < transtotallen; currlen += thislen) {
 		/* check if the remote addr is available */
 		isuse = 0;
@@ -2395,11 +2384,7 @@ sender(void *arg)
 
 		rmtaddr = NULL;
 		TAILQ_LOCK(&rmtaddr_tqh);
-/*		
-		if (!TAILQ_EMPTY(&rmtaddr_tqh)) {
-			rmtaddr = TAILQ_FIRST(&rmtaddr_tqh);
-			TAILQ_REMOVE(&rmtaddr_tqh, rmtaddr, entries);
-		} */
+
 		while (TAILQ_EMPTY(&rmtaddr_tqh)) {
 			evwr->ev_buf.mode = kRdmaTrans_ActWrte;
 			evwr->ev_buf.stat = ACTIVE_WRITE_RQBLK;
@@ -2410,7 +2395,7 @@ sender(void *arg)
 
 			ret = ibv_post_send(cb->qp, &evwr->ev_wr, &bad_wr);
 			if (ret) {
-				fprintf(stderr, "post send error %d\n", ret);
+				syslog(LOG_ERR, "sender ibv_post_send fail: %d(%s)", errno, strerror(errno));
 				return 0;
 			}
 			
@@ -3085,10 +3070,6 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 	bufblk->rdma_sq_wr.sg_list->length = rhdr.dlen + sizeof(rmsgheader);
 	bufblk->rdma_sq_wr.wr_id = bufblk->wr_id;
 	
-/*	bufblk->rdma_sq_wr.send_flags = IBV_SEND_SIGNALED;
-        bufblk->rdma_sq_wr.next = NULL; */
-	
-	DPRINTF(("start data transfer using RDMA_WRITE\n"));
 /*	DEBUG_LOG("rdma write from lkey %x laddr %x len %d\n",
 		  bufblk->rdma_sq_wr.sg_list->lkey,
 		  bufblk->rdma_sq_wr.sg_list->addr,
@@ -3100,20 +3081,14 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 	TAILQ_REMOVE(&rcif_tqh, item, entries);
 	TAILQ_INSERT_TAIL(&rcif_tqh, item, entries);
 	
-/*	ret = ibv_post_send(dc_cb->qp, &bufblk->rdma_sq_wr, &bad_wr); */
 	ret = ibv_post_send(item->qp, &bufblk->rdma_sq_wr, &bad_wr);
 	if (ret) {
-		fprintf(stderr, "post send error %d\n", ret);
+		syslog(LOG_ERR, "send_dat_blk ibv_post_send fail: %d(%s)", \
+			errno, strerror(errno));
 		return 0;
 	}
 	
 	transcurrlen += rhdr.dlen;
-	
-/*	dc_cb->state != ACTIVE_WRITE_POST; -> Todo */
-	DPRINTF(("send_dat_blk: ibv_post_send finish\n"));
-	/* wait the finish of RDMA_WRITE
-	sem_wait(&dc_cb->sem); */
-	DPRINTF(("sem_wait finish of RDMA_WRITE success\n"));
 	
 	return rhdr.dlen;
 }

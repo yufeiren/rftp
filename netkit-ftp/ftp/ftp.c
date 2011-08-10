@@ -488,6 +488,8 @@ sendrequest(const char *cmd, char *local, char *remote, int printnames)
 	volatile long bytes = 0, hashbytes = HASHBYTES;
 	char buf[BUFSIZ], *bufp;
 	const char *volatile lmode;
+	
+	c = 0;
 
 	if (verbose && printnames) {
 		if (local && *local != '-')
@@ -755,19 +757,18 @@ abort:
 void
 mssendrequest(const char *cmd, char *local, char *remote, int printnames)
 {
-	struct stat st;
 	struct timeval start, stop;
-	register int c, d;
 	FILE *volatile fin, *volatile dout = 0;
 	int (*volatile closefunc)(FILE *);
 	void (*volatile oldintr)(int);
 	void (*volatile oldintp)(int);
-	volatile long bytes = 0, hashbytes = HASHBYTES;
-	char buf[BUFSIZ], *bufp;
+	volatile long bytes = 0;
 	const char *volatile lmode;
 	u_long a1,a2,a3,a4,p1,p2;
 	int i;
 	int ret;
+	
+	fin = NULL;
 	
 	if (verbose && printnames) {
 		if (local && *local != '-')
@@ -910,7 +911,6 @@ abort:
 void
 rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 {
-	struct stat st;
 	struct timeval start, stop;
 	register int c, d;
 	FILE *volatile fin, *volatile dout = 0;
@@ -1654,16 +1654,15 @@ msrecvrequest(const char *cmd,
 	int (*volatile closefunc)(FILE *);
 	void (*volatile oldintp)(int);
 	void (*volatile oldintr)(int);
-	volatile int is_retr, tcrflag, bare_lfs = 0;
-	static unsigned bufsize;
-	static char *buf;
-	volatile long bytes = 0, hashbytes = HASHBYTES;
-	register int c, d;
+	volatile int is_retr, tcrflag;
+	volatile long bytes = 0;
+	register int d;
 	struct timeval start, stop;
-	struct stat st;
 	u_long a1,a2,a3,a4,p1,p2;
 	int i;
 	int ret;
+	
+	fout = NULL;
 	
 	is_retr = strcmp(cmd, "MRTR") == 0;
 	if (is_retr && verbose && printnames) {
@@ -1868,15 +1867,13 @@ rdmarecvrequest(const char *cmd,
 	void (*volatile oldintp)(int);
 	void (*volatile oldintr)(int);
 	volatile int is_retr, tcrflag, bare_lfs = 0;
-	static unsigned bufsize;
-	static char *buf;
 	volatile long bytes = 0, hashbytes = HASHBYTES;
 	register int c, d;
 	struct timeval start, stop;
-	struct stat st;
 	
 	/* for rdma */
 	int ret;
+	fout = NULL;
 
 	is_retr = strcmp(cmd, "RRTR") == 0;
 	if (is_retr && verbose && printnames) {
@@ -2514,7 +2511,6 @@ dataconn(const char *lmode)
 static void
 rdmadataconn(const char *lmode)
 {
-	struct ibv_recv_wr *bad_recv_wr;
 	int ret;
 
         if (passivemode) /* Todo here */
@@ -2522,8 +2518,6 @@ rdmadataconn(const char *lmode)
 
 	/* wait for connection established */
 	struct wcm_id *item;
-	
-	DEBUG_LOG("rdma accepting client connection request\n");
 	
 	TAILQ_LOCK(&acceptedTqh);
 	if ( TAILQ_EMPTY(&acceptedTqh) )
@@ -2572,27 +2566,11 @@ rdmadataconn(const char *lmode)
 	}
 	DPRINTF(("iperf_setup_buffers success\n"));
 
-/*	DPRINTF(("before ibv_post_recv\n"));
-	ret = ibv_post_recv(child_dc_cb->qp, &child_dc_cb->rq_wr, &bad_recv_wr);
-	if (ret) {
-		fprintf(stderr, "ibv_post_recv failed: %d (%d, %s)\n", \
-			ret, errno, strerror(errno));
-		goto err2;
-	}
-	DPRINTF(("ibv_post_recv success\n")); */
-
 	ret = pthread_create(&child_dc_cb->cqthread, NULL, cq_thread, child_dc_cb);
 	if (ret) {
 		fprintf(stderr, "pthread_create cq_thread failed: %d\n", ret);
 		goto err2;
 	}
-
-/*	sem_wait(&dc_cb->sem);
-	if (dc_cb->state != CONNECT_REQUEST) {
-		fprintf(stderr, "wait for CONNECT_REQUEST state %d\n",
-			dc_cb->state);
-		return;
-	}*/
 
 	/* rdma_accept */
 	DPRINTF(("before iperf_accept\n"));
@@ -2604,22 +2582,6 @@ rdmadataconn(const char *lmode)
 	DPRINTF(("iperf_accept success\n"));
 
 	/* release the listening rdma_cm_id */
-	/* cq_thread - cm_thread
-DPRINTF(("before: release the listening rdma_cm_id\n"));
-	iperf_free_qp(dc_cb);
-DPRINTF(("before: release the listening rdma_cm_id 1\n"));
-	pthread_cancel(dc_cb->cqthread);
-	pthread_join(dc_cb->cqthread, NULL);
-DPRINTF(("before: release the listening rdma_cm_id 2\n"));
-	pthread_cancel(dc_cb->cmthread);
-	pthread_join(dc_cb->cqthread, NULL);
-DPRINTF(("before: release the listening rdma_cm_id 3\n"));
-	rdma_destroy_id(dc_cb->cm_id);
-DPRINTF(("before: release the listening rdma_cm_id 4\n"));
-	sem_destroy(&dc_cb->sem);
-DPRINTF(("before: release the listening rdma_cm_id 5\n"));
-	free(dc_cb); */
-DPRINTF(("after: release the listening rdma_cm_id\n"));
 	return;
 
 err3:

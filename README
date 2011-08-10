@@ -114,14 +114,14 @@ Usage
 
    
 1. Startup server manually
- # /usr/sbin/rftpd -D &
+ # rftpd -D &
 
 2. Check the network status
  # netstat -an | grep [port]
  tcp    0   0  0.0.0.0:port           0.0.0.0:*             LISTEN
  
 3. Startup client and login to the server
- # /usr/bin/rcftp [server addr] [port]
+ # rcftp [server addr] [port]
  ...
  Name: ftp
  Password: ftp
