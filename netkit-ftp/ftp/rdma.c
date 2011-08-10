@@ -3057,7 +3057,8 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 	struct ibv_send_wr *bad_wr;
 	int ret;
 	rmsgheader rhdr;
-	
+
+	ret = 0;
 	memcpy(&rhdr, bufblk->rdma_buf, sizeof(rmsgheader));
 	
 	/* setup wr */
