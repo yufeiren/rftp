@@ -1219,7 +1219,7 @@ void *cq_thread(void *arg)
 	int ret;
 	
 	DEBUG_LOG("cq_thread started\n");
-	printf("cq thread tid: %d\n" gettid());
+	printf("cq thread tid: %d\n", gettid());
 
 	while (1) {
 		pthread_testcancel();
