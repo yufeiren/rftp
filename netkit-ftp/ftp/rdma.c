@@ -2365,7 +2365,7 @@ sender(void *arg)
 	int isuse;
 	
 	struct ibv_send_wr *bad_wr;
-	printf("this sender tid: %d\n" gettid());	
+	printf("this sender tid: %d\n", gettid());	
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	totallen = cb->filesize;
 
