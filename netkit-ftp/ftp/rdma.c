@@ -93,12 +93,11 @@
 #include "errors.h"
 #include "utils.h"
 
-/*
 #include <sys/syscall.h>
 pid_t gettid()
 {
      return syscall(SYS_gettid);
-} */
+}
 
 extern struct acptq acceptedTqh;
 
@@ -1220,6 +1219,7 @@ void *cq_thread(void *arg)
 	int ret;
 	
 	DEBUG_LOG("cq_thread started\n");
+	printf("cq thread tid: %d\n" gettid());
 
 	while (1) {
 		pthread_testcancel();
@@ -2365,7 +2365,7 @@ sender(void *arg)
 	int isuse;
 	
 	struct ibv_send_wr *bad_wr;
-	
+	printf("this sender tid: %d\n" gettid());	
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	totallen = cb->filesize;
 
@@ -2501,7 +2501,7 @@ reader(void *arg)
 	int thislen;
 	BUFDATBLK *bufblk;
 	rmsgheader rhdr;
-	
+	printf("this reader tid: %d\n", gettid());	
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	totallen = cb->filesize;
 	
