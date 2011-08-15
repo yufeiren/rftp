@@ -1137,15 +1137,13 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			perror("pthread_join monitor:");
 			exit(EXIT_FAILURE);
 		}
-		
-		/* cancel sender and reader
-		pthread_cancel(sender_tid); */
+		printf("join all the monitor thread\n");
 		pthread_join(sender_tid, NULL);
-		
+		printf("join all the sender thread\n");
 		for (i = 0; i < opt.readernum; i ++) {
 			pthread_join(reader_tid[i], NULL);
 		}
-		
+		printf("join all the reader thread\n");
 		bytes = (long) transtotallen;
 		
 		if (hash && (bytes > 0)) {
