@@ -93,12 +93,11 @@
 #include "errors.h"
 #include "utils.h"
 
-/*
 #include <sys/syscall.h>
 pid_t gettid()
 {
      return syscall(SYS_gettid);
-} */
+}
 
 extern struct acptq acceptedTqh;
 
@@ -1220,6 +1219,7 @@ void *cq_thread(void *arg)
 	int ret;
 	
 	DEBUG_LOG("cq_thread started\n");
+	printf("cq thread tid: %d\n", gettid());
 
 	while (1) {
 		pthread_testcancel();
@@ -1943,15 +1943,15 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 		
 		/* create qp */
 		memset(&init_attr, 0, sizeof(init_attr));
-		init_attr.cap.max_send_wr = IPERF_RDMA_SQ_DEPTH;
-		init_attr.cap.max_recv_wr = 4;
+		init_attr.cap.max_send_wr = opt.rdma_qp_sq_depth;
+		init_attr.cap.max_recv_wr = opt.rdma_qp_rq_depth;
 		init_attr.cap.max_recv_sge = 4;
 		init_attr.cap.max_send_sge = 4;
 		init_attr.qp_type = IBV_QPT_RC;
 		init_attr.send_cq = cb->cq;
 		init_attr.recv_cq = cb->cq;
 		
-		ret = rdma_create_qp(rcinfo->cm_id, cb->pd, &init_attr);
+		ret = rdma_create_qp(rcinfo->cm_id, rcinfo->pd, &init_attr);
 		if (!ret)
 			rcinfo->qp = rcinfo->cm_id->qp;
 		else {
@@ -2056,8 +2056,8 @@ void create_dc_stream_server(struct rdma_cb *cb, int num)
 		DPRINTF(("before iperf_create_qp\n"));
 
 		memset(&init_attr, 0, sizeof(init_attr));
-		init_attr.cap.max_send_wr = IPERF_RDMA_SQ_DEPTH;
-		init_attr.cap.max_recv_wr = 4;
+		init_attr.cap.max_send_wr = opt.rdma_qp_sq_depth;
+		init_attr.cap.max_recv_wr = opt.rdma_qp_rq_depth;
 		init_attr.cap.max_recv_sge = 4;
 		init_attr.cap.max_send_sge = 4;
 		init_attr.qp_type = IBV_QPT_RC;
@@ -2365,21 +2365,10 @@ sender(void *arg)
 	int isuse;
 	
 	struct ibv_send_wr *bad_wr;
-	
+	printf("this sender tid: %d\n", gettid());	
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	totallen = cb->filesize;
 
-/*
-	DPRINTF(("start create_dc_qp\n"));
-	create_dc_qp(cb, 4, 1);
-	DPRINTF(("finish create_dc_qp\n")); */
-	
-	/* establish new RC connection
-	DPRINTF(("start create_dc_stream_server\n"));
-	create_dc_stream_server(child_dc_cb, 1);
-	DPRINTF(("finish create_dc_stream_server\n")); */
-
-/*	for (currlen = 0; currlen < totallen; currlen += thislen) { */
 	for (currlen = 0; transcurrlen < transtotallen; currlen += thislen) {
 		/* check if the remote addr is available */
 		isuse = 0;
@@ -2395,11 +2384,7 @@ sender(void *arg)
 
 		rmtaddr = NULL;
 		TAILQ_LOCK(&rmtaddr_tqh);
-/*		
-		if (!TAILQ_EMPTY(&rmtaddr_tqh)) {
-			rmtaddr = TAILQ_FIRST(&rmtaddr_tqh);
-			TAILQ_REMOVE(&rmtaddr_tqh, rmtaddr, entries);
-		} */
+
 		while (TAILQ_EMPTY(&rmtaddr_tqh)) {
 			evwr->ev_buf.mode = kRdmaTrans_ActWrte;
 			evwr->ev_buf.stat = ACTIVE_WRITE_RQBLK;
@@ -2410,7 +2395,7 @@ sender(void *arg)
 
 			ret = ibv_post_send(cb->qp, &evwr->ev_wr, &bad_wr);
 			if (ret) {
-				fprintf(stderr, "post send error %d\n", ret);
+				syslog(LOG_ERR, "sender ibv_post_send fail: %d(%s)", errno, strerror(errno));
 				return 0;
 			}
 			
@@ -2516,7 +2501,7 @@ reader(void *arg)
 	int thislen;
 	BUFDATBLK *bufblk;
 	rmsgheader rhdr;
-	
+	printf("this reader tid: %d\n", gettid());	
 	struct rdma_cb *cb = (struct rdma_cb *) arg;
 	totallen = cb->filesize;
 	
@@ -3072,7 +3057,8 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 	struct ibv_send_wr *bad_wr;
 	int ret;
 	rmsgheader rhdr;
-	
+
+	ret = 0;
 	memcpy(&rhdr, bufblk->rdma_buf, sizeof(rmsgheader));
 	
 	/* setup wr */
@@ -3085,10 +3071,6 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 	bufblk->rdma_sq_wr.sg_list->length = rhdr.dlen + sizeof(rmsgheader);
 	bufblk->rdma_sq_wr.wr_id = bufblk->wr_id;
 	
-/*	bufblk->rdma_sq_wr.send_flags = IBV_SEND_SIGNALED;
-        bufblk->rdma_sq_wr.next = NULL; */
-	
-	DPRINTF(("start data transfer using RDMA_WRITE\n"));
 /*	DEBUG_LOG("rdma write from lkey %x laddr %x len %d\n",
 		  bufblk->rdma_sq_wr.sg_list->lkey,
 		  bufblk->rdma_sq_wr.sg_list->addr,
@@ -3100,20 +3082,14 @@ send_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *dc_cb, struct Remoteaddr *rmt)
 	TAILQ_REMOVE(&rcif_tqh, item, entries);
 	TAILQ_INSERT_TAIL(&rcif_tqh, item, entries);
 	
-/*	ret = ibv_post_send(dc_cb->qp, &bufblk->rdma_sq_wr, &bad_wr); */
 	ret = ibv_post_send(item->qp, &bufblk->rdma_sq_wr, &bad_wr);
 	if (ret) {
-		fprintf(stderr, "post send error %d\n", ret);
+		syslog(LOG_ERR, "send_dat_blk ibv_post_send fail: %d: %d(%s)", \
+		       ret, errno, strerror(errno));
 		return 0;
 	}
 	
 	transcurrlen += rhdr.dlen;
-	
-/*	dc_cb->state != ACTIVE_WRITE_POST; -> Todo */
-	DPRINTF(("send_dat_blk: ibv_post_send finish\n"));
-	/* wait the finish of RDMA_WRITE
-	sem_wait(&dc_cb->sem); */
-	DPRINTF(("sem_wait finish of RDMA_WRITE success\n"));
 	
 	return rhdr.dlen;
 }
