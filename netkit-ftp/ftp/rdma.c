@@ -1943,15 +1943,15 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 		
 		/* create qp */
 		memset(&init_attr, 0, sizeof(init_attr));
-		init_attr.cap.max_send_wr = IPERF_RDMA_SQ_DEPTH;
-		init_attr.cap.max_recv_wr = 4;
+		init_attr.cap.max_send_wr = opt.rdma_qp_sq_depth;
+		init_attr.cap.max_recv_wr = opt.rdma_qp_rq_depth;
 		init_attr.cap.max_recv_sge = 4;
 		init_attr.cap.max_send_sge = 4;
 		init_attr.qp_type = IBV_QPT_RC;
 		init_attr.send_cq = cb->cq;
 		init_attr.recv_cq = cb->cq;
 		
-		ret = rdma_create_qp(rcinfo->cm_id, cb->pd, &init_attr);
+		ret = rdma_create_qp(rcinfo->cm_id, rcinfo->pd, &init_attr);
 		if (!ret)
 			rcinfo->qp = rcinfo->cm_id->qp;
 		else {
@@ -2056,8 +2056,8 @@ void create_dc_stream_server(struct rdma_cb *cb, int num)
 		DPRINTF(("before iperf_create_qp\n"));
 
 		memset(&init_attr, 0, sizeof(init_attr));
-		init_attr.cap.max_send_wr = IPERF_RDMA_SQ_DEPTH;
-		init_attr.cap.max_recv_wr = 4;
+		init_attr.cap.max_send_wr = opt.rdma_qp_sq_depth;
+		init_attr.cap.max_recv_wr = opt.rdma_qp_rq_depth;
 		init_attr.cap.max_recv_sge = 4;
 		init_attr.cap.max_send_sge = 4;
 		init_attr.qp_type = IBV_QPT_RC;

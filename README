@@ -101,7 +101,9 @@ Configuration
 | rdma_qp_rq  |  64      | rcftp  | maximum iodepth of rdma recv   |
 | _depth      |          | rftpd  | queue                          |
 +-------------+----------+--------+--------------------------------+
-
+| rdma_cq     |  32      | rcftp  | maximum iodepth of rdma        |
+| _depth      |          | rftpd  | completion queue               |
++-------------+----------+--------+--------------------------------+
 
 Usage
 =====
