@@ -1951,7 +1951,7 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 		init_attr.send_cq = cb->cq;
 		init_attr.recv_cq = cb->cq;
 		
-		ret = rdma_create_qp(rcinfo->cm_id, rcinfo->pd, &init_attr);
+		ret = rdma_create_qp(rcinfo->cm_id, cb->pd, &init_attr);
 		if (!ret)
 			rcinfo->qp = rcinfo->cm_id->qp;
 		else {
