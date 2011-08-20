@@ -156,7 +156,7 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 			}
 			break;
 		case ACTIVE_WRITE_RPBLK:
-			ret = acpt_blk(&recvwr->recvbuf);
+			ret = acpt_blk(&recvwr->recv_buf);
 			if (ret != 0) {
 				syslog(LOG_ERR, "acpt_blk fail");
 				exit(EXIT_FAILURE);
