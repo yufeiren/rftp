@@ -994,7 +994,7 @@ enum ibv_wc_status {
 
 		/* dispatch the wc to cq_worker */
 		TAILQ_LOCK(&evwc_tqh);
-		TAILQ_INSERT_TAIL(&evwr_tqh, evwr, entries);
+		TAILQ_INSERT_TAIL(&evwc_tqh, evwc, entries);
 		TAILQ_UNLOCK(&evwc_tqh);
 		TAILQ_SIGNAL(&evwc_tqh);
 	}
@@ -1073,14 +1073,12 @@ handle_wr(struct rdma_cb *cb, uint64_t wr_id)
 	return;
 }
 
-void *notify_blk(void *arg)
+int
+notify_blk(BUFDATBLK *item)
 {
 	EVENTWR *evwr;
 	struct ibv_send_wr *bad_wr;
 	int ret;
-	BUFDATBLK *item = (BUFDATBLK *) arg;
-		
-	pthread_detach(pthread_self());
 
 	/* notify peer side the WHICH rdma_write finish */
 	TAILQ_LOCK(&free_evwr_tqh);
@@ -1108,7 +1106,7 @@ void *notify_blk(void *arg)
 		TAILQ_INSERT_TAIL(&free_evwr_tqh, evwr, entries);
 		TAILQ_UNLOCK(&free_evwr_tqh);
 		TAILQ_SIGNAL(&free_evwr_tqh);
-		pthread_exit(NULL);
+		return -1;
 	}
 	
 	TAILQ_LOCK(&free_tqh);
@@ -1116,7 +1114,7 @@ void *notify_blk(void *arg)
 	TAILQ_UNLOCK(&free_tqh);
 	TAILQ_SIGNAL(&free_tqh);
 	
-	pthread_exit(NULL);
+	return 0;
 }
 
 void *cq_worker(void *arg)
@@ -1164,7 +1162,7 @@ void *cq_worker(void *arg)
 
 		/* insert the task into free_evwr_tqh */
 		TAILQ_LOCK(&free_evwc_tqh);
-		TAILQ_INSERT_TAIL(&free_evwr_tqh, evwr, entries);
+		TAILQ_INSERT_TAIL(&free_evwc_tqh, evwc, entries);
 		TAILQ_UNLOCK(&free_evwc_tqh);
 		TAILQ_SIGNAL(&free_evwc_tqh);
 	}
@@ -1188,14 +1186,18 @@ void *cq_thread(void *arg)
 	TAILQ_INIT(&free_evwc_tqh);
 	TAILQ_INIT(&evwc_tqh);
 
-	for (i = 0; i < opt.wc_event; i++) {
+	for (i = 0; i < opt.wc_event_num; i++) {
 		item = (EVENTWC *) malloc(sizeof(EVENTWC));
 		TAILQ_INSERT_TAIL(&free_evwc_tqh, item, entries);
 	}
 
 	/* create worker */
-	for (i = 0; i < opt.wc_thread; i++) {
-		pthread_create(&tid, NULL, cq_worker, NULL);
+	for (i = 0; i < opt.wc_thread_num; i++) {
+		ret = pthread_create(&tid, NULL, cq_worker, NULL);
+		if (ret != 0) {
+			syslog(LOG_ERR, "create cq_worker fail");
+			exit(EXIT_FAILURE);
+		}
 	}
 
 	while (1) {
