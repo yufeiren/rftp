@@ -129,7 +129,8 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 			break;
 	
 	if (recvwr == NULL) {
-		syslog(LOG_ERR, "can not find recv wr id, %ld", recvwr->wr_id);
+		syslog(LOG_ERR, "can not find recv wr id, %ld", \
+			recvwr->wr_id);
 		return -1;
 	}
 	
@@ -231,6 +232,8 @@ handle_file_session_req(struct rdma_info_blk *recvbuf)
 	
 	memcpy(filename, recvbuf->addr, 32);
 	
+	pthread_mutex_init(&item->seqnum_lock, NULL);
+
 	pthread_mutex_lock(&dir_mutex);
 
 	parsedir(filename);
@@ -635,7 +638,9 @@ recv_data(struct rdma_info_blk *recvbuf)
 	}
 	
 	BUFDATBLK *tmpblk;
-	
+
+	pthread_mutex_lock(&finfo->seqnum_lock);
+
 	if (finfo->seqnum == rhdr.seqnum) {
 		finfo->seqnum ++;
 		/* insert into writer list */
@@ -677,7 +682,8 @@ TAILQ_UNLOCK(&finfo->pending_tqh);
 		}
 		TAILQ_UNLOCK(&finfo->pending_tqh);
 	}
-	
+
+	pthread_mutex_unlock(&finfo->seqnum_lock);	
 	return 0;
 }
 
@@ -1123,6 +1129,8 @@ void *cq_worker(void *arg)
 	EVENTWC *evwc;
 	int ret;
 
+	syslog(LOG_ERR, "cq worker thread tid: %d\n", gettid());
+
 	for ( ; ; ) {
 		/* get wc from wc list */
 		TAILQ_LOCK(&evwc_tqh);
@@ -1180,7 +1188,7 @@ void *cq_thread(void *arg)
 	pthread_t tid;
 	EVENTWC *item;
 
-	syslog(LOG_ERR, "cq thread tid: %d\n", gettid());
+	syslog(LOG_ERR, "cq master thread tid: %d\n", gettid());
 
 	/* init eventwc list */
 	TAILQ_INIT(&free_evwc_tqh);
@@ -1193,7 +1201,7 @@ void *cq_thread(void *arg)
 
 	/* create worker */
 	for (i = 0; i < opt.wc_thread_num; i++) {
-		ret = pthread_create(&tid, NULL, cq_worker, NULL);
+		ret = pthread_create(&tid, NULL, cq_worker, cb);
 		if (ret != 0) {
 			syslog(LOG_ERR, "create cq_worker fail");
 			exit(EXIT_FAILURE);

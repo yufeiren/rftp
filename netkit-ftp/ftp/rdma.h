@@ -182,6 +182,7 @@ struct Fileinfo {
 	int    sessionid;
 	off_t  offset;
 	int    seqnum;		/* the next wanted sequence num */
+	pthread_mutex_t seqnum_lock;
 	off_t  fsize;
 	
 	TAILQ_HEAD(, Bufdatblk) pending_tqh;
