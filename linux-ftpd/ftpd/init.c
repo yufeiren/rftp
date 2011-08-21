@@ -109,13 +109,10 @@ static const struct {
 */
 	{ "usesendfile",   &opt.usesendfile,       cmd_boolean },
 	{ "usesplice",     &opt.usesplice,         cmd_boolean },
-	{ "writernum",     &opt.writernum,         cmd_number }
+	{ "writernum",     &opt.writernum,         cmd_number },
+	{ "wceventnum",    &opt.wc_event_num,      cmd_number },
+	{ "wcthreadnum",   &opt.wc_thread_num,     cmd_number }
 /*
-readernum
-writernum
-sendernum
-recvernum
-
 active listening port area (min to max)
 
 */
@@ -164,6 +161,9 @@ defaults (void)
   opt.rdma_qp_sq_depth = 64;
   
   opt.rdma_cq_depth = 32;
+
+  opt.wc_event_num = opt.recvbufnum;
+  opt.wc_thread_num = 4;
 }
 
 /* Return the user's home directory (strdup-ed), or NULL if none is

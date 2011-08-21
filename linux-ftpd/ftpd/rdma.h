@@ -182,6 +182,7 @@ struct Fileinfo {
 	int    sessionid;
 	off_t  offset;
 	int    seqnum;		/* the next wanted sequence num */
+	pthread_mutex_t seqnum_lock;
 	off_t  fsize;
 	
 	TAILQ_HEAD(, Bufdatblk) pending_tqh;
@@ -211,6 +212,11 @@ struct Eventwr {
 };
 typedef struct Eventwr EVENTWR;
 
+struct Eventwc {
+	struct ibv_wc wc;
+	TAILQ_ENTRY(Eventwc) entries;
+};
+typedef struct Eventwc EVENTWC;
 
 struct Recvwr {
 	uint64_t wr_id;
@@ -268,6 +274,10 @@ TAILQ_HEAD(, Remoteaddr)	rmtaddr_tqh;
 	/* event work request addr */
 TAILQ_HEAD(, Eventwr)		free_evwr_tqh;
 TAILQ_HEAD(, Eventwr)		evwr_tqh;
+
+	/* work completion event */
+TAILQ_HEAD(, Eventwc)		free_evwc_tqh;
+TAILQ_HEAD(, Eventwc)		evwc_tqh;
 
 	/* event work request addr */
 TAILQ_HEAD(, Recvwr)		recvwr_tqh;
@@ -444,14 +454,14 @@ int send_dat_blk(BUFDATBLK *, struct rdma_cb *, struct Remoteaddr *);
 
 int recv_dat_blk(BUFDATBLK *, struct rdma_cb *);
 
-void *prep_blk(void *);
-void *acpt_blk(void *);
-void *notify_blk(void *);
+int prep_blk(struct rdma_cb *);
+int acpt_blk(struct rdma_info_blk *);
+int notify_blk(BUFDATBLK *);
 
 void *handle_qp_req(void *);
 void *handle_qp_rep(void *);
 
-void *recv_data(void *);
+int recv_data(struct rdma_info_blk *);
 
 void handle_wr(struct rdma_cb *, uint64_t wr_id);
 /* void *handle_wr(void *); */
@@ -461,9 +471,8 @@ void create_dc_qp(struct rdma_cb *, int, int);
 void create_dc_stream_server(struct rdma_cb *cb, int num);
 void create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest);
 
-void *handle_file_session_req(void *);
-void *handle_file_session_rep(void *);
-
+int handle_file_session_req(struct rdma_info_blk *);
+int handle_file_session_rep(struct rdma_info_blk *);
 
 int get_next_channel_event(struct rdma_event_channel *channel, enum rdma_cm_event_type event);
 

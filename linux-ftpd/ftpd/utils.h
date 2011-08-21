@@ -130,6 +130,8 @@ struct options {
 	int    rdma_cq_depth;
 	int    rdma_qp_rq_depth;
 	int    rdma_qp_sq_depth;
+	int    wc_event_num;
+	int    wc_thread_num;
 };
 
 double byte_atof(const char *);
