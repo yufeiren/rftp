@@ -110,8 +110,8 @@ static const struct {
 	{ "usesendfile",   &opt.usesendfile,       cmd_boolean },
 	{ "usesplice",     &opt.usesplice,         cmd_boolean },
 	{ "wceventnum",    &opt.wc_event_num,      cmd_number },
-	{ "wcthreadnum",   &opt.wc_thread_num,     cmd_number }
-	{ "writernum",     &opt.writernum,         cmd_number },
+	{ "wcthreadnum",   &opt.wc_thread_num,     cmd_number },
+	{ "writernum",     &opt.writernum,         cmd_number }
 /*
 active listening port area (min to max)
 
