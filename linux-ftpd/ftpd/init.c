@@ -93,6 +93,7 @@ static const struct {
 	{ "devzerosiz",    &opt.devzerosiz,        cmd_byte },
 	{ "directio",      &opt.directio,          cmd_boolean },
 	{ "evbufnum",      &opt.evbufnum,          cmd_number },
+	{ "ibaddr",        &opt.ibaddr,            cmd_string },
 	{ "ibdevname",     &opt.ib_devname,        cmd_string },
 	{ "ioengine",      &opt.ioengine,          cmd_string },
 	{ "rcstreamnum",   &opt.rcstreamnum,       cmd_number },
@@ -164,6 +165,8 @@ defaults (void)
 
   opt.wc_event_num = opt.recvbufnum;
   opt.wc_thread_num = 4;
+
+  opt.ibaddr = NULL;
 }
 
 /* Return the user's home directory (strdup-ed), or NULL if none is
