@@ -317,13 +317,13 @@ parse_opt_addr(struct options *opt)
 	end = strchr(start, sep);
 	if (end == NULL) {
 	  strcpy(buf, start);
-	  opt->data_addr[data_addr_num].sin_addr.s_addr = \
+	  opt->data_addr[opt->data_addr_num].sin_addr.s_addr = \
 	    inet_addr(buf);
 	  opt->data_addr_num ++;
 	  break;
 	} else {
 	  memcpy(buf, start, end - start);
-	  opt->data_addr[data_addr_num].sin_addr.s_addr = \
+	  opt->data_addr[opt->data_addr_num].sin_addr.s_addr = \
 	    inet_addr(buf);
 	  opt->data_addr_num ++;
 	  start = end + 1;
