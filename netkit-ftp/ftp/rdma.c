@@ -115,6 +115,7 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 {
 	int ret;
 	struct ibv_recv_wr *bad_wr;
+	int i;
 	
 	if (wc->byte_len != sizeof(cb->recv_buf)) {
 		syslog(LOG_ERR, "Received bogus data, size %d\n", \
@@ -181,7 +182,14 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 			break;
 		case DC_CONNECTION_REQ:
 			memcpy(&opt.rcstreamnum, recvwr->recv_buf.addr, 4);
-			syslog(LOG_ERR, "dc conn num is %d", opt.rcstreamnum);
+			memcpy(&opt.data_addr_num, recvwr->recv_buf.addr + 4, 4);
+			for (i = 0; i < opt.data_addr_num; i ++) {
+				memcpy(&opt.data_addr[i].sin_addr.s_addr, \
+					recvwr->recv_buf.addr + 8 + 4 * i, \
+					4);
+				&opt.data_addr[i].sin_family = AF_INET;
+			}
+			syslog(LOG_ERR, "dc conn num is %d, ibaddr num is %d", opt.rcstreamnum, opt.data_addr_num);
 			sem_post(&cb->sem);
 			break;
 		default:
@@ -1865,11 +1873,12 @@ void
 create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 {
 	struct Rcinfo *rcinfo;
-	int i;
+	int i, j;
 	struct ibv_qp_init_attr init_attr;
 	struct rdma_conn_param conn_param;
 	int ret;
 	
+for (j = 0; j < opt.data_addr_num; j ++) {
 	for (i = 0; i < num; i ++) {
 		rcinfo = (RCINFO *) malloc(sizeof(RCINFO));
 		if (rcinfo == NULL) {
@@ -1892,8 +1901,13 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 		}
 	
 		/* resolve addr */
+		if (opt.data_addr_num == 0) {
 		ret = rdma_resolve_addr(rcinfo->cm_id, NULL, \
 			(struct sockaddr *) dest, 2000);
+		} else {
+		ret = rdma_resolve_addr(rcinfo->cm_id, NULL, \
+			(struct sockaddr *) &opt.data_addr[j], 2000);
+		}
 		if (ret) {
 			syslog(LOG_ERR, "rdma_resolve_addr: %m");
 			exit(EXIT_FAILURE);
@@ -1965,8 +1979,9 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 		
 		TAILQ_INSERT_TAIL(&rcif_tqh, rcinfo, entries);
 	}
-	
-syslog(LOG_ERR, "established %d connections", i);
+ }
+
+	syslog(LOG_ERR, "established %d connections", i);
 	return;
 }
 
@@ -3122,9 +3137,12 @@ recv_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *cb)
 void
 dc_conn_req(struct rdma_cb *cb)
 {
+/* number of stream(4) + number of addr(4) + addr0(4) + ...*/
+
 	EVENTWR *evwr;
 	struct ibv_send_wr *bad_wr;
 	int ret;
+	int i;
 	
 	/* get a send buf */
 	TAILQ_LOCK(&free_evwr_tqh);
@@ -3137,10 +3155,14 @@ dc_conn_req(struct rdma_cb *cb)
 	
 	TAILQ_UNLOCK(&free_evwr_tqh);
 	
-	/* compose send request - FILE_SESSION_ID_REQUEST */
+	/* compose send request - DC_CONNECTION_REQ */
 	evwr->ev_buf.mode = kRdmaTrans_ActWrte;
 	evwr->ev_buf.stat = DC_CONNECTION_REQ;
 	strncpy(evwr->ev_buf.addr, &opt.rcstreamnum, 4);
+	memcpy(evwr->ev_buf.addr + 4, &opt.data_addr_num, 4);
+	for (i = 0; i < opt.data_addr_num; i ++) {
+	  memcpy(evwr->ev_buf.addr + 8 + 4 * i, opt.data_addr[i].sin_addr.s_addr, 4);
+	}
 	
 	TAILQ_LOCK(&evwr_tqh);
 	TAILQ_INSERT_TAIL(&evwr_tqh, evwr, entries);

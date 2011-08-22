@@ -297,3 +297,39 @@ anabw(void *arg)
 	pthread_exit(NULL);
 }
 
+int
+parse_opt_addr(struct options *opt)
+{
+  /* ibaddr = ip1, ip2, ip3, ..., ipN */
+
+  char *start;
+  char *end;
+  int sep = ',';
+  char buf[128];
+
+	opt->data_addr_num = 0;
+	if (opt->ibaddr == NULL)
+		return 0;
+
+  start = end = opt->ibaddr;
+  while (start != NULL) {
+    memset(buf, '\0', 128);
+	end = strchr(start, sep);
+	if (end == NULL) {
+	  strcpy(buf, start);
+	  opt->data_addr[data_addr_num].sin_addr.s_addr = \
+	    inet_addr(buf);
+	  opt->data_addr_num ++;
+	  break;
+	} else {
+	  memcpy(buf, start, end - start);
+	  opt->data_addr[data_addr_num].sin_addr.s_addr = \
+	    inet_addr(buf);
+	  opt->data_addr_num ++;
+	  start = end + 1;
+	}
+  }
+
+	return 0;
+}
+

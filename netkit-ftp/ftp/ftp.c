@@ -2412,9 +2412,15 @@ rdmainitconn(void)
 		return(0);
 	}
 noport:
+	/* parse opt's ibaddr list */
+	parse_opt_addr(&opt);
+
 	data_addr = myctladdr;
-	if (sendport)
+	if (sendport) {
+		if (opt.data_addr_num != 0)
+			data_addr.sin_addr.s_addr = htonl(INADDR_ANY); /* wildcard*/
 		data_addr.sin_port = 0;	/* let system pick one ? in rdma env */ 
+	}
 /*	if (data != -1)
 		(void) close(data); */
 	dc_cb = (rdma_cb *) malloc(sizeof(rdma_cb));

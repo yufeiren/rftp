@@ -132,15 +132,19 @@ struct options {
 	int    rdma_qp_sq_depth;
 	int    wc_event_num;
 	int    wc_thread_num;
+	char   *ibaddr;
+	struct sockaddr_in data_addr[32];
+	int    data_addr_num;
 };
 
 double byte_atof(const char *);
 max_size_t byte_atoi(const char *);
 
-
 bool file_exists_p (const char *);
 char *read_whole_line (FILE *);
 char *concat_strings (const char *, ...);
+
+int parse_opt_addr(struct options *);
 
 /* thread */
 void *anabw(void *);
