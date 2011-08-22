@@ -187,7 +187,7 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 				memcpy(&opt.data_addr[i].sin_addr.s_addr, \
 					recvwr->recv_buf.addr + 8 + 4 * i, \
 					4);
-				&opt.data_addr[i].sin_family = AF_INET;
+				opt.data_addr[i].sin_family = AF_INET;
 			}
 			syslog(LOG_ERR, "dc conn num is %d, ibaddr num is %d", opt.rcstreamnum, opt.data_addr_num);
 			sem_post(&cb->sem);
