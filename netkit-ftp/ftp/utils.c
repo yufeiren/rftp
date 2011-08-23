@@ -320,7 +320,7 @@ parse_opt_addr(struct options *opt)
 	  strcpy(buf, start);
 	  ret = inet_pton(AF_INET, buf, &opt->data_addr[opt->data_addr_num]);
 	  if (ret <= 0) {
-	    syslog(LOG_ERR, "illegal addr format: %s", buf);
+	    fprintf(stderr, "illegal addr format: %s", buf);
 	    return -1;
 	  }
 	  /*	  opt->data_addr[opt->data_addr_num].sin_addr.s_addr =	\
@@ -331,7 +331,7 @@ parse_opt_addr(struct options *opt)
 	  memcpy(buf, start, end - start);
 	  ret = inet_pton(AF_INET, buf, &opt->data_addr[opt->data_addr_num]);
 	  if (ret <= 0) {
-	    syslog(LOG_ERR, "illegal addr format: %s", buf);
+	    fprintf(stderr, "illegal addr format: %s", buf);
 	    return -1;
 	  }
 	  /* opt->data_addr[opt->data_addr_num].sin_addr.s_addr =	\
