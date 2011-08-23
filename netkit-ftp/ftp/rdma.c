@@ -189,7 +189,7 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 				memcpy(str, \
 					recvwr->recv_buf.addr + 8 + 15 * i, \
 					15);
-				if (inet_pton(AF_INET, &opt.data_addr[i], str) == NULL) {
+				if (inet_pton(AF_INET, str, &opt.data_addr[i]) == NULL) {
 				  syslog(LOG_ERR, "parse addr fail: %s", str);
 				}
 				/*				opt.data_addr[i].sin_family = AF_INET; */
