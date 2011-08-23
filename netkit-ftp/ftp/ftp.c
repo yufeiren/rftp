@@ -2461,7 +2461,7 @@ noport:
 	DPRINTF(("rdma_listen successful\n"));
 	
 	if (sendport) {
-		a = (char *)&data_addr.sin_addr;
+		a = (char *)&myctladdr.sin_addr;
 		p = (char *)&data_addr.sin_port;
 #define	UC(b)	(((int)b)&0xff)
 		result =
