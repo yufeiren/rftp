@@ -306,6 +306,7 @@ parse_opt_addr(struct options *opt)
   char *end;
   int sep = ',';
   char buf[128];
+  int ret;
 
 	opt->data_addr_num = 0;
 	if (opt->ibaddr == NULL)
@@ -317,14 +318,24 @@ parse_opt_addr(struct options *opt)
 	end = strchr(start, sep);
 	if (end == NULL) {
 	  strcpy(buf, start);
-	  opt->data_addr[opt->data_addr_num].sin_addr.s_addr = \
-	    inet_addr(buf);
+	  ret = inet_pton(AF_INET, buf, &opt->data_addr[opt->data_addr_num]);
+	  if (ret <= 0) {
+	    fprintf(stderr, "illegal addr format: %s", buf);
+	    return -1;
+	  }
+	  /*	  opt->data_addr[opt->data_addr_num].sin_addr.s_addr =	\
+		  inet_addr(buf); */
 	  opt->data_addr_num ++;
 	  break;
 	} else {
 	  memcpy(buf, start, end - start);
-	  opt->data_addr[opt->data_addr_num].sin_addr.s_addr = \
-	    inet_addr(buf);
+	  ret = inet_pton(AF_INET, buf, &opt->data_addr[opt->data_addr_num]);
+	  if (ret <= 0) {
+	    fprintf(stderr, "illegal addr format: %s", buf);
+	    return -1;
+	  }
+	  /* opt->data_addr[opt->data_addr_num].sin_addr.s_addr =	\
+	     inet_addr(buf); */
 	  opt->data_addr_num ++;
 	  start = end + 1;
 	}
