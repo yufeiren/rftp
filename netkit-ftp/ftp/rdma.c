@@ -116,6 +116,7 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 	int ret;
 	struct ibv_recv_wr *bad_wr;
 	int i;
+	char str[INET6_ADDRSTRLEN];
 	
 	if (wc->byte_len != sizeof(cb->recv_buf)) {
 		syslog(LOG_ERR, "Received bogus data, size %d\n", \
@@ -181,13 +182,17 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 			}
 			break;
 		case DC_CONNECTION_REQ:
+			memset(str, '\0', INET6_ADDRSTRLEN);
 			memcpy(&opt.rcstreamnum, recvwr->recv_buf.addr, 4);
 			memcpy(&opt.data_addr_num, recvwr->recv_buf.addr + 4, 4);
 			for (i = 0; i < opt.data_addr_num; i ++) {
-				memcpy(&opt.data_addr[i].sin_addr.s_addr, \
-					recvwr->recv_buf.addr + 8 + 4 * i, \
-					4);
-				opt.data_addr[i].sin_family = AF_INET;
+				memcpy(str, \
+					recvwr->recv_buf.addr + 8 + 15 * i, \
+					15);
+				if (inet_pton(AF_INET, &opt.data_addr[i], str) == NULL) {
+				  syslog(LOG_ERR, "parse addr fail: %s", str);
+				}
+				/*				opt.data_addr[i].sin_family = AF_INET; */
 			}
 			syslog(LOG_ERR, "dc conn num is %d, ibaddr num is %d", opt.rcstreamnum, opt.data_addr_num);
 			sem_post(&cb->sem);
@@ -1873,12 +1878,12 @@ void
 create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 {
 	struct Rcinfo *rcinfo;
-	int i, j;
+	int i = 0, j = 0;
 	struct ibv_qp_init_attr init_attr;
 	struct rdma_conn_param conn_param;
 	int ret;
 	
-for (j = 0; j < opt.data_addr_num; j ++) {
+for (j = 0; j < opt.data_addr_num + 1; j ++) {
 	for (i = 0; i < num; i ++) {
 		rcinfo = (RCINFO *) malloc(sizeof(RCINFO));
 		if (rcinfo == NULL) {
@@ -3137,12 +3142,13 @@ recv_dat_blk(BUFDATBLK *bufblk, struct rdma_cb *cb)
 void
 dc_conn_req(struct rdma_cb *cb)
 {
-/* number of stream(4) + number of addr(4) + addr0(4) + ...*/
+/* number of stream(4) + number of addr(4) + addr0(15) + ...*/
 
 	EVENTWR *evwr;
 	struct ibv_send_wr *bad_wr;
 	int ret;
 	int i;
+	char str[INET6_ADDRSTRLEN];
 	
 	/* get a send buf */
 	TAILQ_LOCK(&free_evwr_tqh);
@@ -3161,7 +3167,10 @@ dc_conn_req(struct rdma_cb *cb)
 	strncpy(evwr->ev_buf.addr, &opt.rcstreamnum, 4);
 	memcpy(evwr->ev_buf.addr + 4, &opt.data_addr_num, 4);
 	for (i = 0; i < opt.data_addr_num; i ++) {
-	  memcpy(evwr->ev_buf.addr + 8 + 4 * i, opt.data_addr[i].sin_addr.s_addr, 4);
+	  memset(str, '\0', INET6_ADDRSTRLEN);
+	  inet_ntop(AF_INET, &opt.data_addr[i], str, INET6_ADDRSTRLEN);
+	  syslog(LOG_ERR, "ibaddr %d: %s", i, str);
+	  memcpy(evwr->ev_buf.addr + 8 + 15 * i, str, strlen(str));
 	}
 	
 	TAILQ_LOCK(&evwr_tqh);
