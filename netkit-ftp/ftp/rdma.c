@@ -189,10 +189,11 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 				memcpy(str, \
 					recvwr->recv_buf.addr + 8 + 15 * i, \
 					15);
-				if (inet_pton(AF_INET, str, &opt.data_addr[i]) == NULL) {
+				opt.data_addr[i].sin_addr.s_addr = inet_addr(str);
+				/* if (inet_pton(AF_INET, str, &opt.data_addr[i]) == NULL) {
 				  syslog(LOG_ERR, "parse addr fail: %s", str);
 				}
-				/*				opt.data_addr[i].sin_family = AF_INET; */
+				opt.data_addr[i].sin_family = AF_INET; */
 			}
 			syslog(LOG_ERR, "dc conn num is %d, ibaddr num is %d", opt.rcstreamnum, opt.data_addr_num);
 			sem_post(&cb->sem);
@@ -1883,7 +1884,11 @@ create_dc_stream_client(struct rdma_cb *cb, int num, struct sockaddr_in *dest)
 	struct rdma_conn_param conn_param;
 	int ret;
 	
-for (j = 0; j < opt.data_addr_num + 1; j ++) {
+	if (opt.data_addr_num == 0)
+	  j = -1;
+	else
+	  j = 0;
+for (; j < opt.data_addr_num; j ++) {
 	for (i = 0; i < num; i ++) {
 		rcinfo = (RCINFO *) malloc(sizeof(RCINFO));
 		if (rcinfo == NULL) {
@@ -1910,8 +1915,10 @@ for (j = 0; j < opt.data_addr_num + 1; j ++) {
 		ret = rdma_resolve_addr(rcinfo->cm_id, NULL, \
 			(struct sockaddr *) dest, 2000);
 		} else {
-		ret = rdma_resolve_addr(rcinfo->cm_id, NULL, \
-			(struct sockaddr *) &opt.data_addr[j], 2000);
+			opt.data_addr[j].sin_family = AF_INET;
+			opt.data_addr[j].sin_port = dest->sin_port;
+			ret = rdma_resolve_addr(rcinfo->cm_id, NULL, \
+			      (struct sockaddr *) &opt.data_addr[j], 2000);
 		}
 		if (ret) {
 			syslog(LOG_ERR, "rdma_resolve_addr: %m");
