@@ -1341,7 +1341,6 @@ int iperf_setup_qp(struct rdma_cb *cb, struct rdma_cm_id *cm_id)
 	DPRINTF(("before iperf_create_qp\n"));
 	ret = iperf_create_qp(cb);
 	if (ret) {
-		perror("rdma_create_qp");
 		syslog(LOG_ERR, "iperf_create_qp failed: %m");
 		goto err3;
 	}
