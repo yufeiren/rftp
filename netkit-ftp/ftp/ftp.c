@@ -2009,7 +2009,6 @@ rdmarecvrequest(const char *cmd,
 	
 	(void) gettimeofday(&start, (struct timezone *)0);
 	
-	child_dc_cb->fd = fileno(fout);
 	tsf_setup_buf_list(child_dc_cb);
 
 	dc_conn_req(child_dc_cb);
