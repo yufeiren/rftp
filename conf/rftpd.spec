@@ -2,7 +2,7 @@
 
 %define _topdir         /home/ren/rftp
 %define name                    rftpd
-%define release         rc1
+%define release         rc2
 %define version         0.14
 %define buildroot %{_topdir}/%{name}-%{version}-%{release}-root
 
@@ -43,6 +43,11 @@ rm -rf %{buildroot}
 /usr/sbin/rftpd
 
 %changelog
+*Thurs Sept 01 2011 <renyufei83@gmail.com>
+--fix out of order package's pending list sequence number bug
+--introduce the master-worker thread pool for
+  completion event handling
+
 *Tue Aug 02 2011 <renyufei83@gmail.com>
 --support multiple tcp streams for 'get' and 'put'
 --multiple streams with splice/sendfile/read-write

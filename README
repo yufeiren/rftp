@@ -3,26 +3,20 @@ performance data transfer using RDMA technology based on ftp protocol.
 
 New Features
 ==
-* RFTP version information
-* support multiple channel data transfer
-* support directory hierarchy transfer
-* support 'rmput'
-* support direct io
-* support sendfile, splice
-* adjustable reader/writer
-* adjustable io depth of send queue and recv queue
-* bandwidth monitor
+* fix out of order packages' pending list sequence number bug
+* introduce the master-worker thread pool for
+  completion event handling
 
 Installation
 ==
 1. If you have installed previous version, please use upgrade command,
- # rpm -Uvh rftpd-0.13-1.x86_64.rpm
- # rpm -Uvh rcftp-0.13-1.x86_64.rpm
+ # rpm -Uvh rftpd-0.14-rc2.x86_64.rpm
+ # rpm -Uvh rcftp-0.14-rc2.x86_64.rpm
 
 2. Comfirm version
  # rpm -qa rcftp rftpd
- rcftp-0.13-1
- rftpd-0.13-1
+ rcftp-0.14-rc2
+ rftpd-0.14-rc2
 
 Configuration
 ==
@@ -104,6 +98,12 @@ Configuration
 | rdma_cq     |  32      | rcftp  | maximum iodepth of rdma        |
 | _depth      |          | rftpd  | completion queue               |
 +-------------+----------+--------+--------------------------------+
+| wc_thread   |  4       | rcftp  | number of threads for work     |
+| _num        |          | rftpd  | completion event handling      |
++-------------+----------+--------+--------------------------------+
+| wc_event    |  100     | rcftp  | number of events for work      |
+| _num        |          | rftpd  | completion event handling      |
++-------------+----------+--------+--------------------------------+
 
 Usage
 =====
@@ -116,7 +116,7 @@ Usage
 
    
 1. Startup server manually
- # rftpd -D &
+ # rftpd -D
 
 2. Check the network status
  # netstat -an | grep [port]
