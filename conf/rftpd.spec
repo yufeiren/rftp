@@ -43,7 +43,7 @@ rm -rf %{buildroot}
 /usr/sbin/rftpd
 
 %changelog
-*Thurs Sept 01 2011 <renyufei83@gmail.com>
+*Thu Sep 01 2011 <renyufei83@gmail.com>
 --fix out of order package's pending list sequence number bug
 --introduce the master-worker thread pool for
   completion event handling
