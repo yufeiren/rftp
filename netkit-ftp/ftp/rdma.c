@@ -1620,23 +1620,18 @@ int rdma_connect_client(struct rdma_cb *cb)
 	int ret;
 
 	memset(&conn_param, 0, sizeof conn_param);
-	conn_param.responder_resources = 1;
-	conn_param.initiator_depth = 1;
+	conn_param.responder_resources = 8;
+	conn_param.initiator_depth = 8;
 	conn_param.retry_count = 10;
 
 	ret = rdma_connect(cb->cm_id, &conn_param);
 	if (ret) {
-		perror("rdma_connect");
+		syslog(LOG_ERR, "rdma_connect fail %m");
 		return ret;
 	}
 
 	sem_wait(&cb->sem);
-	if (cb->state != CONNECTED) {
-		fprintf(stderr, "wait for CONNECTED state %d\n", cb->state);
-		return -1;
-	}
 
-	DEBUG_LOG("rdma_connect successful\n");
 	return 0;
 }
 
@@ -1649,23 +1644,23 @@ int iperf_accept(struct rdma_cb *cb)
 	DEBUG_LOG("accepting client connection request\n");
 
 	memset(&conn_param, 0, sizeof conn_param);
-	conn_param.responder_resources = 1;
-	conn_param.initiator_depth = 1;
+	conn_param.responder_resources = 8;
+	conn_param.initiator_depth = 8;
 
 	DPRINTF(("tid %ld, child_cm_id %p\n", pthread_self(), cb->child_cm_id));
 
 	ret = rdma_accept(cb->child_cm_id, &conn_param);
 	if (ret) {
-		perror("rdma_accept");
+		syslog(LOG_ERR, "rdma_accept fail: %m");
 		return ret;
 	}
 
 	sem_wait(&cb->sem);
 	if (cb->state == STATE_ERROR) {
-		fprintf(stderr, "wait for CONNECTED state %d\n", cb->state);
+		syslog(LOG_ERR, "wait for CONNECTED state %d\n", cb->state);
 		return -1;
 	}
-	DPRINTF(("iperf_accept finish with state %d\n", cb->state));
+
 	return 0;
 }
 
@@ -2433,10 +2428,6 @@ sender(void *arg)
 		
 		TAILQ_UNLOCK(&sender_tqh);
 
-		/* send data */
-		thislen = send_dat_blk(bufblk, cb, rmtaddr);
-		DPRINTF(("send %d bytes\n", thislen));
-		
 		/* insert to waiting list */
 		TAILQ_LOCK(&waiting_tqh);
 		TAILQ_INSERT_TAIL(&waiting_tqh, bufblk, entries);
@@ -2444,6 +2435,10 @@ sender(void *arg)
 		
 		TAILQ_SIGNAL(&waiting_tqh);
 
+		/* send data */
+		thislen = send_dat_blk(bufblk, cb, rmtaddr);
+		DPRINTF(("send %d bytes\n", thislen));
+		
 		TAILQ_LOCK(&free_rmtaddr_tqh);
 		TAILQ_INSERT_TAIL(&free_rmtaddr_tqh, rmtaddr, entries);
 		TAILQ_UNLOCK(&free_rmtaddr_tqh);
