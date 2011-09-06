@@ -2,7 +2,7 @@
 
 %define _topdir         /home/ren/rftp
 %define name                    rftpd
-%define release         rc2
+%define release         rc3
 %define version         0.14
 %define buildroot %{_topdir}/%{name}-%{version}-%{release}-root
 
@@ -43,8 +43,10 @@ rm -rf %{buildroot}
 /usr/sbin/rftpd
 
 %changelog
-*Thu Sep 01 2011 <renyufei83@gmail.com>
+*Thu Sep 06 2011 <renyufei83@gmail.com>
 --fix out of order package's pending list sequence number bug
+--enlarge rdma_conn_param parameters
+--put buffer block into waiting list before post task
 --introduce the master-worker thread pool for
   completion event handling
 
