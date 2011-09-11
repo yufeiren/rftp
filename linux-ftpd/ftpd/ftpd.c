@@ -217,6 +217,8 @@ struct options opt;
 /* it is not safe to create directory simutanuously  */
 pthread_mutex_t dir_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+pthread_mutex_t transcurrlen_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /*
  * Timeout intervals for retrying connections
  * to hosts that don't accept PORT cmds.  This
