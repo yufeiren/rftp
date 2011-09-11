@@ -2054,7 +2054,8 @@ rdmarecvrequest(const char *cmd,
 		}
 		
 		for (i = 0; i < opt.writernum; i ++) {
-			pthread_join(writer_tid[i], NULL);
+/*			pthread_join(writer_tid[i], NULL); */
+			pthread_cancel(writer_tid[i]);
 		}
 			
 		bytes = (long) transtotallen;

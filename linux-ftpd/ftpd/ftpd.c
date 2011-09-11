@@ -2240,9 +2240,16 @@ static int rreceive_data(FILE *outstr)
 			}
 		}
 		
+		for ( ; ; ) {
+			if (transcurrlen >= transtotallen)
+				break;
+			sleep(1);
+		}
+
 		for (i = 0; i < opt.writernum; i ++) {
-			pthread_join(writer_tid[i], NULL);
-			syslog(LOG_ERR, "join writer[%d] success", i);
+			pthread_cancel(writer_tid[i]);
+/*			pthread_join(writer_tid[i], NULL); */
+			syslog(LOG_ERR, "cancel writer[%d] success", i);
 		}
 		
 		/* release the connected rdma_cm_id */
