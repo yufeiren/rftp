@@ -105,6 +105,8 @@ extern struct options opt;
 
 extern pthread_mutex_t dir_mutex;
 
+extern pthread_mutex_t transcurrlen_mutex;
+
 static struct rdma_cb *tmpcb;
 /* static tmp; */
 
@@ -2653,8 +2655,7 @@ writer(void *arg)
 	off_t currlen;
 	int thislen;
 	
-	TAILQ_HEAD(, Bufdatblk) 	inner_tqh;
-	TAILQ_INIT(&inner_tqh);
+	syslog(LOG_ERR, "this writer tid: %d\n", gettid());	
 	
 	for (currlen = 0 ; transcurrlen < transtotallen; currlen += thislen) {
 		/* get write block */
@@ -2679,8 +2680,10 @@ writer(void *arg)
 		
 		if (thislen == 0)
 			break;
-		
+
+		pthread_mutex_lock(&transcurrlen_mutex);		
 		transcurrlen += thislen;
+		pthread_mutex_unlock(&transcurrlen_mutex);		
 	}
 	
 	pthread_exit((void *) currlen);

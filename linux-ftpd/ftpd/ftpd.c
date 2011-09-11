@@ -2233,16 +2233,12 @@ static int rreceive_data(FILE *outstr)
 			ret = pthread_create(&writer_tid[i], NULL, \
 				writer, dc_cb);
 			if (ret != 0) {
-				perror("pthread_create reader:");
+				syslog(LOG_ERR, "create writer fail");
 				exit(EXIT_FAILURE);
 			}
 		}
 		
-		/* wait for disconnection event
-		sem_wait(&dc_cb->sem); */
-		
 		for (i = 0; i < opt.writernum; i ++) {
-/*			pthread_cancel(writer_tid[i]); */
 			pthread_join(writer_tid[i], NULL);
 			syslog(LOG_ERR, "join writer[%d] success", i);
 		}
