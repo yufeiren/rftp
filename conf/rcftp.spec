@@ -2,7 +2,7 @@
 
 %define _topdir         /home/ren/rftp
 %define name                    rcftp
-%define release         rc3
+%define release         rc4
 %define version         0.14
 %define buildroot %{_topdir}/%{name}-%{version}-%{release}-root
 
