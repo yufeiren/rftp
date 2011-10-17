@@ -93,6 +93,7 @@ static const struct {
 	{ "devzerosiz",    &opt.devzerosiz,        cmd_byte },
 	{ "directio",      &opt.directio,          cmd_boolean },
 	{ "evbufnum",      &opt.evbufnum,          cmd_number },
+	{ "ibaddr",        &opt.ibaddr,            cmd_string },
 	{ "ibdevname",     &opt.ib_devname,        cmd_string },
 	{ "ioengine",      &opt.ioengine,          cmd_string },
 	{ "rcstreamnum",   &opt.rcstreamnum,       cmd_number },
@@ -109,13 +110,10 @@ static const struct {
 */
 	{ "usesendfile",   &opt.usesendfile,       cmd_boolean },
 	{ "usesplice",     &opt.usesplice,         cmd_boolean },
+	{ "wceventnum",    &opt.wc_event_num,      cmd_number },
+	{ "wcthreadnum",   &opt.wc_thread_num,     cmd_number },
 	{ "writernum",     &opt.writernum,         cmd_number }
 /*
-readernum
-writernum
-sendernum
-recvernum
-
 active listening port area (min to max)
 
 */
@@ -164,6 +162,11 @@ defaults (void)
   opt.rdma_qp_sq_depth = 64;
   
   opt.rdma_cq_depth = 32;
+
+  opt.wc_event_num = opt.recvbufnum;
+  opt.wc_thread_num = 4;
+
+  opt.ibaddr = NULL;
 }
 
 /* Return the user's home directory (strdup-ed), or NULL if none is

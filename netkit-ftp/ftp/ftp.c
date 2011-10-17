@@ -488,6 +488,8 @@ sendrequest(const char *cmd, char *local, char *remote, int printnames)
 	volatile long bytes = 0, hashbytes = HASHBYTES;
 	char buf[BUFSIZ], *bufp;
 	const char *volatile lmode;
+	
+	c = 0;
 
 	if (verbose && printnames) {
 		if (local && *local != '-')
@@ -755,19 +757,18 @@ abort:
 void
 mssendrequest(const char *cmd, char *local, char *remote, int printnames)
 {
-	struct stat st;
 	struct timeval start, stop;
-	register int c, d;
 	FILE *volatile fin, *volatile dout = 0;
 	int (*volatile closefunc)(FILE *);
 	void (*volatile oldintr)(int);
 	void (*volatile oldintp)(int);
-	volatile long bytes = 0, hashbytes = HASHBYTES;
-	char buf[BUFSIZ], *bufp;
+	volatile long bytes = 0;
 	const char *volatile lmode;
 	u_long a1,a2,a3,a4,p1,p2;
 	int i;
 	int ret;
+	
+	fin = NULL;
 	
 	if (verbose && printnames) {
 		if (local && *local != '-')
@@ -910,7 +911,6 @@ abort:
 void
 rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 {
-	struct stat st;
 	struct timeval start, stop;
 	register int c, d;
 	FILE *volatile fin, *volatile dout = 0;
@@ -1137,15 +1137,13 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			perror("pthread_join monitor:");
 			exit(EXIT_FAILURE);
 		}
-		
-		/* cancel sender and reader
-		pthread_cancel(sender_tid); */
+		printf("join all the monitor thread\n");
 		pthread_join(sender_tid, NULL);
-		
+		printf("join all the sender thread\n");
 		for (i = 0; i < opt.readernum; i ++) {
 			pthread_join(reader_tid[i], NULL);
 		}
-		
+		printf("join all the reader thread\n");
 		bytes = (long) transtotallen;
 		
 		if (hash && (bytes > 0)) {
@@ -1654,16 +1652,15 @@ msrecvrequest(const char *cmd,
 	int (*volatile closefunc)(FILE *);
 	void (*volatile oldintp)(int);
 	void (*volatile oldintr)(int);
-	volatile int is_retr, tcrflag, bare_lfs = 0;
-	static unsigned bufsize;
-	static char *buf;
-	volatile long bytes = 0, hashbytes = HASHBYTES;
-	register int c, d;
+	volatile int is_retr, tcrflag;
+	volatile long bytes = 0;
+	register int d;
 	struct timeval start, stop;
-	struct stat st;
 	u_long a1,a2,a3,a4,p1,p2;
 	int i;
 	int ret;
+	
+	fout = NULL;
 	
 	is_retr = strcmp(cmd, "MRTR") == 0;
 	if (is_retr && verbose && printnames) {
@@ -1868,15 +1865,13 @@ rdmarecvrequest(const char *cmd,
 	void (*volatile oldintp)(int);
 	void (*volatile oldintr)(int);
 	volatile int is_retr, tcrflag, bare_lfs = 0;
-	static unsigned bufsize;
-	static char *buf;
 	volatile long bytes = 0, hashbytes = HASHBYTES;
 	register int c, d;
 	struct timeval start, stop;
-	struct stat st;
 	
 	/* for rdma */
 	int ret;
+	fout = NULL;
 
 	is_retr = strcmp(cmd, "RRTR") == 0;
 	if (is_retr && verbose && printnames) {
@@ -2014,7 +2009,6 @@ rdmarecvrequest(const char *cmd,
 	
 	(void) gettimeofday(&start, (struct timezone *)0);
 	
-	child_dc_cb->fd = fileno(fout);
 	tsf_setup_buf_list(child_dc_cb);
 
 	dc_conn_req(child_dc_cb);
@@ -2060,7 +2054,8 @@ rdmarecvrequest(const char *cmd,
 		}
 		
 		for (i = 0; i < opt.writernum; i ++) {
-			pthread_join(writer_tid[i], NULL);
+/*			pthread_join(writer_tid[i], NULL); */
+			pthread_cancel(writer_tid[i]);
 		}
 			
 		bytes = (long) transtotallen;
@@ -2417,9 +2412,15 @@ rdmainitconn(void)
 		return(0);
 	}
 noport:
+	/* parse opt's ibaddr list */
+	parse_opt_addr(&opt);
+
 	data_addr = myctladdr;
-	if (sendport)
+	if (sendport) {
+		if (opt.data_addr_num != 0)
+			data_addr.sin_addr.s_addr = htonl(INADDR_ANY); /* wildcard*/
 		data_addr.sin_port = 0;	/* let system pick one ? in rdma env */ 
+	}
 /*	if (data != -1)
 		(void) close(data); */
 	dc_cb = (rdma_cb *) malloc(sizeof(rdma_cb));
@@ -2460,7 +2461,7 @@ noport:
 	DPRINTF(("rdma_listen successful\n"));
 	
 	if (sendport) {
-		a = (char *)&data_addr.sin_addr;
+		a = (char *)&myctladdr.sin_addr;
 		p = (char *)&data_addr.sin_port;
 #define	UC(b)	(((int)b)&0xff)
 		result =
@@ -2514,7 +2515,6 @@ dataconn(const char *lmode)
 static void
 rdmadataconn(const char *lmode)
 {
-	struct ibv_recv_wr *bad_recv_wr;
 	int ret;
 
         if (passivemode) /* Todo here */
@@ -2522,8 +2522,6 @@ rdmadataconn(const char *lmode)
 
 	/* wait for connection established */
 	struct wcm_id *item;
-	
-	DEBUG_LOG("rdma accepting client connection request\n");
 	
 	TAILQ_LOCK(&acceptedTqh);
 	if ( TAILQ_EMPTY(&acceptedTqh) )
@@ -2572,27 +2570,11 @@ rdmadataconn(const char *lmode)
 	}
 	DPRINTF(("iperf_setup_buffers success\n"));
 
-/*	DPRINTF(("before ibv_post_recv\n"));
-	ret = ibv_post_recv(child_dc_cb->qp, &child_dc_cb->rq_wr, &bad_recv_wr);
-	if (ret) {
-		fprintf(stderr, "ibv_post_recv failed: %d (%d, %s)\n", \
-			ret, errno, strerror(errno));
-		goto err2;
-	}
-	DPRINTF(("ibv_post_recv success\n")); */
-
 	ret = pthread_create(&child_dc_cb->cqthread, NULL, cq_thread, child_dc_cb);
 	if (ret) {
 		fprintf(stderr, "pthread_create cq_thread failed: %d\n", ret);
 		goto err2;
 	}
-
-/*	sem_wait(&dc_cb->sem);
-	if (dc_cb->state != CONNECT_REQUEST) {
-		fprintf(stderr, "wait for CONNECT_REQUEST state %d\n",
-			dc_cb->state);
-		return;
-	}*/
 
 	/* rdma_accept */
 	DPRINTF(("before iperf_accept\n"));
@@ -2604,22 +2586,6 @@ rdmadataconn(const char *lmode)
 	DPRINTF(("iperf_accept success\n"));
 
 	/* release the listening rdma_cm_id */
-	/* cq_thread - cm_thread
-DPRINTF(("before: release the listening rdma_cm_id\n"));
-	iperf_free_qp(dc_cb);
-DPRINTF(("before: release the listening rdma_cm_id 1\n"));
-	pthread_cancel(dc_cb->cqthread);
-	pthread_join(dc_cb->cqthread, NULL);
-DPRINTF(("before: release the listening rdma_cm_id 2\n"));
-	pthread_cancel(dc_cb->cmthread);
-	pthread_join(dc_cb->cqthread, NULL);
-DPRINTF(("before: release the listening rdma_cm_id 3\n"));
-	rdma_destroy_id(dc_cb->cm_id);
-DPRINTF(("before: release the listening rdma_cm_id 4\n"));
-	sem_destroy(&dc_cb->sem);
-DPRINTF(("before: release the listening rdma_cm_id 5\n"));
-	free(dc_cb); */
-DPRINTF(("after: release the listening rdma_cm_id\n"));
 	return;
 
 err3:

@@ -217,6 +217,8 @@ struct options opt;
 /* it is not safe to create directory simutanuously  */
 pthread_mutex_t dir_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+pthread_mutex_t transcurrlen_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /*
  * Timeout intervals for retrying connections
  * to hosts that don't accept PORT cmds.  This
@@ -2233,18 +2235,21 @@ static int rreceive_data(FILE *outstr)
 			ret = pthread_create(&writer_tid[i], NULL, \
 				writer, dc_cb);
 			if (ret != 0) {
-				perror("pthread_create reader:");
+				syslog(LOG_ERR, "create writer fail");
 				exit(EXIT_FAILURE);
 			}
 		}
 		
-		/* wait for disconnection event
-		sem_wait(&dc_cb->sem); */
-		
+		for ( ; ; ) {
+			if (transcurrlen >= transtotallen)
+				break;
+			sleep(1);
+		}
+
 		for (i = 0; i < opt.writernum; i ++) {
-/*			pthread_cancel(writer_tid[i]); */
-			pthread_join(writer_tid[i], NULL);
-			syslog(LOG_ERR, "join writer[%d] success", i);
+			pthread_cancel(writer_tid[i]);
+/*			pthread_join(writer_tid[i], NULL); */
+			syslog(LOG_ERR, "cancel writer[%d] success", i);
 		}
 		
 		/* release the connected rdma_cm_id */

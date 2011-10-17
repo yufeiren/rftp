@@ -54,6 +54,7 @@
 extern "C" {
 #endif
 
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -65,6 +66,9 @@ extern "C" {
 #include <sys/mman.h>
 #include <utime.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <assert.h>
@@ -130,15 +134,21 @@ struct options {
 	int    rdma_cq_depth;
 	int    rdma_qp_rq_depth;
 	int    rdma_qp_sq_depth;
+	int    wc_event_num;
+	int    wc_thread_num;
+	char   *ibaddr;
+	struct sockaddr_in data_addr[32];
+	int    data_addr_num;
 };
 
 double byte_atof(const char *);
 max_size_t byte_atoi(const char *);
 
-
 bool file_exists_p (const char *);
 char *read_whole_line (FILE *);
 char *concat_strings (const char *, ...);
+
+int parse_opt_addr(struct options *);
 
 /* thread */
 void *anabw(void *);

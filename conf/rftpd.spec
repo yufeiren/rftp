@@ -2,7 +2,7 @@
 
 %define _topdir         /home/ren/rftp
 %define name                    rftpd
-%define release         rc1
+%define release         1
 %define version         0.14
 %define buildroot %{_topdir}/%{name}-%{version}-%{release}-root
 
@@ -43,6 +43,16 @@ rm -rf %{buildroot}
 /usr/sbin/rftpd
 
 %changelog
+*Mon Oct 17 2011 <renyufei83@gmail.com>
+--limit splice length for lower kernel version - 2.6.18
+
+*Thu Sep 06 2011 <renyufei83@gmail.com>
+--fix out of order package's pending list sequence number bug
+--enlarge rdma_conn_param parameters
+--put buffer block into waiting list before post task
+--introduce the master-worker thread pool for
+  completion event handling
+
 *Tue Aug 02 2011 <renyufei83@gmail.com>
 --support multiple tcp streams for 'get' and 'put'
 --multiple streams with splice/sendfile/read-write
