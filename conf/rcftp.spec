@@ -2,7 +2,7 @@
 
 %define _topdir         /home/ren/rftp
 %define name                    rcftp
-%define release         rc4
+%define release         1
 %define version         0.14
 %define buildroot %{_topdir}/%{name}-%{version}-%{release}-root
 
@@ -43,6 +43,9 @@ rm -rf %{buildroot}
 /usr/bin/rcftp
 
 %changelog
+*Mon Oct 17 2011 <renyufei83@gmail.com>
+--limit splice length for lower kernel version - 2.6.18
+
 *Thu Sep 06 2011 <renyufei83@gmail.com>
 --fix out of order package's pending list sequence number bug
 --enlarge rdma_conn_param parameters

@@ -1754,6 +1754,8 @@ fs_splice(int out_fd, int in_fd, off_t offset, size_t count)
 	
 	ssize_t bytes, bytes_sent, bytes_in_pipe;
 	size_t total_bytes_sent = 0;
+	ssize_t this_len;
+	int flags;
 
 	if ( pipe(pipefd) < 0 ) {
 		syslog(LOG_ERR, "pipe fail");
@@ -1762,9 +1764,16 @@ fs_splice(int out_fd, int in_fd, off_t offset, size_t count)
 	
 	// Splice the data from in_fd into the pipe
 	while (total_bytes_sent < count) {
+		this_len = count - total_bytes_sent;
+		flags = 0;
+
+		if (this_len > SPLICE_DEF_SIZE) {
+			this_len = SPLICE_DEF_SIZE;
+			flags = SPLICE_F_MORE | SPLICE_F_MOVE;
+		}
+
 		if ((bytes_sent = splice(in_fd, NULL, pipefd[1], NULL,
-			count - total_bytes_sent,
-			SPLICE_F_MORE | SPLICE_F_MOVE)) <= 0) {
+					 this_len, flags)) <= 0) {
 			if (errno == EINTR || errno == EAGAIN) {
 				// Interrupted system call/try again
 				// Just skip to the top of the loop and try again
