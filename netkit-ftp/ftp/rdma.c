@@ -2772,13 +2772,25 @@ tcp_sender(void *arg)
 	
 	pgsz = getpagesize();
 	
-	char buf[16*1024];
+	char *buf;
 	off_t filelen;
 	off_t sendsize;
 	off_t n;
 	char *bufp;
 	register int c, d;
 	
+	buf = (char *) malloc(opt.cbufsiz);
+	if (buf == NULL) {
+		syslog(LOG_ERR, "no sufficient memory");
+		exit(EXIT_FAILURE);
+	}
+
+	if (posix_memalign(&buf, pgsz, opt.cbufsiz) != 0) {
+		syslog(LOG_ERR, "memory align fail: %d(%s)", \
+			errno, strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
 	for ( ; ; ) {
 		/* get file info block */
 		TAILQ_LOCK(&finfo_tqh);
@@ -2803,7 +2815,7 @@ tcp_sender(void *arg)
 		}
 		
 		/* file information(1032) = file path(1024) + file size (8) */
-		memset(buf, '\0', 16 * 1024);
+		memset(buf, '\0', opt.cbufsiz);
 		memcpy(buf, item->rf, strlen(item->rf));
 		filelen = htonll(item->fsize);
 		memcpy(buf + 1024, &filelen, 8);
@@ -2829,7 +2841,7 @@ tcp_sender(void *arg)
 			sendfilen(conn, item->fd, offset, item->fsize);
 		} else {
 			syslog(LOG_ERR, "ioengine: sync(read/write)");
-			while ((c = read(item->fd, buf, sizeof (buf))) > 0) {
+			while ((c = read(item->fd, buf, opt.cbufsiz)) > 0) {
 				if ((item->fsize -= c) < 0)
 					break;
 				for (bufp = buf; c > 0; c -= d, bufp += d)
@@ -2840,6 +2852,8 @@ tcp_sender(void *arg)
 		
 		close(item->fd);
 	}
+
+	free(buf);
 	
 	/* close the connection */
 	close(conn);
@@ -2874,13 +2888,25 @@ tcp_recver(void *arg)
 	
 	pgsz = getpagesize();
 	
-	char buf[16*1024];
+	char *buf;
 	char filename[1024];
 	off_t filesize;
 	off_t recvsize;
 	int cnt;
 	int fd;
 	
+	buf = (char *) malloc(opt.cbufsiz);
+	if (buf == NULL) {
+		syslog(LOG_ERR, "no sufficient memory");
+		exit(EXIT_FAILURE);
+	}
+
+	if (posix_memalign(&buf, pgsz, opt.cbufsiz) != 0) {
+		syslog(LOG_ERR, "memory align fail: %d(%s)", \
+			errno, strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
 	for ( ; ; ) {
 		/* recv header */
 		if (readn(conn, buf, 1032) != 1032)
@@ -2921,7 +2947,7 @@ tcp_recver(void *arg)
 		} else
 		do {
 			(void) alarm ((unsigned) 900);
-			cnt = read(conn, buf, sizeof(buf));
+			cnt = readn(conn, buf, sizeof(buf));
 			(void) alarm (0);
 
 			if (cnt > 0) {
@@ -2932,6 +2958,8 @@ tcp_recver(void *arg)
 		
 		close(fd);
 	}
+
+	free(buf);
 	
 	/* close the connection */
 	close(conn);
