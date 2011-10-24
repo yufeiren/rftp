@@ -2761,7 +2761,7 @@ void passive(void)
 	len = sizeof(pasv_addr);
 	if (getsockname(pdata, (struct sockaddr *) &pasv_addr, &len) < 0)
 		goto pasv_error;
-	if (listen(pdata, 1) < 0)
+	if (listen(pdata, 128) < 0)
 		goto pasv_error;
 	a = (char *) &pasv_addr.sin_addr;
 	p = (char *) &pasv_addr.sin_port;
