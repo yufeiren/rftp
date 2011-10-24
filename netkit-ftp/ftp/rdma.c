@@ -2925,6 +2925,8 @@ tcp_recver(void *arg)
 		transtotallen += filesize;
 		pthread_mutex_unlock(&dir_mutex);
 		
+		syslog(LOG_ERR, "start transfer file: %s", filename);
+
 		/* open file */
 		if (   (opt.directio == true)
 		    && (stat(filename, &st) < 0 || S_ISREG(st.st_mode)))
@@ -2944,18 +2946,17 @@ tcp_recver(void *arg)
 			recvsize = sf_splice(fd, conn, offset, filesize);
 			syslog(LOG_ERR, "sf_splice file %s %ld bytes", \
 				filename, recvsize);
-		} else
+		} else {
+			syslog(LOG_ERR, "ioengine: read-write");
 		do {
-			(void) alarm ((unsigned) 900);
-			cnt = readn(conn, buf, sizeof(buf));
-			(void) alarm (0);
+			cnt = readn(conn, buf, opt.cbufsiz);
 
 			if (cnt > 0) {
 				if (writen(fd, buf, cnt) != cnt)
 					break;
 			}
 		} while (cnt > 0 && (filesize -= cnt) > 0);
-		
+		}
 		close(fd);
 	}
 

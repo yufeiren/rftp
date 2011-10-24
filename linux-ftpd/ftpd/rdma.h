@@ -78,6 +78,8 @@ extern FILE *fin;
 // rdma_listen backlog
 #define RLISTENBACKLOG		32
 
+#define TCPLISTENBACKLOG	1024
+
 // wr_id bitmask
 #define WRIDEVENT	0x0100000000000000
 #define WRIDBUFFER	0x0200000000000000
