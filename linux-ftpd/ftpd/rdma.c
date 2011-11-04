@@ -2772,13 +2772,26 @@ tcp_sender(void *arg)
 	
 	pgsz = getpagesize();
 	
-	char buf[16*1024];
+	char *buf;
 	off_t filelen;
 	off_t sendsize;
 	off_t n;
+	size_t bytes_read;
 	char *bufp;
 	register int c, d;
 	
+	buf = (char *) malloc(opt.cbufsiz);
+	if (buf == NULL) {
+		syslog(LOG_ERR, "no sufficient memory");
+		exit(EXIT_FAILURE);
+	}
+
+	if (posix_memalign(&buf, pgsz, opt.cbufsiz) != 0) {
+		syslog(LOG_ERR, "memory align fail: %d(%s)", \
+			errno, strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
 	for ( ; ; ) {
 		/* get file info block */
 		TAILQ_LOCK(&finfo_tqh);
@@ -2803,7 +2816,7 @@ tcp_sender(void *arg)
 		}
 		
 		/* file information(1032) = file path(1024) + file size (8) */
-		memset(buf, '\0', 16 * 1024);
+		memset(buf, '\0', opt.cbufsiz);
 		memcpy(buf, item->rf, strlen(item->rf));
 		filelen = htonll(item->fsize);
 		memcpy(buf + 1024, &filelen, 8);
@@ -2829,17 +2842,45 @@ tcp_sender(void *arg)
 			sendfilen(conn, item->fd, offset, item->fsize);
 		} else {
 			syslog(LOG_ERR, "ioengine: sync(read/write)");
-			while ((c = read(item->fd, buf, sizeof (buf))) > 0) {
-				if ((item->fsize -= c) < 0)
-					break;
-				for (bufp = buf; c > 0; c -= d, bufp += d)
-					if ((d = write(conn, bufp, c)) <= 0)
-						break;
+			int tmpfd;
+			off_t tmpfsize = item->fsize;
+			
+		do {
+			if ( (opt.directio == true)
+				&& (item->fsize < opt.cbufsiz)
+				&& (item->fsize % pgsz != 0))
+			{
+				/* open - lseek - read - close */
+			  printf("tail of file size is %d\n", item->fsize);
+				tmpfd = open(item->lf, O_RDONLY);
+				if (tmpfd < 0) {
+					syslog(LOG_ERR, "can not open %s", \
+						item->lf);
+					exit(EXIT_FAILURE);
+				}
+				
+				lseek(tmpfd, tmpfsize - item->fsize, SEEK_CUR);
+				c = read(tmpfd, buf, item->fsize);
+				close(tmpfd);
+			} else {
+				c = read(item->fd, buf, opt.cbufsiz);
 			}
+
+			if (c <= 0)
+				break;
+
+			for (bufp = buf; c > 0; c -= d, bufp += d)
+				if ((d = write(conn, bufp, c)) <= 0)
+					break;
+
+		} while ((item->fsize -= c) > 0);
+
 		}
 		
 		close(item->fd);
 	}
+
+	free(buf);
 	
 	/* close the connection */
 	close(conn);
@@ -2874,13 +2915,25 @@ tcp_recver(void *arg)
 	
 	pgsz = getpagesize();
 	
-	char buf[16*1024];
+	char *buf;
 	char filename[1024];
 	off_t filesize;
 	off_t recvsize;
 	int cnt;
 	int fd;
 	
+	buf = (char *) malloc(opt.cbufsiz);
+	if (buf == NULL) {
+		syslog(LOG_ERR, "no sufficient memory");
+		exit(EXIT_FAILURE);
+	}
+
+	if (posix_memalign(&buf, pgsz, opt.cbufsiz) != 0) {
+		syslog(LOG_ERR, "memory align fail: %d(%s)", \
+			errno, strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
 	for ( ; ; ) {
 		/* recv header */
 		if (readn(conn, buf, 1032) != 1032)
@@ -2899,6 +2952,8 @@ tcp_recver(void *arg)
 		transtotallen += filesize;
 		pthread_mutex_unlock(&dir_mutex);
 		
+		syslog(LOG_ERR, "start transfer file: %s", filename);
+
 		/* open file */
 		if (   (opt.directio == true)
 		    && (stat(filename, &st) < 0 || S_ISREG(st.st_mode)))
@@ -2918,20 +2973,46 @@ tcp_recver(void *arg)
 			recvsize = sf_splice(fd, conn, offset, filesize);
 			syslog(LOG_ERR, "sf_splice file %s %ld bytes", \
 				filename, recvsize);
-		} else
+		} else {
+			syslog(LOG_ERR, "ioengine: sync(read/write)");
+			int tmpfd;
+			off_t tmpfsize = filesize;
+
 		do {
-			(void) alarm ((unsigned) 900);
-			cnt = read(conn, buf, sizeof(buf));
-			(void) alarm (0);
+			if (filesize < opt.cbufsiz)
+				cnt = readn(conn, buf, filesize);
+			else
+				cnt = readn(conn, buf, opt.cbufsiz);
 
 			if (cnt > 0) {
+
+			  if ( (opt.directio == true)
+				&& (cnt % pgsz != 0) ) {
+				tmpfd = open(filename, O_WRONLY | O_CREAT, 0666);
+				if (tmpfd < 0) {
+					syslog(LOG_ERR, "Open failed %s", \
+						filename);
+					exit(EXIT_FAILURE);
+				}
+
+				lseek(tmpfd, tmpfsize - filesize, SEEK_CUR);
+
+				if (writen(tmpfd, buf, cnt) != cnt)
+					break;
+
+				close(tmpfd);
+			  } else {
 				if (writen(fd, buf, cnt) != cnt)
 					break;
+			  }
+
 			}
 		} while (cnt > 0 && (filesize -= cnt) > 0);
-		
+		}
 		close(fd);
 	}
+
+	free(buf);
 	
 	/* close the connection */
 	close(conn);
