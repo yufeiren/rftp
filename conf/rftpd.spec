@@ -2,8 +2,8 @@
 
 %define _topdir         /home/ren/rftp
 %define name                    rftpd
-%define release         1
-%define version         0.14
+%define release         rc1
+%define version         0.15
 %define buildroot %{_topdir}/%{name}-%{version}-%{release}-root
 
 BuildRoot:      %{buildroot}
@@ -43,6 +43,10 @@ rm -rf %{buildroot}
 /usr/sbin/rftpd
 
 %changelog
+*Fri Nov 04 2011 <renyufei83@gmail.com>
+--enlarge server side listen queue backlog
+--intergate tcp engine with direct io
+
 *Mon Oct 17 2011 <renyufei83@gmail.com>
 --limit splice length for lower kernel version - 2.6.18
 
