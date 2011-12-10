@@ -118,6 +118,42 @@ static void	 help __P((struct tab *, char *));
 #define	SITECMD	7	/* SITE command */
 #define	NSTR	8	/* Number followed by a string */
 
+%}
+
+%union {
+	int	i;
+	char   *s;
+}
+
+%token
+	A	B	C	E	F	I
+	L	N	P	R	S	T
+
+	SP	CRLF	COMMA
+
+	USER	PASS	ACCT	REIN	QUIT	PORT
+	PASV	TYPE	STRU	MODE	RETR	STOR
+	APPE	MLFL	MAIL	MSND	MSOM	MSAM
+	MRSQ	MRCP	ALLO	REST	RNFR	RNTO
+	ABOR	DELE	CWD	LIST	NLST	SITE
+	STAT	HELP	NOOP	MKD	RMD	PWD
+	CDUP	STOU	SMNT	SYST	SIZE	MDTM
+	RADR	RPSV	RSTR    RRTR    MSTR    MRTR
+
+	UMASK	IDLE	CHMOD
+
+	LEXERR
+
+%token	<s> STRING
+%token	<i> NUMBER
+
+%type	<i> check_login octal_number byte_size
+%type	<i> struct_code mode_code type_code form_code
+%type	<s> pathstring pathname password username
+%type	<i> host_port conn_number
+
+%{
+
 struct tab {
 	const char	*name;
 	short	token;
@@ -192,38 +228,6 @@ struct tab sitetab[] = {
 };
 
 %}
-
-%union {
-	int	i;
-	char   *s;
-}
-
-%token
-	A	B	C	E	F	I
-	L	N	P	R	S	T
-
-	SP	CRLF	COMMA
-
-	USER	PASS	ACCT	REIN	QUIT	PORT
-	PASV	TYPE	STRU	MODE	RETR	STOR
-	APPE	MLFL	MAIL	MSND	MSOM	MSAM
-	MRSQ	MRCP	ALLO	REST	RNFR	RNTO
-	ABOR	DELE	CWD	LIST	NLST	SITE
-	STAT	HELP	NOOP	MKD	RMD	PWD
-	CDUP	STOU	SMNT	SYST	SIZE	MDTM
-	RADR	RPSV	RSTR    RRTR    MSTR    MRTR
-
-	UMASK	IDLE	CHMOD
-
-	LEXERR
-
-%token	<s> STRING
-%token	<i> NUMBER
-
-%type	<i> check_login octal_number byte_size
-%type	<i> struct_code mode_code type_code form_code
-%type	<s> pathstring pathname password username
-%type	<i> host_port conn_number
 
 %start	cmd_list
 
