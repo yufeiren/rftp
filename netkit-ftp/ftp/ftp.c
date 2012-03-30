@@ -1073,10 +1073,6 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	
 	int i;
 	
-	switch (curtype) {
-
-	case TYPE_I:
-	case TYPE_L:
 		errno = d = 0;
 		
 		/* create sender and reader */
@@ -1165,55 +1161,6 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			bytes = -1;
 		}
 
-		break;
-
-	case TYPE_A:
-		while ((c = getc(fin)) != EOF) {
-			if (c == '\n') {
-				while (hash && (bytes >= hashbytes)) {
-					(void) putchar('#');
-					(void) fflush(stdout);
-					hashbytes += HASHBYTES;
-				}
-				if (tick && (bytes >= hashbytes)) {
-					(void) printf("\rBytes transferred: %ld",
-						bytes);
-					(void) fflush(stdout);
-					while (bytes >= hashbytes)
-						hashbytes += TICKBYTES;
-				}
-				if (ferror(dout))
-					break;
-				(void) putc('\r', dout);
-				bytes++;
-			}
-			(void) putc(c, dout);
-			bytes++;
-	/*		if (c == '\r') {			  	*/
-	/*		(void)	putc('\0', dout);  (* this violates rfc */
-	/*			bytes++;				*/
-	/*		}                          			*/     
-		}
-		if (hash) {
-			if (bytes < hashbytes)
-				(void) putchar('#');
-			(void) putchar('\n');
-			(void) fflush(stdout);
-		}
-		if (tick) {
-			(void) printf("\rBytes transferred: %ld\n", bytes);
-			(void) fflush(stdout);
-		}
-		if (ferror(fin))
-			fprintf(stderr, "local: %s: %s\n", local,
-				strerror(errno));
-		if (ferror(dout)) {
-			if (errno != EPIPE)
-				perror("netout");
-			bytes = -1;
-		}
-		break;
-	}
 	(void) gettimeofday(&stop, (struct timezone *)0);
 	if (closefunc != NULL)
 		(*closefunc)(fin);

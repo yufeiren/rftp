@@ -2219,10 +2219,7 @@ static int rreceive_data(FILE *outstr)
 		transflag = 0;
 		return (-1);
 	}
-	switch (type) {
 
-	case TYPE_I:
-	case TYPE_L:
 		signal (SIGALRM, lostconn);
 		
 		/* create recver and writer */
@@ -2291,46 +2288,6 @@ static int rreceive_data(FILE *outstr)
 		
 		return (0);
 
-	case TYPE_E:
-		reply(553, "TYPE E not implemented.");
-		transflag = 0;
-		return (-1);
-
-	case TYPE_A:
-		while ((c = getc(instr)) != EOF) {
-			byte_count++;
-			if (c == '\n')
-				bare_lfs++;
-			while (c == '\r') {
-				if (ferror(outstr))
-					goto data_err;
-				if ((c = getc(instr)) != '\n') {
-					(void) putc ('\r', outstr);
-					if (c == '\0' || c == EOF)
-						goto contin2;
-				}
-			}
-			(void) putc(c, outstr);
-	contin2:	;
-		}
-		fflush(outstr);
-		if (ferror(instr))
-			goto data_err;
-		if (ferror(outstr))
-			goto file_err;
-		transflag = 0;
-		if (bare_lfs) {
-			lreply(226,
-		"WARNING! %d bare linefeeds received in ASCII mode",
-			    bare_lfs);
-		(void)printf("   File may not have transferred correctly.\r\n");
-		}
-		return (0);
-	default:
-		reply(550, "Unimplemented TYPE %d in receive_data", type);
-		transflag = 0;
-		return (-1);
-	}
 	
 	tsf_free_buf_list();
 
