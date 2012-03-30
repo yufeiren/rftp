@@ -2,7 +2,7 @@
 
 %define _topdir         /home/ren/rftp
 %define name                    rcftp
-%define release         rc1
+%define release         rc3
 %define version         0.15
 %define buildroot %{_topdir}/%{name}-%{version}-%{release}-root
 
@@ -43,6 +43,9 @@ rm -rf %{buildroot}
 /usr/bin/rcftp
 
 %changelog
+*Fri Mar 30 2012 <renyufei83@gmail.com>
+--add '-V' for checking version
+
 *Fri Nov 04 2011 <renyufei83@gmail.com>
 --enlarge server side listen queue backlog
 --intergate tcp engine with direct io
