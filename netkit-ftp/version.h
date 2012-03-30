@@ -2,4 +2,4 @@
  * String to embed in binaries to identify package
  */
 
-char pkg[]="$RFTP: linux-rcftp-0.13 $";
+char pkg[]="$RFTP: rcftp-0.15-rc3 $";

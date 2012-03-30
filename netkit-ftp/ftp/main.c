@@ -67,10 +67,12 @@ char main_rcsid[] =
 
 #define Extern
 #include "ftp_var.h"
+#include "../version.h"
 #include "errors.h"
 #include "rdma.h"
 #include "init.h"
 #include "utils.h"
+
 int traceflag = 0;
 const char *home = "/";
 
@@ -100,8 +102,8 @@ static
 void
 usage(void)
 {
-	printf("\nRFTP client version 0.13\n");
-	printf("\n\tUsage: { rcftp | pftp } [-pinegvtd] [hostname]\n");
+	printf("\n%s\n", pkg);
+	printf("\n\tUsage: rcftp [-pinegvtd] [hostname] [port]\n");
 	printf("\t   -p: enable passive mode (default for pftp)\n");
 	printf("\t   -i: turn off prompting during mget\n");
 	printf("\t   -n: inhibit auto-login\n");
@@ -187,6 +189,10 @@ main(volatile int argc, char **volatile argv)
 				
 			case 'h':
 				usage();
+				exit(0);
+
+			case 'V':
+				printf("%s", pkg);
 				exit(0);
 
 			default:

@@ -138,7 +138,7 @@ typedef unsigned int useconds_t;
 #include "init.h"
 #include "utils.h"
 
-static char versionpre[] = "Version 0.13/Linux";
+static char versionpre[] = "Version 0.15/Linux";
 static char version[sizeof(versionpre)+sizeof(pkg)];
 
 
@@ -408,6 +408,10 @@ main(int argc, char *argv[], char **envp)
 		case 'v':
 			debug = 1;
 			break;
+
+		case 'V':
+			printf("%s\n", version);
+			exit(0);
 
 		default:
 			warnx("unknown flag -%c ignored", optopt);
