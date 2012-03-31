@@ -192,7 +192,7 @@ main(volatile int argc, char **volatile argv)
 				exit(0);
 
 			case 'V':
-				printf("%s", pkg);
+				printf("%s\n", pkg);
 				exit(0);
 
 			default:

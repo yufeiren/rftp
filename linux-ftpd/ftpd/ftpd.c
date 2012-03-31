@@ -313,7 +313,7 @@ main(int argc, char *argv[], char **envp)
 	socklen_t addrlen;
 	char *cp, line[LINE_MAX];
 	FILE *fd;
-	const char *argstr = "AdDhlMSt:T:u:UvP";
+	const char *argstr = "AdDhlMSt:T:u:UvVP";
 	struct hostent *hp;
 
 #ifdef __linux__

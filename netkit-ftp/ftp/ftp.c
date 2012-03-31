@@ -63,7 +63,6 @@ char ftp_rcsid[] =
 #include "ftp_var.h"
 #include "cmds.h"
 #include "errors.h"
-#include "../version.h"
 
 #include "rdma.h"
 #include "utils.h"
@@ -1133,13 +1132,13 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			perror("pthread_join monitor:");
 			exit(EXIT_FAILURE);
 		}
-		syslog(LOG_INFO, "join all the monitor thread");
+		DPRINTF(("join all the monitor thread"));
 		pthread_join(sender_tid, NULL);
-		syslog(LOG_INFO, "join all the sender thread\n"));
+		DPRINTF(("join all the sender thread\n"));
 		for (i = 0; i < opt.readernum; i ++) {
 			pthread_join(reader_tid[i], NULL);
 		}
-		syslog(LOG_INFO, "join all the reader thread\n");
+		DPRINTF(("join all the reader thread\n"));
 		bytes = (long) transtotallen;
 		
 		if (hash && (bytes > 0)) {
