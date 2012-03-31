@@ -1584,10 +1584,16 @@ tsf_free_buf_list(void)
 	int i;
 	for (i = 0; i < opt.cbufnum; i ++) {
 		TAILQ_LOCK(&free_tqh);
-		while ( TAILQ_EMPTY(&free_tqh) )
+		/*		while ( TAILQ_EMPTY(&free_tqh) )
 			if ( TAILQ_WAIT(&free_tqh) != 0)
 				syslog(LOG_ERR, "TAILQ_WAIT free_tqh");
-		
+		*/
+
+		if ( TAILQ_EMPTY(&free_tqh) ) {
+			TAILQ_UNLOCK(&free_tqh);
+			break;
+		}
+
 		item = TAILQ_FIRST(&free_tqh);
 		TAILQ_REMOVE(&free_tqh, item, entries);
 		
