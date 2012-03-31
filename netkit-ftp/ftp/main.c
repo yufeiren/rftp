@@ -98,6 +98,8 @@ pthread_mutex_t dir_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t transcurrlen_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+int is_disconnected_event = 0;
+
 static
 void
 usage(void)

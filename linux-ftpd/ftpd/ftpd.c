@@ -219,6 +219,8 @@ pthread_mutex_t dir_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t transcurrlen_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+int is_disconnected_event = 0;
+
 /*
  * Timeout intervals for retrying connections
  * to hosts that don't accept PORT cmds.  This
@@ -1768,7 +1770,6 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	}
 	
 	sem_wait(&dc_cb->sem);
-	
 	if (dc_cb->state != ROUTE_RESOLVED) {
 		syslog(LOG_ERR, "waiting for addr/route resolution state %d\n", 
 			dc_cb->state);
@@ -1794,8 +1795,12 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	}
 	
 	/* setup buffers */
-	tsf_setup_buf_list(dc_cb);
-	syslog(LOG_ERR, "tsf_setup_buf_list finish\n");
+	ret = tsf_setup_buf_list(dc_cb);
+	if (ret) {
+		syslog(LOG_ERR, "tsf_setup_buf_list fail");
+		goto err3;
+	}
+	syslog(LOG_ERR, "tsf_setup_buf_list success\n");
 	
 	/* multiple streams
 	create_dc_stream_client(dc_cb, opt.rcstreamnum, &data_dest); */
@@ -2244,6 +2249,13 @@ static int rreceive_data(FILE *outstr)
 		for ( ; ; ) {
 			if (transcurrlen >= transtotallen)
 				break;
+
+			/* during the data transfer if disconnect event 
+			 * happened, just exit the process
+			 */
+			if (is_disconnected_event == 1)
+				break;
+
 			sleep(1);
 		}
 

@@ -107,6 +107,8 @@ extern pthread_mutex_t dir_mutex;
 
 extern pthread_mutex_t transcurrlen_mutex;
 
+extern int is_disconnected_event;
+
 static struct rdma_cb *tmpcb;
 /* static tmp; */
 
@@ -900,7 +902,7 @@ int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 	case RDMA_CM_EVENT_CONNECT_ERROR:
 	case RDMA_CM_EVENT_UNREACHABLE:
 	case RDMA_CM_EVENT_REJECTED:
-		fprintf(stderr, "cma event %s, error %d\n",
+		syslog(LOG_ERR, "cma event %s, error %d\n",
 			rdma_event_str(event->event), event->status);
 		sem_post(&cb->sem);
 		ret = -1;
@@ -909,6 +911,7 @@ int iperf_cma_event_handler(struct rdma_cm_id *cma_id,
 	case RDMA_CM_EVENT_DISCONNECTED:
 		syslog(LOG_ERR, "RDMA %s DISCONNECT EVENT...\n",
 			cb->server ? "server" : "client");
+		is_disconnected_event = 1;
 		sem_post(&cb->sem);
 		break;
 
@@ -1414,7 +1417,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 	
 	for (i = 0; i < opt.evbufnum; i++) {
 		if ( (evwritem = (EVENTWR *) malloc(sizeof(EVENTWR))) == NULL) {
-			syslog(LOG_ERR, "iperf_setup_buffers: malloc");
+			syslog(LOG_ERR, "iperf_setup_buffers: malloc WR fail");
 			exit(EXIT_FAILURE);
 		}
 		
@@ -1424,7 +1427,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 		
 		evwritem->ev_mr = ibv_reg_mr(cb->pd, &evwritem->ev_buf, sizeof(struct rdma_info_blk), 0);
 		if (!evwritem->ev_mr) {
-			syslog(LOG_ERR, "evwritem->ev_mr ibv_reg_mr send_mr");
+			syslog(LOG_ERR, "iperf_setup_buffers: ibv_reg_mr WR fail");
 			exit(EXIT_FAILURE);
 		}
 		
@@ -1445,7 +1448,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 	
 	for (i = 0; i < opt.rmtaddrnum; i++) {
 		if ( (rmtaddritem = (REMOTEADDR *) malloc(sizeof(REMOTEADDR))) == NULL) {
-			syslog(LOG_ERR, "tsf_setup_buf_list: malloc");
+			syslog(LOG_ERR, "iperf_setup_buffers: malloc REMOTEADDR fail");
 			exit(EXIT_FAILURE);
 		}
 		
@@ -1459,7 +1462,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 	/* untagged recv buf list */
 	for (i = 0; i < opt.recvbufnum; i++) {
 		if ( (recvitem = (RECVWR *) malloc(sizeof(RECVWR))) == NULL) {
-			syslog(LOG_ERR, "tsf_setup_buf_list: malloc");
+			syslog(LOG_ERR, "iperf_setup_buffers: malloc RECVWR fail");
 			exit(EXIT_FAILURE);
 		}
 		
@@ -1469,7 +1472,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 		
 		recvitem->recv_mr = ibv_reg_mr(cb->pd, &recvitem->recv_buf, sizeof(struct rdma_info_blk), IBV_ACCESS_LOCAL_WRITE);
 		if (!recvitem->recv_mr) {
-			syslog(LOG_ERR, "recvitem->recv_mr ibv_reg_mr recv_mr");
+			syslog(LOG_ERR, "tsf_setup_buf_list: ibv_reg_mr recv_mr fail");
 			exit(EXIT_FAILURE);
 		}
 		
@@ -1485,7 +1488,7 @@ int iperf_setup_buffers(struct rdma_cb *cb)
 		
 		ret = ibv_post_recv(cb->qp, &recvitem->recv_wr, &bad_recv_wr);
 		if (ret) {
-			syslog(LOG_ERR, "ibv_post_recv fail: %m");
+			syslog(LOG_ERR, "iperf_setup_buffers: ibv_post_recv fail: %m");
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -1508,7 +1511,7 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 	
 	for (i = 0; i < opt.cbufnum; i++) {
 		if ( (item = (BUFDATBLK *) malloc(sizeof(BUFDATBLK))) == NULL) {
-			syslog(LOG_ERR, "tsf_setup_buf_list: malloc fail");
+			syslog(LOG_ERR, "tsf_setup_buf_list: malloc DATABLK fail");
 			exit(EXIT_FAILURE);
 		}
 		
@@ -1518,13 +1521,13 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 		
 		if (opt.directio != true) {
 			if ( (item->rdma_buf = (char *) malloc(cb->size + sizeof(rmsgheader))) == NULL) {
-				syslog(LOG_ERR, "tsf_setup_buf_list: malloc 2");
-				exit(EXIT_FAILURE);
+				syslog(LOG_ERR, "tsf_setup_buf_list: malloc rmsgheader fail");
+				return -1;
 			}
 		} else {
 			if ( posix_memalign(&item->rdma_buf, getpagesize(), cb->size + sizeof(rmsgheader)) != 0 ) {
-			        syslog(LOG_ERR, "tsf_setup_buf_list: memalign");
-			        exit(EXIT_FAILURE);
+			        syslog(LOG_ERR, "tsf_setup_buf_list: memalign fail");
+				return -1;
 			}
 		}
 		
@@ -1536,8 +1539,10 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 				| IBV_ACCESS_REMOTE_READ
 				| IBV_ACCESS_REMOTE_WRITE);
 		if (!item->rdma_mr) {
-			syslog(LOG_ERR, "tsf_setup_buf_list: ibv_reg_mr");
-			exit(EXIT_FAILURE);
+			syslog(LOG_ERR, \
+				"tsf_setup_buf_list: ibv_reg_mr fail %d(%s)", \
+				errno, strerror(errno));
+				return -1;
 		}
 		
 		item->buflen = cb->size + sizeof(rmsgheader);
@@ -1932,7 +1937,7 @@ for (; j < opt.data_addr_num; j ++) {
 		
 		ret = get_next_channel_event(rcinfo->cm_channel, RDMA_CM_EVENT_ADDR_RESOLVED);
 		if (ret) {
-			syslog(LOG_ERR, "get_next_channel_event");
+			syslog(LOG_ERR, "get_next_channel_event fail");
 			exit(EXIT_FAILURE);
 		}
 		
