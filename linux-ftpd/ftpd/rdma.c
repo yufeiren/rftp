@@ -114,6 +114,7 @@ static struct rdma_cb *tmpcb;
 
 static int filesessionid;
 
+static pthread_mutex_t rqblk_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 {
@@ -148,6 +149,11 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 	if (recvwr->recv_buf.mode == kRdmaTrans_ActWrte) {
 		switch (recvwr->recv_buf.stat) {
 		case ACTIVE_WRITE_FIN:
+			/* try to return some addresses to data source */
+			if (pthread_mutex_trylock(&rqblk_mutex) == 0) {
+				prep_blk_nb(cb);
+				pthread_mutex_unlock(&rqblk_mutex);
+			}
 			/* take the block out */
 			ret = recv_data(&recvwr->recv_buf);
 			if (ret != 0) {
@@ -156,7 +162,9 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 			}
 			break;
 		case ACTIVE_WRITE_RQBLK:
+			pthread_mutex_lock(&rqblk_mutex);
 			ret = prep_blk(cb);
+			pthread_mutex_unlock(&rqblk_mutex);
 			if (ret != 0) {
 				syslog(LOG_ERR, "prep_blk fail");
 				exit(EXIT_FAILURE);
@@ -774,6 +782,98 @@ prep_blk(struct rdma_cb *cb)
 		/* put wr into evwr_tqh list */
 	}
 	
+	/* num */
+	num = htonl(j);
+	memcpy(evwr->ev_buf.addr, &num, 4);
+	
+	evwr->ev_buf.mode = kRdmaTrans_ActWrte;
+	evwr->ev_buf.stat = ACTIVE_WRITE_RPBLK;
+	
+	/* post send response */
+	TAILQ_LOCK(&evwr_tqh);
+	TAILQ_INSERT_TAIL(&evwr_tqh, evwr, entries);
+	TAILQ_UNLOCK(&evwr_tqh);
+	
+	ret = ibv_post_send(cb->qp, &evwr->ev_wr, &bad_wr);
+	if (ret) {
+		syslog(LOG_ERR, "ibv_post_send: %m");
+		return -1;
+	}	
+	
+	return 0;
+}
+
+
+int
+prep_blk_nb(struct rdma_cb *cb)
+{
+/* addr: num(4 bytes) + (buf 8 + rkey 4 + size 4) */
+
+	int i;
+	BUFDATBLK *bufblk;
+	EVENTWR *evwr;
+	struct ibv_send_wr *bad_wr;
+	int ret;
+	
+	char *offset;
+	int j = 0;
+	int num;
+
+	/* get addr info */
+	TAILQ_LOCK(&free_evwr_tqh);
+
+	if (TAILQ_EMPTY(&free_evwr_tqh)) {
+		TAILQ_UNLOCK(&free_evwr_tqh);
+		return 0;
+	}
+
+	evwr = TAILQ_FIRST(&free_evwr_tqh);
+	TAILQ_REMOVE(&free_evwr_tqh, evwr, entries);
+	
+	TAILQ_UNLOCK(&free_evwr_tqh);
+	
+	for (i = 0; i < 2; i ++) {
+		/* get from free list */
+		TAILQ_LOCK(&free_tqh);
+
+		if (TAILQ_EMPTY(&free_tqh)) {
+			TAILQ_UNLOCK(&free_tqh);
+			break;
+		}
+			
+		bufblk = TAILQ_FIRST(&free_tqh);
+		TAILQ_REMOVE(&free_tqh, bufblk, entries);
+		
+		TAILQ_UNLOCK(&free_tqh);
+				
+		/* insert bulk into waiting list */
+		TAILQ_LOCK(&waiting_tqh);
+		TAILQ_INSERT_TAIL(&waiting_tqh, bufblk, entries);
+		TAILQ_UNLOCK(&waiting_tqh);
+		
+		evwr->ev_buf.buf = htonll((uint64_t) (unsigned long)bufblk->rdma_buf);
+		evwr->ev_buf.rkey = htonl(bufblk->rdma_mr->rkey);
+		evwr->ev_buf.size = htonl(cb->size + sizeof(rmsgheader));
+		
+		offset = evwr->ev_buf.addr + i * 16 + 4;
+		memcpy(offset, &(evwr->ev_buf.buf), 8);
+		memcpy(offset + 8, &(evwr->ev_buf.rkey), 4);
+		memcpy(offset + 12, &(evwr->ev_buf.size), 4);
+		
+		++ j;
+		
+		/* put wr into evwr_tqh list */
+	}
+
+	if (i == 0) {
+		TAILQ_LOCK(&free_evwr_tqh);
+		TAILQ_INSERT_TAIL(&free_evwr_tqh, evwr, entries);
+		TAILQ_UNLOCK(&free_evwr_tqh);
+		TAILQ_SIGNAL(&free_evwr_tqh);
+
+		return 0;
+	}
+
 	/* num */
 	num = htonl(j);
 	memcpy(evwr->ev_buf.addr, &num, 4);
@@ -1584,10 +1684,10 @@ tsf_free_buf_list(void)
 	int i;
 	for (i = 0; i < opt.cbufnum; i ++) {
 		TAILQ_LOCK(&free_tqh);
-		/*		while ( TAILQ_EMPTY(&free_tqh) )
+		while ( TAILQ_EMPTY(&free_tqh) )
 			if ( TAILQ_WAIT(&free_tqh) != 0)
 				syslog(LOG_ERR, "TAILQ_WAIT free_tqh");
-		*/
+		
 
 		if ( TAILQ_EMPTY(&free_tqh) ) {
 			TAILQ_UNLOCK(&free_tqh);

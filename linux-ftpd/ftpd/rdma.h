@@ -447,6 +447,8 @@ int send_dat_blk(BUFDATBLK *, struct rdma_cb *, struct Remoteaddr *);
 int recv_dat_blk(BUFDATBLK *, struct rdma_cb *);
 
 int prep_blk(struct rdma_cb *);
+/* non-block mode */
+int prep_blk_nb(struct rdma_cb *);
 int acpt_blk(struct rdma_info_blk *);
 int notify_blk(BUFDATBLK *);
 

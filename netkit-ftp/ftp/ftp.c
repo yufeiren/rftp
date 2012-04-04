@@ -1961,10 +1961,6 @@ rdmarecvrequest(const char *cmd,
 	
 	create_dc_stream_server(child_dc_cb, opt.rcstreamnum);
 	
-	switch (curtype) {
-	
-	case TYPE_I:
-	case TYPE_L:
 		errno = d = 0;
 		
 		/* create writer */
@@ -2017,89 +2013,6 @@ rdmarecvrequest(const char *cmd,
 			(void) fflush(stdout);
 		}
 		
-		break;
-
-	case TYPE_A:
-		if (restart_point) {
-			register int i, n, ch;
-
-			if (fseek(fout, 0L, L_SET) < 0)
-				goto done;
-			n = restart_point;
-			for (i = 0; i++ < n;) {
-				if ((ch = getc(fout)) == EOF)
-					goto done;
-				if (ch == '\n')
-					i++;
-			}
-			if (fseek(fout, 0L, L_INCR) < 0) {
-done:
-				fprintf(stderr, "local: %s: %s\n", local,
-					strerror(errno));
-				if (closefunc != NULL)
-					(*closefunc)(fout);
-				return;
-			}
-		}
-		while ((c = getc(din)) != EOF) {
-			if (c == '\n')
-				bare_lfs++;
-			while (c == '\r') {
-				while (hash && (bytes >= hashbytes)
-					&& is_retr) {
-					(void) putchar('#');
-					(void) fflush(stdout);
-					hashbytes += HASHBYTES;
-				}
-				if (tick && (bytes >= hashbytes) && is_retr) {
-					printf("\rBytes transferred: %ld",
-						bytes);
-					fflush(stdout);
-					while (bytes >= hashbytes)
-						hashbytes += TICKBYTES;
-				}
-				bytes++;
-				if ((c = getc(din)) != '\n' || tcrflag) {
-					if (ferror(fout))
-						goto break2;
-					(void) putc('\r', fout);
-					if (c == '\0') {
-						bytes++;
-						goto contin2;
-					}
-					if (c == EOF)
-						goto contin2;
-				}
-			}
-			(void) putc(c, fout);
-			bytes++;
-	contin2:	;
-		}
-break2:
-		if (hash && is_retr) {
-			if (bytes < hashbytes)
-				(void) putchar('#');
-			(void) putchar('\n');
-			(void) fflush(stdout);
-		}
-		if (tick && is_retr) {
-			(void) printf("\rBytes transferred: %ld\n", bytes);
-			(void) fflush(stdout);
-		}
-		if (bare_lfs) {
-			printf("WARNING! %d bare linefeeds received in ASCII mode\n", bare_lfs);
-			printf("File may not have transferred correctly.\n");
-		}
-		if (ferror(din)) {
-			if (errno != EPIPE)
-				perror("netin");
-			bytes = -1;
-		}
-		if (ferror(fout))
-			fprintf(stderr, "local: %s: %s\n", local,
-				strerror(errno));
-		break;
-	}
 	if (closefunc != NULL)
 		(*closefunc)(fout);
 	(void) signal(SIGINT, oldintr);

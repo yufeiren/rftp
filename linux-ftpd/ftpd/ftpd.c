@@ -1996,29 +1996,7 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 		transflag = 0;
 		return;
 	}
-	switch (type) {
 
-	case TYPE_A:
-		while ((c = getc(instr)) != EOF) {
-			byte_count++;
-			if (c == '\n') {
-				if (ferror(outstr))
-					goto data_err;
-				(void) putc('\r', outstr);
-			}
-			(void) putc(c, outstr);
-		}
-		fflush(outstr);
-		transflag = 0;
-		if (ferror(instr))
-			goto file_err;
-		if (ferror(outstr))
-			goto data_err;
-		reply(226, "Transfer complete.");
-		return;
-
-	case TYPE_I:
-	case TYPE_L:
 		/* create sender and reader */
 		ret = pthread_create(&scheduler_tid, NULL, scheduler, dc_cb);
 		if (ret != 0) {
@@ -2087,11 +2065,6 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 		
 		reply(226, "Transfer complete.");
 		return;
-	default:
-		transflag = 0;
-		reply(550, "Unimplemented TYPE %d in send_data", type);
-		return;
-	}
 	
 	tsf_free_buf_list();
 	
