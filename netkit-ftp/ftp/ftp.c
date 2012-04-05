@@ -2324,9 +2324,9 @@ noport:
 		p = (char *)&data_addr.sin_port;
 #define	UC(b)	(((int)b)&0xff)
 		result =
-		    command("RADR %d,%d,%d,%d,%d,%d",
+		    command("RADR %d,%d,%d,%d,%d,%d %ld",
 		      UC(a[0]), UC(a[1]), UC(a[2]), UC(a[3]),
-		      UC(p[0]), UC(p[1]));
+			UC(p[0]), UC(p[1]), htonl(opt.cbufsiz));
 		if (result == ERROR && sendport == -1) {
 			sendport = 0;
 			tmpno = 1;

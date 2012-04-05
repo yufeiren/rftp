@@ -275,17 +275,17 @@ anabw(void *arg)
 		/* bandwidth */
 		printf("  ");
 		
-		if (trans < kKilo_to_Unit)
+		if (trans < kkilo_to_Unit)
 			printf("%7.2f Bits/sec", (double) trans);
-		else if (trans < kMega_to_Unit)
+		else if (trans < kmega_to_Unit)
 			printf("%7.2f KBits/sec", \
-				(double) trans / kKilo_to_Unit);
-		else if (trans < kGiga_to_Unit)
+				(double) trans / kkilo_to_Unit);
+		else if (trans < kgiga_to_Unit)
 			printf("%7.2f MBits/sec", \
-				(double) trans / kMega_to_Unit);
+				(double) trans / kmega_to_Unit);
 		else
 			printf("%7.2f GBits/sec", \
-				(double) trans / kGiga_to_Unit);
+				(double) trans / kgiga_to_Unit);
 		
 		printf("\r");
 		fflush(stdout);

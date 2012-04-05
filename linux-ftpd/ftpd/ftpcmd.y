@@ -72,6 +72,7 @@ char ftpcmd_rcsid[] =
 #endif
 
 #include "extern.h"
+#include "utils.h"
 
 extern	struct sockaddr_in data_dest;
 extern	int logged_in;
@@ -91,6 +92,7 @@ extern  int transflag;
 extern  char tmpline[];
 extern	int portcheck;
 extern	struct sockaddr_in his_addr;
+extern  struct options opt;
 
 off_t	restart_point;
 
@@ -150,7 +152,7 @@ static void	 help __P((struct tab *, char *));
 %type	<i> check_login octal_number byte_size
 %type	<i> struct_code mode_code type_code form_code
 %type	<s> pathstring pathname password username
-%type	<i> host_port conn_number
+%type	<i> host_port conn_number rdma_buf_size
 
 %{
 
@@ -170,7 +172,7 @@ struct tab cmdtab[] = {		/* In order defined in RFC 765 */
 	{ "REIN", REIN, ARGS, 0,	"(reinitialize server state)" },
 	{ "QUIT", QUIT, ARGS, 1,	"(terminate service)", },
 	{ "PORT", PORT, ARGS, 1,	"<sp> b0, b1, b2, b3, b4" },
-	{ "RADR", RADR, ARGS, 1,	"<sp> b0, b1, b2, b3, b4" },
+	{ "RADR", RADR, ARGS, 1,	"<sp> b0, b1, b2, b3, b4, bs" },
 	{ "PASV", PASV, ARGS, 1,	"(set server in passive mode)" },
 	{ "RPSV", RPSV, ARGS, 1,	"(set server in passive rmda mode)" },
 	{ "TYPE", TYPE, ARGS, 1,	"<sp> [ A | E | I | L ]" },
@@ -284,7 +286,7 @@ cmd
 				}
 			}
 		}
-	| RADR check_login SP host_port CRLF
+	| RADR check_login SP host_port SP rdma_buf_size CRLF
 		{
 			if ($2) {
 				if ($4) {
@@ -766,6 +768,13 @@ byte_size
 
 conn_number
 	: NUMBER
+	;
+
+rdma_buf_size
+	: NUMBER
+		{
+			opt.cbufsiz = ntohl($1);
+		}
 	;
 
 host_port

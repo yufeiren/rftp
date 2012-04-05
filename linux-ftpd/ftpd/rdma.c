@@ -115,6 +115,7 @@ static struct rdma_cb *tmpcb;
 static int filesessionid;
 
 static pthread_mutex_t rqblk_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t rqblk_once_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 {
@@ -157,17 +158,20 @@ static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 			/* take the block out */
 			ret = recv_data(&recvwr->recv_buf);
 			if (ret != 0) {
-			  syslog(LOG_ERR, "recv_data fail");
+				syslog(LOG_ERR, "recv_data fail");
 				exit(EXIT_FAILURE);
 			}
 			break;
 		case ACTIVE_WRITE_RQBLK:
-			pthread_mutex_lock(&rqblk_mutex);
-			ret = prep_blk(cb);
-			pthread_mutex_unlock(&rqblk_mutex);
-			if (ret != 0) {
-				syslog(LOG_ERR, "prep_blk fail");
-				exit(EXIT_FAILURE);
+			if (pthread_mutex_trylock(&rqblk_once_mutex) == 0) {
+				pthread_mutex_lock(&rqblk_mutex);
+				ret = prep_blk(cb);
+				pthread_mutex_unlock(&rqblk_mutex);
+				if (ret != 0) {
+					syslog(LOG_ERR, "prep_blk fail");
+					exit(EXIT_FAILURE);
+				}
+				pthread_mutex_unlock(&rqblk_once_mutex);
 			}
 			break;
 		case ACTIVE_WRITE_RPBLK:
@@ -1117,11 +1121,26 @@ enum ibv_wc_status {
 			goto error;
 		}
 
-		/* dispatch the wc to cq_worker */
-		TAILQ_LOCK(&evwc_tqh);
-		TAILQ_INSERT_TAIL(&evwc_tqh, evwc, entries);
-		TAILQ_UNLOCK(&evwc_tqh);
-		TAILQ_SIGNAL(&evwc_tqh);
+		/* dispatch the wc to different type cq_worker */
+		if (evwc->wc.wr_id & WRIDEVENT) {
+			TAILQ_LOCK(&send_evwc_tqh);
+			TAILQ_INSERT_TAIL(&send_evwc_tqh, evwc, entries);
+			TAILQ_UNLOCK(&send_evwc_tqh);
+			TAILQ_SIGNAL(&send_evwc_tqh);
+		} else if (evwc->wc.wr_id & WRIDRECV) {
+			TAILQ_LOCK(&recv_evwc_tqh);
+			TAILQ_INSERT_TAIL(&recv_evwc_tqh, evwc, entries);
+			TAILQ_UNLOCK(&recv_evwc_tqh);
+			TAILQ_SIGNAL(&recv_evwc_tqh);
+		} else if (evwc->wc.wr_id & WRIDBUFFER) {
+			TAILQ_LOCK(&write_evwc_tqh);
+			TAILQ_INSERT_TAIL(&write_evwc_tqh, evwc, entries);
+			TAILQ_UNLOCK(&write_evwc_tqh);
+			TAILQ_SIGNAL(&write_evwc_tqh);
+		} else {
+			syslog(LOG_ERR, "unrecognized id type: %lx", \
+			       evwc->wc.wr_id);
+		}
 	}
 	if (ret) {
 		syslog(LOG_ERR, "ibv_poll_cq error %d\n", ret);
@@ -1153,8 +1172,8 @@ handle_wr(struct rdma_cb *cb, uint64_t wr_id)
 		if (evwr != NULL)
 			TAILQ_REMOVE(&evwr_tqh, evwr, entries);
 		else {
-			syslog(LOG_ERR, "can not find send event %ld\n", \
-			       wr_id);
+			syslog(LOG_ERR, "can not find send event %ld", \
+			       wr_id & 0x00FFFFFFFFFFFFFF);
 			TAILQ_UNLOCK(&evwr_tqh);
 			return;
 		}
@@ -1180,7 +1199,8 @@ handle_wr(struct rdma_cb *cb, uint64_t wr_id)
 		if (item != NULL)
 			TAILQ_REMOVE(&waiting_tqh, item, entries);
 		else {
-			syslog(LOG_ERR, "can not find buf %ld\n", wr_id);
+			syslog(LOG_ERR, "can not find buffer: %ld", \
+				wr_id & 0x00FFFFFFFFFFFFFF);
 			TAILQ_UNLOCK(&waiting_tqh);
 			return;
 		}
@@ -1193,6 +1213,8 @@ handle_wr(struct rdma_cb *cb, uint64_t wr_id)
 			syslog(LOG_ERR, "notify_blk fail");
 			exit(EXIT_FAILURE);
 		}
+	} else {
+		syslog(LOG_ERR, "illeagle wr_id %lx", wr_id);
 	}
 	
 	return;
@@ -1242,52 +1264,105 @@ notify_blk(BUFDATBLK *item)
 	return 0;
 }
 
-void *cq_worker(void *arg)
+void *
+cq_worker_send(void *arg)
 {
 	struct rdma_cb *cb = arg;
 	EVENTWC *evwc;
 	int ret;
 
-	syslog(LOG_ERR, "cq worker thread tid: %d\n", gettid());
+	syslog(LOG_ERR, "cq worker thread tid (SEND): %d\n", gettid());
 
 	for ( ; ; ) {
 		/* get wc from wc list */
-		TAILQ_LOCK(&evwc_tqh);
-		while (TAILQ_EMPTY(&evwc_tqh)) {
-			if (TAILQ_WAIT(&evwc_tqh) != 0)
+		TAILQ_LOCK(&send_evwc_tqh);
+		while (TAILQ_EMPTY(&send_evwc_tqh)) {
+			if ((ret = TAILQ_WAIT(&send_evwc_tqh)) != 0) {
+				syslog(LOG_ERR, "cq_worker_sender(%d): tailq wait fail: %d(%s)\n", \
+					gettid(), errno, strerror(errno));
+				continue;
+			}
+		}
+
+		evwc = TAILQ_FIRST(&send_evwc_tqh);
+		TAILQ_REMOVE(&send_evwc_tqh, evwc, entries);
+		TAILQ_UNLOCK(&send_evwc_tqh);
+
+		/* handle the task
+		switch (evwc->wc.opcode) {
+		case IBV_WC_SEND:*/
+		handle_wr(cb, evwc->wc.wr_id);
+
+		/* insert the task into free_evwc_tqh */
+		TAILQ_LOCK(&free_evwc_tqh);
+		TAILQ_INSERT_TAIL(&free_evwc_tqh, evwc, entries);
+		TAILQ_UNLOCK(&free_evwc_tqh);
+		TAILQ_SIGNAL(&free_evwc_tqh);
+	}
+
+	pthread_exit(NULL);
+}
+
+void *
+cq_worker_recv(void *arg)
+{
+	struct rdma_cb *cb = arg;
+	EVENTWC *evwc;
+	int ret;
+
+	syslog(LOG_ERR, "cq worker thread tid (RECV): %d\n", gettid());
+
+	for ( ; ; ) {
+		/* get wc from wc list */
+		TAILQ_LOCK(&recv_evwc_tqh);
+		while (TAILQ_EMPTY(&recv_evwc_tqh)) {
+			if (TAILQ_WAIT(&recv_evwc_tqh) != 0)
 				continue;
 		}
 
-		evwc = TAILQ_FIRST(&evwc_tqh);
-		TAILQ_REMOVE(&evwc_tqh, evwc, entries);
-		TAILQ_UNLOCK(&evwc_tqh);
+		evwc = TAILQ_FIRST(&recv_evwc_tqh);
+		TAILQ_REMOVE(&recv_evwc_tqh, evwc, entries);
+		TAILQ_UNLOCK(&recv_evwc_tqh);
 
-		/* handle the task */
-		switch (evwc->wc.opcode) {
-		case IBV_WC_SEND:
-			handle_wr(cb, evwc->wc.wr_id);
-			break;
-
-		case IBV_WC_RDMA_WRITE:
-			handle_wr(cb, evwc->wc.wr_id);
-			break;
-
-		case IBV_WC_RDMA_READ:
-			break;
-
-		case IBV_WC_RECV:
-			ret = do_recv(cb, &evwc->wc);
-			if (ret) {
-				syslog(LOG_ERR, "recv wc error: %d\n", ret);
-			}
-			break;
-
-		default:
-			syslog(LOG_ERR, "unknown!!!!! completion\n");
-			break;
+		ret = do_recv(cb, &evwc->wc);
+		if (ret) {
+			syslog(LOG_ERR, "recv wc error: %d\n", ret);
 		}
 
-		/* insert the task into free_evwr_tqh */
+		/* insert the task into free_evwc_tqh */
+		TAILQ_LOCK(&free_evwc_tqh);
+		TAILQ_INSERT_TAIL(&free_evwc_tqh, evwc, entries);
+		TAILQ_UNLOCK(&free_evwc_tqh);
+		TAILQ_SIGNAL(&free_evwc_tqh);
+	}
+
+	pthread_exit(NULL);
+}
+
+void *
+cq_worker_write(void *arg)
+{
+	struct rdma_cb *cb = arg;
+	EVENTWC *evwc;
+	int ret;
+
+	syslog(LOG_ERR, "cq worker thread tid (WRITE): %d\n", gettid());
+
+	for ( ; ; ) {
+		/* get wc from wc list */
+		TAILQ_LOCK(&write_evwc_tqh);
+		while (TAILQ_EMPTY(&write_evwc_tqh)) {
+			if (TAILQ_WAIT(&write_evwc_tqh) != 0)
+				continue;
+		}
+
+		evwc = TAILQ_FIRST(&write_evwc_tqh);
+		TAILQ_REMOVE(&write_evwc_tqh, evwc, entries);
+		TAILQ_UNLOCK(&write_evwc_tqh);
+
+		handle_wr(cb, evwc->wc.wr_id);
+
+		/* insert the task into free_evwc_tqh */
 		TAILQ_LOCK(&free_evwc_tqh);
 		TAILQ_INSERT_TAIL(&free_evwc_tqh, evwc, entries);
 		TAILQ_UNLOCK(&free_evwc_tqh);
@@ -1311,7 +1386,9 @@ void *cq_thread(void *arg)
 
 	/* init eventwc list */
 	TAILQ_INIT(&free_evwc_tqh);
-	TAILQ_INIT(&evwc_tqh);
+	TAILQ_INIT(&send_evwc_tqh);
+	TAILQ_INIT(&recv_evwc_tqh);
+	TAILQ_INIT(&write_evwc_tqh);
 
 	for (i = 0; i < opt.wc_event_num; i++) {
 		item = (EVENTWC *) malloc(sizeof(EVENTWC));
@@ -1320,9 +1397,21 @@ void *cq_thread(void *arg)
 
 	/* create worker */
 	for (i = 0; i < opt.wc_thread_num; i++) {
-		ret = pthread_create(&tid, NULL, cq_worker, cb);
+		ret = pthread_create(&tid, NULL, cq_worker_send, cb);
 		if (ret != 0) {
-			syslog(LOG_ERR, "create cq_worker fail");
+			syslog(LOG_ERR, "create cq_worker_send fail %m");
+			exit(EXIT_FAILURE);
+		}
+
+		ret = pthread_create(&tid, NULL, cq_worker_recv, cb);
+		if (ret != 0) {
+			syslog(LOG_ERR, "create cq_worker_recv fail");
+			exit(EXIT_FAILURE);
+		}
+
+		ret = pthread_create(&tid, NULL, cq_worker_write, cb);
+		if (ret != 0) {
+			syslog(LOG_ERR, "create cq_worker_write fail");
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -1345,7 +1434,8 @@ void *cq_thread(void *arg)
 		}
 
 		ret = iperf_cq_event_handler(cb);
-		ibv_ack_cq_events(cb->cq, ret);
+		if (ret > 0)
+			ibv_ack_cq_events(cb->cq, ret);
 /*		if (ret) {
 			syslog(LOG_ERR, "!! iperf_cq_event_handler %m");
 			pthread_exit(NULL);
@@ -1609,6 +1699,9 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 	struct ibv_recv_wr *bad_recv_wr;
 	int ret;
 	
+	syslog(LOG_INFO, "tsf_setup_buf_list: cbufsiz is %d\n", \
+	       opt.cbufsiz);
+
 	for (i = 0; i < opt.cbufnum; i++) {
 		if ( (item = (BUFDATBLK *) malloc(sizeof(BUFDATBLK))) == NULL) {
 			syslog(LOG_ERR, "tsf_setup_buf_list: malloc DATABLK fail");
@@ -1620,12 +1713,12 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 		item->wr_id = (uint64_t) (i + 1) | WRIDBUFFER;
 		
 		if (opt.directio != true) {
-			if ( (item->rdma_buf = (char *) malloc(cb->size + sizeof(rmsgheader))) == NULL) {
+			if ( (item->rdma_buf = (char *) malloc(opt.cbufsiz + sizeof(rmsgheader))) == NULL) {
 				syslog(LOG_ERR, "tsf_setup_buf_list: malloc rmsgheader fail");
 				return -1;
 			}
 		} else {
-			if ( posix_memalign(&item->rdma_buf, getpagesize(), cb->size + sizeof(rmsgheader)) != 0 ) {
+			if ( posix_memalign(&item->rdma_buf, getpagesize(), opt.cbufsiz + sizeof(rmsgheader)) != 0 ) {
 			        syslog(LOG_ERR, "tsf_setup_buf_list: memalign fail");
 				return -1;
 			}

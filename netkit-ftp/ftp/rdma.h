@@ -279,7 +279,9 @@ TAILQ_HEAD(, Eventwr)		evwr_tqh;
 
 	/* work completion event */
 TAILQ_HEAD(, Eventwc)		free_evwc_tqh;
-TAILQ_HEAD(, Eventwc)		evwc_tqh;
+TAILQ_HEAD(, Eventwc)		send_evwc_tqh;
+TAILQ_HEAD(, Eventwc)		recv_evwc_tqh;
+TAILQ_HEAD(, Eventwc)		write_evwc_tqh;
 
 	/* event work request addr */
 TAILQ_HEAD(, Recvwr)		recvwr_tqh;
@@ -378,6 +380,9 @@ void *cm_thread(void *arg);
 int iperf_cq_event_handler(struct rdma_cb *cb);
 
 void *cq_thread(void *arg);
+void *cq_worker_send(void *arg);
+void *cq_worker_recv(void *arg);
+void *cq_worker_write(void *arg);
 
 int rdma_cb_init( struct rdma_cb *cb );
 
