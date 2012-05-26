@@ -100,6 +100,13 @@ pthread_mutex_t transcurrlen_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int is_disconnected_event = 0;
 
+struct timespec total_rd_cpu;
+struct timespec total_rd_real;
+struct timespec total_net_cpu;
+struct timespec total_net_real;
+struct timespec total_wr_cpu;
+struct timespec total_wr_real;
+
 static
 void
 usage(void)

@@ -221,6 +221,13 @@ pthread_mutex_t transcurrlen_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int is_disconnected_event = 0;
 
+struct timespec total_rd_cpu;
+struct timespec total_rd_real;
+struct timespec total_net_cpu;
+struct timespec total_net_real;
+struct timespec total_wr_cpu;
+struct timespec total_wr_real;
+
 /*
  * Timeout intervals for retrying connections
  * to hosts that don't accept PORT cmds.  This
@@ -1406,7 +1413,10 @@ void rstore(const char *name, const char *mode, int unique)
 			reply(226, "Transfer complete (unique file name:%s).",
 			    name);
 		else
-			reply(226, "Transfer complete.");
+			reply(226, "Transfer complete. %ld:%09ld %ld:%09ld.", \
+			total_wr_cpu.tv_sec, total_wr_cpu.tv_nsec, \
+			total_wr_real.tv_sec, total_wr_real.tv_nsec);
+
 	}
 	data = -1;
 	pdata = -1;
@@ -2234,13 +2244,13 @@ static int rreceive_data(FILE *outstr)
 
 		for (i = 0; i < opt.writernum; i ++) {
 			pthread_cancel(writer_tid[i]);
-/*			pthread_join(writer_tid[i], NULL); */
 			syslog(LOG_ERR, "cancel writer[%d] success", i);
 		}
 		
 		/* release the connected rdma_cm_id */
 		/* cq_thread - cm_thread */
-		tsf_waiting_to_free();
+		if (is_disconnected_event != 1)
+			tsf_waiting_to_free();
 		tsf_free_buf_list();
 		
 		rdma_disconnect(dc_cb->cm_id);

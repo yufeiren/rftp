@@ -71,6 +71,14 @@ extern struct acptq acceptedTqh;
 
 extern struct options opt;
 
+extern struct timespec total_rd_cpu;
+extern struct timespec total_rd_real;
+extern struct timespec total_net_cpu;
+extern struct timespec total_net_real;
+extern struct timespec total_wr_cpu;
+extern struct timespec total_wr_real;
+
+
 int data = -1;
 off_t restart_point = 0;
 rdma_cb *dc_cb;		/* data channel rdma control block - for listen */
@@ -1166,6 +1174,9 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 /*	(void) fclose(dout); no dout in rdma mode */
 	/* closes data as well, so discard it */
 	data = -1;
+
+	DPRINTF(("getreply"));
+	(void) getreply(0);
 	
 	tsf_free_buf_list();
 	DPRINTF(("tsf_free_buf_list success\n"));
@@ -1202,8 +1213,19 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	
 	free(child_dc_cb);
 	
-	DPRINTF(("getreply"));
-	(void) getreply(0);
+	printf("client\t\tcpu\treal\n");
+	printf("Loading\t\t%ld:%09ld\t%ld:%09ld\n", \
+	       total_rd_cpu.tv_sec, total_rd_cpu.tv_nsec, \
+	       total_rd_real.tv_sec, total_rd_real.tv_nsec);
+	printf("Net\t\t%ld:%09ld\t%ld:%09ld\n", \
+	       total_net_cpu.tv_sec, total_net_cpu.tv_nsec, \
+	       total_net_real.tv_sec, total_net_real.tv_nsec);
+	printf("Offloading\t\t%ld:%09ld\t%ld:%09ld\n", \
+	       total_wr_cpu.tv_sec, total_wr_cpu.tv_nsec, \
+	       total_wr_real.tv_sec, total_wr_real.tv_nsec);
+
+	/*	DPRINTF(("getreply"));
+		(void) getreply(0);*/
 	(void) signal(SIGINT, oldintr);
 	if (oldintp)
 		(void) signal(SIGPIPE, oldintp);
@@ -2465,14 +2487,14 @@ ptransfer(const char *direction, long bytes,
 	  const struct timeval *t1)
 {
 	struct timeval td;
-	float s, bs;
+	double s, bs;
 
 	if (verbose) {
 		tvsub(&td, t1, t0);
-		s = td.tv_sec + (td.tv_usec / 1000000.);
+		s = (((double)td.tv_sec) / 1.0) + (((double)td.tv_usec) / 1000000.0);
 #define	nz(x)	((x) == 0 ? 1 : (x))
 		bs = bytes / nz(s);
-		printf("%ld bytes %s in %.3g secs (%.2g Kbytes/sec)\n",
+		printf("%ld bytes %s in %.4f secs (%.2g Kbytes/sec)\n",
 		    bytes, direction, s, bs / 1024.0);
 	}
 }

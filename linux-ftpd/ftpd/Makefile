@@ -1,7 +1,7 @@
 include ../MCONFIG
 
 CFLAGS+=-I../support -I..
-LIBS+=-L../support -lsupport  -libverbs -lrdmacm -lpthread
+LIBS+=-L../support -lsupport  -libverbs -lrdmacm -lpthread -lrt
 
 
 OBJS=ftpd.o ftpcmd.o logutmp.o logwtmp.o popen.o rdma.o utils.o init.o

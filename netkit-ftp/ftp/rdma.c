@@ -109,6 +109,13 @@ extern pthread_mutex_t transcurrlen_mutex;
 
 extern int is_disconnected_event;
 
+extern struct timespec total_rd_cpu;
+extern struct timespec total_rd_real;
+extern struct timespec total_net_cpu;
+extern struct timespec total_net_real;
+extern struct timespec total_wr_cpu;
+extern struct timespec total_wr_real;
+
 static struct rdma_cb *tmpcb;
 /* static tmp; */
 
@@ -116,6 +123,41 @@ static int filesessionid;
 
 static pthread_mutex_t rqblk_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t rqblk_once_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+
+/* add the difference between start and end into total */
+static inline void
+diff_acc(struct timespec *total, const struct timespec *start, const struct timespec *end)
+{
+  if (((end->tv_nsec - start->tv_nsec) + total->tv_nsec) > 999999999) {
+    total->tv_nsec += (end->tv_nsec - start->tv_nsec) - 1000000000;
+    total->tv_sec += end->tv_sec - start->tv_sec + 1;
+  } else if (((end->tv_nsec - start->tv_nsec) + total->tv_nsec) < 0) {
+    total->tv_nsec += (end->tv_nsec - start->tv_nsec) + 1000000000;
+    total->tv_sec += end->tv_sec - start->tv_sec - 1;
+  } else {
+    total->tv_nsec += end->tv_nsec - start->tv_nsec;
+    total->tv_sec += end->tv_sec - start->tv_sec;
+  }
+
+  return;
+}
+
+/* accumulate the time from from to to */
+static void
+acc_time(struct timespec *to, const struct timespec *from)
+{
+  if ((from->tv_nsec + to->tv_nsec) > 999999999) {
+    to->tv_nsec += from->tv_nsec - 1000000000;
+    to->tv_sec += from->tv_sec + 1;
+  } else {
+    to->tv_nsec += from->tv_nsec;
+    to->tv_sec += from->tv_sec;
+  }
+
+  return;
+}
+
 
 static int do_recv(struct rdma_cb *cb, struct ibv_wc *wc)
 {
@@ -263,6 +305,7 @@ handle_file_session_req(struct rdma_info_blk *recvbuf)
 	memcpy(filename, recvbuf->addr, 32);
 	
 	pthread_mutex_init(&item->seqnum_lock, NULL);
+	pthread_mutex_init(&item->writer_lock, NULL);
 
 	pthread_mutex_lock(&dir_mutex);
 
@@ -651,7 +694,8 @@ recv_data(struct rdma_info_blk *recvbuf)
 	bufblk->seqnum = rhdr.seqnum;
 	bufblk->offset = rhdr.offset;
 	bufblk->buflen = rhdr.dlen + sizeof(rhdr);
-	
+	bufblk->writer_lockp = &finfo->writer_lock;	
+
 	/* non-odirect */
 	pgsz = getpagesize();
 	
@@ -1206,6 +1250,11 @@ handle_wr(struct rdma_cb *cb, uint64_t wr_id)
 		}
 		
 		TAILQ_UNLOCK(&waiting_tqh);
+
+		clock_gettime(CLOCK_REALTIME, &(item->net_real_end));
+			
+		diff_acc(&(item->net_real_total), \
+			 &(item->net_real_start), &(item->net_real_end));
 		
 		item->qp = cb->qp;
 		ret = notify_blk(item);
@@ -1773,6 +1822,19 @@ tsf_free_buf_list(void)
 {
 	BUFDATBLK *item;
 	
+	total_rd_cpu.tv_sec = 0;
+	total_rd_cpu.tv_nsec = 0;
+	total_rd_real.tv_sec = 0;
+	total_rd_real.tv_nsec = 0;
+	total_net_cpu.tv_sec = 0;
+	total_net_cpu.tv_nsec = 0;
+	total_net_real.tv_sec = 0;
+	total_net_real.tv_nsec = 0;
+	total_wr_cpu.tv_sec = 0;
+	total_wr_cpu.tv_nsec = 0;
+	total_wr_real.tv_sec = 0;
+	total_wr_real.tv_nsec = 0;
+
 	/* free free list - not thread safe */
 	int i;
 	for (i = 0; i < opt.cbufnum; i ++) {
@@ -1791,12 +1853,19 @@ tsf_free_buf_list(void)
 		TAILQ_REMOVE(&free_tqh, item, entries);
 		
 		TAILQ_UNLOCK(&free_tqh);
-		
+
+		acc_time(&total_rd_cpu, &item->rd_thr_total);
+		acc_time(&total_rd_real, &item->rd_real_total);
+		acc_time(&total_net_cpu, &item->net_thr_total);
+		acc_time(&total_net_real, &item->net_real_total);
+		acc_time(&total_wr_cpu, &item->wr_thr_total);
+		acc_time(&total_wr_real, &item->wr_real_total);
+
 		ibv_dereg_mr(item->rdma_mr);
 		
 		free(item->rdma_buf);
 	}
-	
+
 	return;
 }
 
@@ -2650,10 +2719,18 @@ sender(void *arg)
 		
 		TAILQ_SIGNAL(&waiting_tqh);
 
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &(bufblk->net_thr_start));
+		clock_gettime(CLOCK_REALTIME, &(bufblk->net_real_start));
+
 		/* send data */
 		thislen = send_dat_blk(bufblk, cb, rmtaddr);
 		DPRINTF(("send %d bytes\n", thislen));
 		
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &(bufblk->net_thr_end));
+
+		diff_acc(&(bufblk->net_thr_total), \
+		  &(bufblk->net_thr_start), &(bufblk->net_thr_end));
+
 		TAILQ_LOCK(&free_rmtaddr_tqh);
 		TAILQ_INSERT_TAIL(&free_rmtaddr_tqh, rmtaddr, entries);
 		TAILQ_UNLOCK(&free_rmtaddr_tqh);
@@ -2798,7 +2875,10 @@ reader(void *arg)
 				thislen = 0;
 				break;
 			}
-			
+
+			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &(bufblk->rd_thr_start));
+			clock_gettime(CLOCK_REALTIME, &(bufblk->rd_real_start));
+
 			if (  (opt.directio == true)
 			   && (leftlen < (bufblk->buflen - sizeof(rmsgheader)))
 			   && (leftlen % pgsz != 0) ) {
@@ -2820,7 +2900,15 @@ reader(void *arg)
 				thislen = load_dat_blk(bufblk);
 			}
 			DPRINTF(("load %d bytes\n", thislen));
+
+			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &(bufblk->rd_thr_end));
+			clock_gettime(CLOCK_REALTIME, &(bufblk->rd_real_end));
 			
+			diff_acc(&(bufblk->rd_thr_total), \
+			  &(bufblk->rd_thr_start), &(bufblk->rd_thr_end));
+			diff_acc(&(bufblk->rd_real_total), \
+			  &(bufblk->rd_real_start), &(bufblk->rd_real_end));
+
 			if (thislen <= 0) {
 				TAILQ_INSERT_TAIL(&inner_tqh, bufblk, entries);
 				break;
@@ -2881,8 +2969,26 @@ writer(void *arg)
 		TAILQ_REMOVE(&writer_tqh, bufblk, entries);
 		
 		TAILQ_UNLOCK(&writer_tqh);
-		
+
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &(bufblk->wr_thr_start));
+		clock_gettime(CLOCK_REALTIME, &(bufblk->wr_real_start));
+
+		pthread_mutex_lock(bufblk->writer_lockp);
+		if (bufblk->offset != lseek(bufblk->fd, 0, SEEK_CUR)) {
+			lseek(bufblk->fd, bufblk->offset, SEEK_SET);
+		}
+
 		thislen = offload_dat_blk(bufblk);
+		pthread_mutex_unlock(bufblk->writer_lockp);
+
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &(bufblk->wr_thr_end));
+		clock_gettime(CLOCK_REALTIME, &(bufblk->wr_real_end));
+			
+		diff_acc(&(bufblk->wr_thr_total), \
+		  &(bufblk->wr_thr_start), &(bufblk->wr_thr_end));
+		diff_acc(&(bufblk->wr_real_total), \
+		  &(bufblk->wr_real_start), &(bufblk->wr_real_end));
+
 		
 		/* insert to free list */
 		TAILQ_LOCK(&free_tqh);
@@ -3481,3 +3587,4 @@ dc_conn_req(struct rdma_cb *cb)
 	
 	return;
 }
+

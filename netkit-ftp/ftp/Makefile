@@ -5,7 +5,7 @@ include ../MRULES
 
 ifeq ($(USE_READLINE),1)
 CFLAGS += -D__USE_READLINE__ -DRCFTPRC
-LIBS += -lreadline $(LIBTERMCAP) -libverbs -lrdmacm -lpthread
+LIBS += -lreadline $(LIBTERMCAP) -libverbs -lrdmacm -lpthread -lrt
 endif
 
 rcftp: cmds.o cmdtab.o domacro.o ftp.o glob.o main.o ruserpass.o rdma.o utils.o init.o
