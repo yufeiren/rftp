@@ -1,9 +1,9 @@
 #! /bin/sh
 
 GITSRCDIR=$HOME/git/rftp
-RPMDIR=$HOME/rftp
+RPMDIR=$HOME/rftpbuild
 VERSION=0.15
-RELEASE=rc1
+RELEASE=rc3
 
 TAG=v$VERSION-$RELEASE
 

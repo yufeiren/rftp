@@ -172,7 +172,33 @@ struct Bufdatblk {
 	struct ibv_qp 		*qp;		/* qp */
 	int			seqnum;
 	off_t			offset;
+
+	pthread_mutex_t		*writer_lockp;	/* get from Fileinfo*/
+
+	struct timespec		rd_thr_start;
+	struct timespec		rd_thr_end;
+	struct timespec		rd_thr_total;
+
+	struct timespec		rd_real_start;
+	struct timespec		rd_real_end;
+	struct timespec		rd_real_total;
+
+	struct timespec		net_thr_start;
+	struct timespec		net_thr_end;
+	struct timespec		net_thr_total;
+
+	struct timespec		net_real_start;
+	struct timespec		net_real_end;
+	struct timespec		net_real_total;
 	
+	struct timespec		wr_thr_start;
+	struct timespec		wr_thr_end;
+	struct timespec		wr_thr_total;
+
+	struct timespec		wr_real_start;
+	struct timespec		wr_real_end;
+	struct timespec		wr_real_total;
+
 	TAILQ_ENTRY(Bufdatblk) entries;
 };
 typedef struct Bufdatblk BUFDATBLK;
@@ -185,6 +211,7 @@ struct Fileinfo {
 	off_t  offset;
 	int    seqnum;		/* the next wanted sequence num */
 	pthread_mutex_t seqnum_lock;
+	pthread_mutex_t writer_lock; /* writer lock for this file */
 	off_t  fsize;
 	
 	TAILQ_HEAD(, Bufdatblk) pending_tqh;
@@ -279,7 +306,9 @@ TAILQ_HEAD(, Eventwr)		evwr_tqh;
 
 	/* work completion event */
 TAILQ_HEAD(, Eventwc)		free_evwc_tqh;
-TAILQ_HEAD(, Eventwc)		evwc_tqh;
+TAILQ_HEAD(, Eventwc)		send_evwc_tqh;
+TAILQ_HEAD(, Eventwc)		recv_evwc_tqh;
+TAILQ_HEAD(, Eventwc)		write_evwc_tqh;
 
 	/* event work request addr */
 TAILQ_HEAD(, Recvwr)		recvwr_tqh;
@@ -378,6 +407,9 @@ void *cm_thread(void *arg);
 int iperf_cq_event_handler(struct rdma_cb *cb);
 
 void *cq_thread(void *arg);
+void *cq_worker_send(void *arg);
+void *cq_worker_recv(void *arg);
+void *cq_worker_write(void *arg);
 
 int rdma_cb_init( struct rdma_cb *cb );
 
@@ -447,6 +479,8 @@ int send_dat_blk(BUFDATBLK *, struct rdma_cb *, struct Remoteaddr *);
 int recv_dat_blk(BUFDATBLK *, struct rdma_cb *);
 
 int prep_blk(struct rdma_cb *);
+/* non-block mode */
+int prep_blk_nb(struct rdma_cb *);
 int acpt_blk(struct rdma_info_blk *);
 int notify_blk(BUFDATBLK *);
 

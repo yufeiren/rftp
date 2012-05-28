@@ -138,7 +138,7 @@ typedef unsigned int useconds_t;
 #include "init.h"
 #include "utils.h"
 
-static char versionpre[] = "Version 0.13/Linux";
+static char versionpre[] = "Version 0.15/Linux";
 static char version[sizeof(versionpre)+sizeof(pkg)];
 
 
@@ -218,6 +218,15 @@ struct options opt;
 pthread_mutex_t dir_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t transcurrlen_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+int is_disconnected_event = 0;
+
+struct timespec total_rd_cpu;
+struct timespec total_rd_real;
+struct timespec total_net_cpu;
+struct timespec total_net_real;
+struct timespec total_wr_cpu;
+struct timespec total_wr_real;
 
 /*
  * Timeout intervals for retrying connections
@@ -313,7 +322,7 @@ main(int argc, char *argv[], char **envp)
 	socklen_t addrlen;
 	char *cp, line[LINE_MAX];
 	FILE *fd;
-	const char *argstr = "AdDhlMSt:T:u:UvP";
+	const char *argstr = "AdDhlMSt:T:u:UvVP";
 	struct hostent *hp;
 
 #ifdef __linux__
@@ -408,6 +417,10 @@ main(int argc, char *argv[], char **envp)
 		case 'v':
 			debug = 1;
 			break;
+
+		case 'V':
+			printf("%s\n", version);
+			exit(0);
 
 		default:
 			warnx("unknown flag -%c ignored", optopt);
@@ -1400,7 +1413,10 @@ void rstore(const char *name, const char *mode, int unique)
 			reply(226, "Transfer complete (unique file name:%s).",
 			    name);
 		else
-			reply(226, "Transfer complete.");
+			reply(226, "Transfer complete. %ld:%09ld %ld:%09ld.", \
+			total_wr_cpu.tv_sec, total_wr_cpu.tv_nsec, \
+			total_wr_real.tv_sec, total_wr_real.tv_nsec);
+
 	}
 	data = -1;
 	pdata = -1;
@@ -1764,7 +1780,6 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	}
 	
 	sem_wait(&dc_cb->sem);
-	
 	if (dc_cb->state != ROUTE_RESOLVED) {
 		syslog(LOG_ERR, "waiting for addr/route resolution state %d\n", 
 			dc_cb->state);
@@ -1790,8 +1805,12 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 	}
 	
 	/* setup buffers */
-	tsf_setup_buf_list(dc_cb);
-	syslog(LOG_ERR, "tsf_setup_buf_list finish\n");
+	ret = tsf_setup_buf_list(dc_cb);
+	if (ret) {
+		syslog(LOG_ERR, "tsf_setup_buf_list fail");
+		goto err3;
+	}
+	syslog(LOG_ERR, "tsf_setup_buf_list success\n");
 	
 	/* multiple streams
 	create_dc_stream_client(dc_cb, opt.rcstreamnum, &data_dest); */
@@ -1987,29 +2006,7 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 		transflag = 0;
 		return;
 	}
-	switch (type) {
 
-	case TYPE_A:
-		while ((c = getc(instr)) != EOF) {
-			byte_count++;
-			if (c == '\n') {
-				if (ferror(outstr))
-					goto data_err;
-				(void) putc('\r', outstr);
-			}
-			(void) putc(c, outstr);
-		}
-		fflush(outstr);
-		transflag = 0;
-		if (ferror(instr))
-			goto file_err;
-		if (ferror(outstr))
-			goto data_err;
-		reply(226, "Transfer complete.");
-		return;
-
-	case TYPE_I:
-	case TYPE_L:
 		/* create sender and reader */
 		ret = pthread_create(&scheduler_tid, NULL, scheduler, dc_cb);
 		if (ret != 0) {
@@ -2078,11 +2075,6 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 		
 		reply(226, "Transfer complete.");
 		return;
-	default:
-		transflag = 0;
-		reply(550, "Unimplemented TYPE %d in send_data", type);
-		return;
-	}
 	
 	tsf_free_buf_list();
 	
@@ -2219,10 +2211,7 @@ static int rreceive_data(FILE *outstr)
 		transflag = 0;
 		return (-1);
 	}
-	switch (type) {
 
-	case TYPE_I:
-	case TYPE_L:
 		signal (SIGALRM, lostconn);
 		
 		/* create recver and writer */
@@ -2243,18 +2232,25 @@ static int rreceive_data(FILE *outstr)
 		for ( ; ; ) {
 			if (transcurrlen >= transtotallen)
 				break;
+
+			/* during the data transfer if disconnect event 
+			 * happened, just exit the process
+			 */
+			if (is_disconnected_event == 1)
+				break;
+
 			sleep(1);
 		}
 
 		for (i = 0; i < opt.writernum; i ++) {
 			pthread_cancel(writer_tid[i]);
-/*			pthread_join(writer_tid[i], NULL); */
 			syslog(LOG_ERR, "cancel writer[%d] success", i);
 		}
 		
 		/* release the connected rdma_cm_id */
 		/* cq_thread - cm_thread */
-		tsf_waiting_to_free();
+		if (is_disconnected_event != 1)
+			tsf_waiting_to_free();
 		tsf_free_buf_list();
 		
 		rdma_disconnect(dc_cb->cm_id);
@@ -2291,46 +2287,6 @@ static int rreceive_data(FILE *outstr)
 		
 		return (0);
 
-	case TYPE_E:
-		reply(553, "TYPE E not implemented.");
-		transflag = 0;
-		return (-1);
-
-	case TYPE_A:
-		while ((c = getc(instr)) != EOF) {
-			byte_count++;
-			if (c == '\n')
-				bare_lfs++;
-			while (c == '\r') {
-				if (ferror(outstr))
-					goto data_err;
-				if ((c = getc(instr)) != '\n') {
-					(void) putc ('\r', outstr);
-					if (c == '\0' || c == EOF)
-						goto contin2;
-				}
-			}
-			(void) putc(c, outstr);
-	contin2:	;
-		}
-		fflush(outstr);
-		if (ferror(instr))
-			goto data_err;
-		if (ferror(outstr))
-			goto file_err;
-		transflag = 0;
-		if (bare_lfs) {
-			lreply(226,
-		"WARNING! %d bare linefeeds received in ASCII mode",
-			    bare_lfs);
-		(void)printf("   File may not have transferred correctly.\r\n");
-		}
-		return (0);
-	default:
-		reply(550, "Unimplemented TYPE %d in receive_data", type);
-		transflag = 0;
-		return (-1);
-	}
 	
 	tsf_free_buf_list();
 

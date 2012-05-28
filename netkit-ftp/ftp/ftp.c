@@ -63,7 +63,6 @@ char ftp_rcsid[] =
 #include "ftp_var.h"
 #include "cmds.h"
 #include "errors.h"
-#include "../version.h"
 
 #include "rdma.h"
 #include "utils.h"
@@ -71,6 +70,14 @@ char ftp_rcsid[] =
 extern struct acptq acceptedTqh;
 
 extern struct options opt;
+
+extern struct timespec total_rd_cpu;
+extern struct timespec total_rd_real;
+extern struct timespec total_net_cpu;
+extern struct timespec total_net_real;
+extern struct timespec total_wr_cpu;
+extern struct timespec total_wr_real;
+
 
 int data = -1;
 off_t restart_point = 0;
@@ -1073,10 +1080,6 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	
 	int i;
 	
-	switch (curtype) {
-
-	case TYPE_I:
-	case TYPE_L:
 		errno = d = 0;
 		
 		/* create sender and reader */
@@ -1137,13 +1140,13 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			perror("pthread_join monitor:");
 			exit(EXIT_FAILURE);
 		}
-		printf("join all the monitor thread\n");
+		DPRINTF(("join all the monitor thread"));
 		pthread_join(sender_tid, NULL);
-		printf("join all the sender thread\n");
+		DPRINTF(("join all the sender thread\n"));
 		for (i = 0; i < opt.readernum; i ++) {
 			pthread_join(reader_tid[i], NULL);
 		}
-		printf("join all the reader thread\n");
+		DPRINTF(("join all the reader thread\n"));
 		bytes = (long) transtotallen;
 		
 		if (hash && (bytes > 0)) {
@@ -1165,61 +1168,15 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			bytes = -1;
 		}
 
-		break;
-
-	case TYPE_A:
-		while ((c = getc(fin)) != EOF) {
-			if (c == '\n') {
-				while (hash && (bytes >= hashbytes)) {
-					(void) putchar('#');
-					(void) fflush(stdout);
-					hashbytes += HASHBYTES;
-				}
-				if (tick && (bytes >= hashbytes)) {
-					(void) printf("\rBytes transferred: %ld",
-						bytes);
-					(void) fflush(stdout);
-					while (bytes >= hashbytes)
-						hashbytes += TICKBYTES;
-				}
-				if (ferror(dout))
-					break;
-				(void) putc('\r', dout);
-				bytes++;
-			}
-			(void) putc(c, dout);
-			bytes++;
-	/*		if (c == '\r') {			  	*/
-	/*		(void)	putc('\0', dout);  (* this violates rfc */
-	/*			bytes++;				*/
-	/*		}                          			*/     
-		}
-		if (hash) {
-			if (bytes < hashbytes)
-				(void) putchar('#');
-			(void) putchar('\n');
-			(void) fflush(stdout);
-		}
-		if (tick) {
-			(void) printf("\rBytes transferred: %ld\n", bytes);
-			(void) fflush(stdout);
-		}
-		if (ferror(fin))
-			fprintf(stderr, "local: %s: %s\n", local,
-				strerror(errno));
-		if (ferror(dout)) {
-			if (errno != EPIPE)
-				perror("netout");
-			bytes = -1;
-		}
-		break;
-	}
 	(void) gettimeofday(&stop, (struct timezone *)0);
 	if (closefunc != NULL)
 		(*closefunc)(fin);
 /*	(void) fclose(dout); no dout in rdma mode */
 	/* closes data as well, so discard it */
 	data = -1;
+
+	DPRINTF(("getreply"));
+	(void) getreply(0);
 	
 	tsf_free_buf_list();
 	DPRINTF(("tsf_free_buf_list success\n"));
@@ -1256,8 +1213,19 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	
 	free(child_dc_cb);
 	
-	DPRINTF(("getreply"));
-	(void) getreply(0);
+	printf("client\t\tcpu\treal\n");
+	printf("Loading\t\t%ld:%09ld\t%ld:%09ld\n", \
+	       total_rd_cpu.tv_sec, total_rd_cpu.tv_nsec, \
+	       total_rd_real.tv_sec, total_rd_real.tv_nsec);
+	printf("Net\t\t%ld:%09ld\t%ld:%09ld\n", \
+	       total_net_cpu.tv_sec, total_net_cpu.tv_nsec, \
+	       total_net_real.tv_sec, total_net_real.tv_nsec);
+	printf("Offloading\t\t%ld:%09ld\t%ld:%09ld\n", \
+	       total_wr_cpu.tv_sec, total_wr_cpu.tv_nsec, \
+	       total_wr_real.tv_sec, total_wr_real.tv_nsec);
+
+	/*	DPRINTF(("getreply"));
+		(void) getreply(0);*/
 	(void) signal(SIGINT, oldintr);
 	if (oldintp)
 		(void) signal(SIGPIPE, oldintp);
@@ -2015,10 +1983,6 @@ rdmarecvrequest(const char *cmd,
 	
 	create_dc_stream_server(child_dc_cb, opt.rcstreamnum);
 	
-	switch (curtype) {
-	
-	case TYPE_I:
-	case TYPE_L:
 		errno = d = 0;
 		
 		/* create writer */
@@ -2071,89 +2035,6 @@ rdmarecvrequest(const char *cmd,
 			(void) fflush(stdout);
 		}
 		
-		break;
-
-	case TYPE_A:
-		if (restart_point) {
-			register int i, n, ch;
-
-			if (fseek(fout, 0L, L_SET) < 0)
-				goto done;
-			n = restart_point;
-			for (i = 0; i++ < n;) {
-				if ((ch = getc(fout)) == EOF)
-					goto done;
-				if (ch == '\n')
-					i++;
-			}
-			if (fseek(fout, 0L, L_INCR) < 0) {
-done:
-				fprintf(stderr, "local: %s: %s\n", local,
-					strerror(errno));
-				if (closefunc != NULL)
-					(*closefunc)(fout);
-				return;
-			}
-		}
-		while ((c = getc(din)) != EOF) {
-			if (c == '\n')
-				bare_lfs++;
-			while (c == '\r') {
-				while (hash && (bytes >= hashbytes)
-					&& is_retr) {
-					(void) putchar('#');
-					(void) fflush(stdout);
-					hashbytes += HASHBYTES;
-				}
-				if (tick && (bytes >= hashbytes) && is_retr) {
-					printf("\rBytes transferred: %ld",
-						bytes);
-					fflush(stdout);
-					while (bytes >= hashbytes)
-						hashbytes += TICKBYTES;
-				}
-				bytes++;
-				if ((c = getc(din)) != '\n' || tcrflag) {
-					if (ferror(fout))
-						goto break2;
-					(void) putc('\r', fout);
-					if (c == '\0') {
-						bytes++;
-						goto contin2;
-					}
-					if (c == EOF)
-						goto contin2;
-				}
-			}
-			(void) putc(c, fout);
-			bytes++;
-	contin2:	;
-		}
-break2:
-		if (hash && is_retr) {
-			if (bytes < hashbytes)
-				(void) putchar('#');
-			(void) putchar('\n');
-			(void) fflush(stdout);
-		}
-		if (tick && is_retr) {
-			(void) printf("\rBytes transferred: %ld\n", bytes);
-			(void) fflush(stdout);
-		}
-		if (bare_lfs) {
-			printf("WARNING! %d bare linefeeds received in ASCII mode\n", bare_lfs);
-			printf("File may not have transferred correctly.\n");
-		}
-		if (ferror(din)) {
-			if (errno != EPIPE)
-				perror("netin");
-			bytes = -1;
-		}
-		if (ferror(fout))
-			fprintf(stderr, "local: %s: %s\n", local,
-				strerror(errno));
-		break;
-	}
 	if (closefunc != NULL)
 		(*closefunc)(fout);
 	(void) signal(SIGINT, oldintr);
@@ -2465,9 +2346,9 @@ noport:
 		p = (char *)&data_addr.sin_port;
 #define	UC(b)	(((int)b)&0xff)
 		result =
-		    command("RADR %d,%d,%d,%d,%d,%d",
+		    command("RADR %d,%d,%d,%d,%d,%d %ld",
 		      UC(a[0]), UC(a[1]), UC(a[2]), UC(a[3]),
-		      UC(p[0]), UC(p[1]));
+			UC(p[0]), UC(p[1]), htonl(opt.cbufsiz));
 		if (result == ERROR && sendport == -1) {
 			sendport = 0;
 			tmpno = 1;
@@ -2606,14 +2487,14 @@ ptransfer(const char *direction, long bytes,
 	  const struct timeval *t1)
 {
 	struct timeval td;
-	float s, bs;
+	double s, bs;
 
 	if (verbose) {
 		tvsub(&td, t1, t0);
-		s = td.tv_sec + (td.tv_usec / 1000000.);
+		s = (((double)td.tv_sec) / 1.0) + (((double)td.tv_usec) / 1000000.0);
 #define	nz(x)	((x) == 0 ? 1 : (x))
 		bs = bytes / nz(s);
-		printf("%ld bytes %s in %.3g secs (%.2g Kbytes/sec)\n",
+		printf("%ld bytes %s in %.4f secs (%.2g Kbytes/sec)\n",
 		    bytes, direction, s, bs / 1024.0);
 	}
 }
