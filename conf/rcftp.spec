@@ -1,6 +1,6 @@
 # This is the spec file for rcftp
 
-%define _topdir         /home/ren/rftp
+%define _topdir         /home/ren/rftpbuild
 %define name                    rcftp
 %define release         rc3
 %define version         0.15
@@ -34,6 +34,8 @@ make
 rm -rf %{buildroot}
 test -z "$RPM_BUILD_ROOT/usr/bin" || /bin/mkdir -p $RPM_BUILD_ROOT/usr/bin
 make install prefix=$RPM_BUILD_ROOT/usr
+test -z "$RPM_BUILD_ROOT/etc" || /bin/mkdir -p $RPM_BUILD_ROOT/etc
+install -m 644 rcftprc $RPM_BUILD_ROOT/etc
 
 %clean
 rm -rf %{buildroot}
@@ -41,8 +43,17 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root)
 /usr/bin/rcftp
+%config /etc/rcftprc
 
 %changelog
+*Mon May 28 2012 <renyufei83@gmail.com>
+--once data sink gets FIN, it sends back 2 credits immediately
+--fix writers competition bug
+--add thread evaluation function
+--extend one worker thread pool to multiple ones
+--network performance is 1000 based
+--handle RDMA_CM_EVENT_DISCONNECTED event during data transfer
+
 *Fri Mar 30 2012 <renyufei83@gmail.com>
 --add '-V' for checking version
 

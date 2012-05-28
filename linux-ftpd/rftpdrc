@@ -1,0 +1,17 @@
+cbufnum = 100
+srvcomport = 9987
+usesendfile = no
+usesplice = no
+devzerosiz = 10G
+rmtaddrnum = 200
+evbufnum = 500
+recvbufnum = 500
+readernum = 1
+writernum = 1
+ioengine = sync
+directio = yes
+rdma_qp_sq_depth = 1280
+rdma_qp_rq_depth = 1280
+rdma_cq_depth = 2000
+wceventnum = 600
+wcthreadnum = 4
