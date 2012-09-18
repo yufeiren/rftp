@@ -241,9 +241,21 @@ update_param(struct options *opt)
 {
 	opt->cbufnum = opt->maxbufpoolsiz / opt->cbufsiz;
 	opt->rmtaddrnum = opt->cbufnum;
-	opt->evbufnum = opt->cbufnum;
-	opt->recvbufnum = opt->cbufnum * 2;
-	opt->wc_event_num = opt->evbufnum + opt->recvbufnum;
+
+	if (opt->cbufnum < opt->rdma_qp_sq_depth)
+		opt->evbufnum = opt->cbufnum;
+	else
+		opt->evbufnum = opt->rdma_qp_sq_depth - 1;
+
+	if (opt->cbufnum < opt->rdma_qp_rq_depth)
+		opt->recvbufnum = opt->cbufnum;
+	else
+		opt->recvbufnum = opt->rdma_qp_rq_depth - 1;
+
+	if ((opt->evbufnum + opt->recvbufnum) < opt->rdma_cq_depth)
+		opt->wc_event_num = opt->evbufnum + opt->recvbufnum;
+	else
+		opt->wc_event_num = opt->rdma_cq_depth - 1;
 
 	return;
 }
