@@ -71,6 +71,8 @@ extern struct acptq acceptedTqh;
 
 extern struct options opt;
 
+extern struct proc_rusage_time self_ru;
+
 extern struct timespec total_rd_cpu;
 extern struct timespec total_rd_real;
 extern struct timespec total_net_cpu;
@@ -1077,7 +1079,14 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 
 	(void) gettimeofday(&start, (struct timezone *)0);
 	oldintp = signal(SIGPIPE, SIG_IGN);
-	
+
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
+
+	getrusage(RUSAGE_SELF, &(self_ru.ru_start));
+	self_ru.real_start.tv_sec = ts.tv_sec;
+	self_ru.real_start.tv_usec = ts.tv_nsec / 1000;
+
 	int i;
 	
 		errno = d = 0;
@@ -1168,6 +1177,12 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 			bytes = -1;
 		}
 
+	clock_gettime(CLOCK_REALTIME, &ts);
+
+	getrusage(RUSAGE_SELF, &(self_ru.ru_end));
+	self_ru.real_end.tv_sec = ts.tv_sec;
+	self_ru.real_end.tv_usec = ts.tv_nsec / 1000;
+
 	(void) gettimeofday(&stop, (struct timezone *)0);
 	if (closefunc != NULL)
 		(*closefunc)(fin);
@@ -1212,6 +1227,8 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	sem_destroy(&child_dc_cb->sem);
 	
 	free(child_dc_cb);
+
+	
 	
 	printf("client\t\tcpu\treal\n");
 	printf("Loading\t\t%ld:%09ld\t%ld:%09ld\n", \

@@ -236,6 +236,13 @@ max_size_t byte_atoi( const char *inString ) {
     return (max_size_t) theNum;
 } /* end byte_atoi */
 
+void
+cal_rusage(struct proc_rusage_time *self_ru)
+{
+return;
+}
+
+
 void *
 anabw(void *arg)
 {
