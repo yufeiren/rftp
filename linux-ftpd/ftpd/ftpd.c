@@ -221,6 +221,8 @@ pthread_mutex_t transcurrlen_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int is_disconnected_event = 0;
 
+struct proc_rusage_time self_ru;
+
 struct timespec total_rd_cpu;
 struct timespec total_rd_real;
 struct timespec total_net_cpu;
@@ -1413,9 +1415,8 @@ void rstore(const char *name, const char *mode, int unique)
 			reply(226, "Transfer complete (unique file name:%s).",
 			    name);
 		else
-			reply(226, "Transfer complete. %ld:%09ld %ld:%09ld.", \
-			total_wr_cpu.tv_sec, total_wr_cpu.tv_nsec, \
-			total_wr_real.tv_sec, total_wr_real.tv_nsec);
+			reply(226, "Transfer complete. Server user %.4f %%, sys %.4f %%, total %.4f %%.", \
+			      self_ru.cpu_user, self_ru.cpu_sys, self_ru.cpu_total);
 
 	}
 	data = -1;
@@ -1791,7 +1792,10 @@ static int rdmadataconn(const char *name, off_t size, const char *mode)
 		syslog(LOG_ERR, "iperf_setup_qp: %m");
 		goto err0;
 	}
-	
+
+	/* update parameters */
+	update_param(&opt);
+
 	ret = iperf_setup_buffers(dc_cb);
 	if (ret) {
 		syslog(LOG_ERR, "iperf_setup_buffers: %m");
@@ -2025,6 +2029,13 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 		syslog(LOG_ERR, "start connection num: %d", opt.rcstreamnum);
 		create_dc_stream_client(dc_cb, opt.rcstreamnum, &data_dest);
 		
+		struct timespec ts;
+		clock_gettime(CLOCK_REALTIME, &ts);
+
+		getrusage(RUSAGE_SELF, &(self_ru.ru_start));
+		self_ru.real_start.tv_sec = ts.tv_sec;
+		self_ru.real_start.tv_usec = ts.tv_nsec / 1000;
+
 		ret = pthread_create(&sender_tid, NULL, sender, dc_cb);
 		if (ret != 0) {
 			syslog(LOG_ERR, "pthread_create sender fail");
@@ -2042,6 +2053,14 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 			}
 		}
 		
+		clock_gettime(CLOCK_REALTIME, &ts);
+
+		getrusage(RUSAGE_SELF, &(self_ru.ru_end));
+		self_ru.real_end.tv_sec = ts.tv_sec;
+		self_ru.real_end.tv_usec = ts.tv_nsec / 1000;
+
+		cal_rusage(&self_ru);
+
 		pthread_join(sender_tid, NULL);
 		syslog(LOG_ERR, "join sender success");
 		
@@ -2073,7 +2092,8 @@ static void rsend_data(FILE *instr, FILE *outstr, off_t blksize, off_t filesize,
 		
 		free(dc_cb);
 		
-		reply(226, "Transfer complete.");
+		reply(226, "Transfer complete. Server user %.4f %%, sys %.4f %%, total %.4f %%.", \
+		      self_ru.cpu_user, self_ru.cpu_sys, self_ru.cpu_total);
 		return;
 	
 	tsf_free_buf_list();
@@ -2219,6 +2239,13 @@ static int rreceive_data(FILE *outstr)
 		pthread_t writer_tid[200];
 		void      *tret;
 		
+		struct timespec ts;
+		clock_gettime(CLOCK_REALTIME, &ts);
+
+		getrusage(RUSAGE_SELF, &(self_ru.ru_start));
+		self_ru.real_start.tv_sec = ts.tv_sec;
+		self_ru.real_start.tv_usec = ts.tv_nsec / 1000;
+
 		/* create multiple writer */
 		for (i = 0; i < opt.writernum; i ++) {
 			ret = pthread_create(&writer_tid[i], NULL, \
@@ -2241,6 +2268,14 @@ static int rreceive_data(FILE *outstr)
 
 			sleep(1);
 		}
+
+		clock_gettime(CLOCK_REALTIME, &ts);
+
+		getrusage(RUSAGE_SELF, &(self_ru.ru_end));
+		self_ru.real_end.tv_sec = ts.tv_sec;
+		self_ru.real_end.tv_usec = ts.tv_nsec / 1000;
+
+		cal_rusage(&self_ru);
 
 		for (i = 0; i < opt.writernum; i ++) {
 			pthread_cancel(writer_tid[i]);

@@ -60,6 +60,8 @@ char ftp_rcsid[] =
 #include <pwd.h>
 #include <stdarg.h>
 
+#include <sys/resource.h>
+
 #include "ftp_var.h"
 #include "cmds.h"
 #include "errors.h"
@@ -1183,6 +1185,8 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	self_ru.real_end.tv_sec = ts.tv_sec;
 	self_ru.real_end.tv_usec = ts.tv_nsec / 1000;
 
+	cal_rusage(&self_ru);
+
 	(void) gettimeofday(&stop, (struct timezone *)0);
 	if (closefunc != NULL)
 		(*closefunc)(fin);
@@ -1228,9 +1232,11 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	
 	free(child_dc_cb);
 
+	printf("Client CPU stat:\n");
+	printf("user %.4f %%, sys %.4f %%, total %.4f %%.\n",
+	       self_ru.cpu_user, self_ru.cpu_sys, self_ru.cpu_total);
 	
-	
-	printf("client\t\tcpu\treal\n");
+	/*	printf("client\t\tcpu\treal\n");
 	printf("Loading\t\t%ld:%09ld\t%ld:%09ld\n", \
 	       total_rd_cpu.tv_sec, total_rd_cpu.tv_nsec, \
 	       total_rd_real.tv_sec, total_rd_real.tv_nsec);
@@ -1239,7 +1245,7 @@ rdmasendrequest(const char *cmd, char *local, char *remote, int printnames)
 	       total_net_real.tv_sec, total_net_real.tv_nsec);
 	printf("Offloading\t\t%ld:%09ld\t%ld:%09ld\n", \
 	       total_wr_cpu.tv_sec, total_wr_cpu.tv_nsec, \
-	       total_wr_real.tv_sec, total_wr_real.tv_nsec);
+	       total_wr_real.tv_sec, total_wr_real.tv_nsec); */
 
 	/*	DPRINTF(("getreply"));
 		(void) getreply(0);*/
@@ -1993,7 +1999,7 @@ rdmarecvrequest(const char *cmd,
 	rdmadataconn("r");
 	
 	(void) gettimeofday(&start, (struct timezone *)0);
-	
+
 	tsf_setup_buf_list(child_dc_cb);
 
 	dc_conn_req(child_dc_cb);
@@ -2010,6 +2016,13 @@ rdmarecvrequest(const char *cmd,
 		/* create multiple writer */
 		(void) gettimeofday(&start, (struct timezone *)0);
 		
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
+
+	getrusage(RUSAGE_SELF, &(self_ru.ru_start));
+	self_ru.real_start.tv_sec = ts.tv_sec;
+	self_ru.real_start.tv_usec = ts.tv_nsec / 1000;
+	
 		int i;
 		for (i = 0; i < opt.writernum; i ++) {
 			ret = pthread_create(&writer_tid[i], NULL, \
@@ -2057,6 +2070,15 @@ rdmarecvrequest(const char *cmd,
 	(void) signal(SIGINT, oldintr);
 	if (oldintp)
 		(void) signal(SIGPIPE, oldintp);
+
+	clock_gettime(CLOCK_REALTIME, &ts);
+
+	getrusage(RUSAGE_SELF, &(self_ru.ru_end));
+	self_ru.real_end.tv_sec = ts.tv_sec;
+	self_ru.real_end.tv_usec = ts.tv_nsec / 1000;
+
+	cal_rusage(&self_ru);
+
 	(void) gettimeofday(&stop, (struct timezone *)0);
 /*	(void) fclose(din); no din in rdma mode */
 	/* closes data as well, so discard it */
@@ -2089,6 +2111,11 @@ rdmarecvrequest(const char *cmd,
 	(void) getreply(0);
 	if (bytes > 0 && is_retr)
 		ptransfer("received", bytes, &start, &stop);
+
+	printf("Client CPU stat:\n");
+	printf("user %.4f %%, sys %.4f %%, total %.4f %%\n",
+	       self_ru.cpu_user, self_ru.cpu_sys, self_ru.cpu_total);
+
 	return;
 abort:
 
@@ -2459,6 +2486,9 @@ rdmadataconn(const char *lmode)
 		goto err0;
 	}
 	DPRINTF(("iperf_setup_qp success\n"));
+
+	/* update parameters according to current setup */
+	update_param(&opt);
 
 	DPRINTF(("before iperf_setup_buffers\n"));
 	ret = iperf_setup_buffers(child_dc_cb);

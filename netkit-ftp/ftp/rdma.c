@@ -1751,6 +1751,8 @@ int tsf_setup_buf_list(struct rdma_cb *cb)
 	syslog(LOG_INFO, "tsf_setup_buf_list: cbufsiz is %d\n", \
 	       opt.cbufsiz);
 
+	opt.cbufnum = opt.maxbufpoolsiz / opt.cbufsiz;
+
 	for (i = 0; i < opt.cbufnum; i++) {
 		if ( (item = (BUFDATBLK *) malloc(sizeof(BUFDATBLK))) == NULL) {
 			syslog(LOG_ERR, "tsf_setup_buf_list: malloc DATABLK fail");

@@ -237,9 +237,56 @@ max_size_t byte_atoi( const char *inString ) {
 } /* end byte_atoi */
 
 void
+update_param(struct options *opt)
+{
+	opt->cbufnum = opt->maxbufpoolsiz / opt->cbufsiz;
+	opt->rmtaddrnum = opt->cbufnum;
+	opt->evbufnum = opt->cbufnum;
+	opt->recvbufnum = opt->cbufnum * 2;
+	opt->wc_event_num = opt->evbufnum + opt->recvbufnum;
+
+	return;
+}
+
+/* from fio */
+unsigned long long
+utime_since(struct timeval *s, struct timeval *e)
+{
+        long sec, usec;
+        unsigned long long ret;
+
+        sec = e->tv_sec - s->tv_sec;
+        usec = e->tv_usec - s->tv_usec;
+        if (sec > 0 && usec < 0) {
+                sec--;
+                usec += 1000000;
+        }
+
+        /*
+         * time warp bug on some kernels?
+         */
+        if (sec < 0 || (sec == 0 && usec < 0))
+                return 0;
+
+        ret = sec * 1000000ULL + usec;
+
+	return ret;
+}
+
+void
 cal_rusage(struct proc_rusage_time *self_ru)
 {
-return;
+	uint64_t u_usec, s_usec, r_usec;
+
+	u_usec = utime_since(&(self_ru->ru_start.ru_utime), &(self_ru->ru_end.ru_utime));
+	s_usec = utime_since(&(self_ru->ru_start.ru_stime), &(self_ru->ru_end.ru_stime));
+	r_usec = utime_since(&(self_ru->real_start), &(self_ru->real_end));
+
+	self_ru->cpu_user = (double) u_usec * (double) 100 / (double) r_usec;
+	self_ru->cpu_sys = (double) s_usec * (double) 100 / (double) r_usec;
+	self_ru->cpu_total = self_ru->cpu_user + self_ru->cpu_sys;
+
+	return;
 }
 
 

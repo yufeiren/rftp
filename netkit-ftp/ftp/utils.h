@@ -152,6 +152,10 @@ struct proc_rusage_time {
 	struct rusage ru_end;
 	struct timeval real_start;
 	struct timeval real_end;
+
+	double cpu_user;
+	double cpu_sys;
+	double cpu_total;
 };
 
 double byte_atof(const char *);
@@ -162,6 +166,11 @@ char *read_whole_line (FILE *);
 char *concat_strings (const char *, ...);
 
 int parse_opt_addr(struct options *);
+
+unsigned long long utime_since(struct timeval *, struct timeval *);
+
+/* update parameters according to current setup */
+void update_param(struct options *);
 
 void cal_rusage(struct proc_rusage_time *self_ru);
 

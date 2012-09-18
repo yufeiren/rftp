@@ -140,7 +140,7 @@ defaults (void)
 
   opt.cbufsiz = 5242880; /* default buffer size is 5MB */
   opt.cbufnum = 10;
-  opt.maxbufpoolsiz = 524288000 /* default buffer pool size is 500MB */
+  opt.maxbufpoolsiz = 524288000; /* default buffer pool size is 500MB */
 
   opt.devzerosiz = 10737418240; /* default size of /dev/zero is 10GB */
   
