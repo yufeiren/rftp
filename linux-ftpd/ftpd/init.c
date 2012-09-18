@@ -92,6 +92,7 @@ static const struct {
 	{ "cbufsiz",       &opt.cbufsiz,           cmd_byte },
 	{ "devzerosiz",    &opt.devzerosiz,        cmd_byte },
 	{ "directio",      &opt.directio,          cmd_boolean },
+	{ "diskiosiz",     &opt.disk_io_siz,       cmd_byte },
 	{ "evbufnum",      &opt.evbufnum,          cmd_number },
 	{ "ibaddr",        &opt.ibaddr,            cmd_string },
 	{ "ibdevname",     &opt.ib_devname,        cmd_string },
@@ -159,6 +160,7 @@ defaults (void)
   
 /* opt.ioengine = "sync"; */
   opt.directio = false;
+  opt.disk_io_siz = opt.cbufsiz;
   
   opt.rdma_qp_rq_depth = 128;
   opt.rdma_qp_sq_depth = 128;

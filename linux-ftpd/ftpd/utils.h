@@ -133,6 +133,7 @@ struct options {
 	int    readernum;	/* number of reader if send data */
 	int    writernum;	/* number of writer if recv data */
 	char   *ioengine;
+	int    disk_io_siz;	/* io size for disk io */
 	bool   directio;
 	int    rdma_cq_depth;
 	int    rdma_qp_rq_depth;

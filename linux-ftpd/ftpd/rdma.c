@@ -3451,13 +3451,39 @@ parsepath(const char *path)
 int
 load_dat_blk(BUFDATBLK *bufblk)
 {
-	return readn(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), bufblk->buflen - sizeof(rmsgheader));
+	int cur = 0;
+	int iret;
+
+	if (opt.disk_io_siz >= opt.cbufsiz)
+		return readn(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), bufblk->buflen - sizeof(rmsgheader));
+	else {
+		do {
+			iret = readn(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader) + cur, opt.disk_io_siz);
+			if (iret < 0)
+				return -1;
+			else
+				cur += iret;
+		} while (cur < (bufblk->buflen - sizeof(rmsgheader)));
+	}
 }
 
 int
 offload_dat_blk(BUFDATBLK *bufblk)
 {
-	return writen(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), bufblk->buflen - sizeof(rmsgheader));
+	int cur = 0;
+	int iret;
+
+	if (opt.disk_io_siz >= opt.cbufsiz)
+		return writen(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), bufblk->buflen - sizeof(rmsgheader));
+	else {
+		do {
+			iret = writen(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader) + cur, opt.disk_io_siz);
+			if (iret < 0)
+				return -1;
+			else
+				cur += iret;
+		} while (cur < (bufblk->buflen - sizeof(rmsgheader)));
+	}
 }
 
 
