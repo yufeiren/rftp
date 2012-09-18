@@ -80,6 +80,8 @@ extern "C" {
 #include <signal.h>
 #include <setjmp.h>
 
+#include <sys/resource.h>
+
 #include <linux/limits.h>
 
 # ifndef countof
@@ -118,6 +120,7 @@ max_size_t transcurrlen;
 struct options {
 	int    cbufnum;
 	long   cbufsiz;
+	long   maxbufpoolsiz;
 	int    evbufnum;
 	int    recvbufnum;
 	int    rmtaddrnum;
@@ -141,6 +144,16 @@ struct options {
 	int    data_addr_num;
 };
 
+/* Whole Network Data Transfer CPU usage is
+ * (ru_end - ru_start) / (real_end - real_start) * 100%
+ */
+struct proc_rusage_time {
+	struct rusage ru_start;
+	struct rusage ru_end;
+	struct timeval real_start;
+	struct timeval real_end;
+};
+
 double byte_atof(const char *);
 max_size_t byte_atoi(const char *);
 
@@ -149,6 +162,8 @@ char *read_whole_line (FILE *);
 char *concat_strings (const char *, ...);
 
 int parse_opt_addr(struct options *);
+
+void cal_rusage(struct proc_rusage_time *self_ru);
 
 /* thread */
 void *anabw(void *);
