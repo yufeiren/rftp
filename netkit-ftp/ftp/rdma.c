@@ -119,7 +119,7 @@ extern struct timespec total_wr_real;
 static struct rdma_cb *tmpcb;
 /* static tmp; */
 
-static int filesessionid;
+static int filesessionid = 0;
 
 static pthread_mutex_t rqblk_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t rqblk_once_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -3456,15 +3456,22 @@ load_dat_blk(BUFDATBLK *bufblk)
 
 	if (opt.disk_io_siz >= opt.cbufsiz)
 		return readn(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), bufblk->buflen - sizeof(rmsgheader));
-	else {
-		do {
+
+	do {
+		if (opt.disk_io_siz < (bufblk->buflen - sizeof(rmsgheader) - cur))
 			iret = readn(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader) + cur, opt.disk_io_siz);
-			if (iret < 0)
-				return -1;
-			else
-				cur += iret;
-		} while (cur < (bufblk->buflen - sizeof(rmsgheader)));
-	}
+		else
+			iret = readn(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader) + cur, bufblk->buflen - sizeof(rmsgheader) - cur);
+
+		if (iret < 0)
+			return -1;
+		else if (iret == 0)
+			break;
+		else
+			cur += iret;
+	} while (cur < (bufblk->buflen - sizeof(rmsgheader)));
+
+	return cur;
 }
 
 int
@@ -3475,15 +3482,20 @@ offload_dat_blk(BUFDATBLK *bufblk)
 
 	if (opt.disk_io_siz >= opt.cbufsiz)
 		return writen(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader), bufblk->buflen - sizeof(rmsgheader));
-	else {
-		do {
+
+	do {
+		if (opt.disk_io_siz < (bufblk->buflen - sizeof(rmsgheader) - cur))
 			iret = writen(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader) + cur, opt.disk_io_siz);
-			if (iret < 0)
-				return -1;
-			else
-				cur += iret;
-		} while (cur < (bufblk->buflen - sizeof(rmsgheader)));
-	}
+		else
+			iret = writen(bufblk->fd, bufblk->rdma_buf + sizeof(rmsgheader) + cur, bufblk->buflen - sizeof(rmsgheader) - cur);
+
+		if (iret < 0)
+			return -1;
+		else
+			cur += iret;
+	} while (cur < (bufblk->buflen - sizeof(rmsgheader)));
+
+	return cur;
 }
 
 

@@ -139,7 +139,7 @@ defaults (void)
      illegal, but porting Wget to a machine where NULL is not all-zero
      bit pattern will be the least of the implementors' worries.  */
 
-  opt.cbufsiz = 5242880; /* default buffer size is 5MB */
+  opt.cbufsiz = 524288; /* default buffer size is 512KB */
   opt.cbufnum = 10;
   opt.maxbufpoolsiz = 524288000; /* default buffer pool size is 500MB */
 
