@@ -1,22 +1,22 @@
-RDMA FTP client (rcftp) and server (rftpd) is a set of tools for high
-performance data transfer using RDMA technology based on ftp protocol.
+RDMA FTP client (rcftp) and server (rftpd) are a set of tools for high
+performance data transfer using RDMA technology.
 
 New Features
 ==
-* fix out of order packages' pending list sequence number bug
-* introduce the master-worker thread pool for
-  completion event handling
+* introduce maximum buffer pool size (maxbufpoolsiz)
+* introduce dedicate disk IO block size (disk_io_siz)
+* client and server CPU usage statistics
 
 Installation
 ==
 1. If you have installed previous version, please use upgrade command,
- # rpm -Uvh rftpd-0.14-rc2.x86_64.rpm
- # rpm -Uvh rcftp-0.14-rc2.x86_64.rpm
+ # rpm -Uvh rftpd-0.15-rc4.x86_64.rpm
+ # rpm -Uvh rcftp-0.15-rc4.x86_64.rpm
 
 2. Comfirm version
  # rpm -qa rcftp rftpd
- rcftp-0.14-rc2
- rftpd-0.14-rc2
+ rcftp-0.15-rc4
+ rftpd-0.15-rc4
 
 Configuration
 ==
@@ -45,23 +45,24 @@ Configuration
 +-------------+----------+--------+--------------------------------+
 |   option    |  default |  app   |   description                  |
 +-------------+----------+--------+--------------------------------+
-| cbufsiz     |  1MB     | rcftp  | circular buffer block size     |
+| cbufsiz     |  1MB     | rcftp  | block size of ring buffer      |
 |             |          | rftpd  |                                |
 +-------------+----------+--------+--------------------------------+
-| cbufnum     |  10      | rcftp  | circular buffer block number   |
+| maxbufpoolsiz | 500MB  | rcftp  | maximum size of ring buffer    |
 |             |          | rftpd  |                                |
++-------------+----------+--------+--------------------------------+
+| cbufnum     |  10      | rcftp  | number of ring buffer block    |
+| (deprecated)|          | rftpd  |                                |
 +-------------+----------+--------+--------------------------------+
 | srvcomport  |  21      | rftpd  | server side communication      |
 |             |          |        | channel listening port         |
 +-------------+----------+--------+--------------------------------+
-| usesendfile |  no      | rcftp  | set 'yes' if you want to use   |
-|             |          | rftpd  | sendfile to avoid data copy    |
-|             |          |        | between kernel and userspace   |
+| usesendfile |  no      | rcftp  | If set 'yes', TCP data channel |
+|             |          | rftpd  | uses sendfile() to transfer    |
+|             |          |        | data                           |
 +-------------+----------+--------+--------------------------------+
-| usesplice   |  no      | rcftp  | set 'yes' if you want to take  |
-|             |          | rftpd  | advantage of splice to avoid   |
-|	      |	         |        | data copy between kernel and   |
-|             |          |        | userspace                      |
+| usesplice   |  no      | rcftp  | If set 'yes', TCP data channel |
+|             |          | rftpd  | uses splice() to transfer data |
 +-------------+----------+--------+--------------------------------+
 | devzerosiz  |  100G    | rcftp  | set /dev/zero size for         |
 |             |          | rftpd  | limited data transfer          |
@@ -89,6 +90,9 @@ Configuration
 |             |          |        | CHR device like /dev/zero and  |
 |             |          |        |  /devnull don't support this   |
 +-------------+----------+--------+--------------------------------+
+| disk_io_siz |  1M      | rcftp  | size of disk io operation      |
+|             |          | rftpd  |                                |
++-------------+----------+--------+--------------------------------+
 | rdma_qp_sq  |  64      | rcftp  | maximum iodepth of rdma send   |
 | _depth      |          | rftpd  | queue                          |
 +-------------+----------+--------+--------------------------------+
@@ -108,12 +112,20 @@ Configuration
 Usage
 =====
 
-0. Before launch rcftp/rftpd, please confirm the following value of your system
- $ ulimit -l    # max locked memory
-   RDMA kernel bypass technology has to pin memory before rNIC operate on that memroy. So, please give the application enough locked memory. At lease, it must be larger than (cbufsiz * cbufnum).
- $ ulimit -n    # open files
-   RFTP supports directory hirarchy transfer. You should confirm the number of files you want to transfer is less than this limitation. Otherwise, a 'can not open file' error will occur.
+0. Before start rcftp/rftpd, please confirm maximum locked memory
+for your user account
 
+ $ ulimit -l    # max locked memory
+
+   RDMA pins memory blocks to avoid page swap or migration. Enlarge
+   this parameter if it is not sufficient. It must be larger than
+   maxbufpoolsiz.
+
+ $ ulimit -n    # open files
+
+   RFTP supports directory hirarchy transfer. You should confirm the
+   number of files you want to transfer is less than this
+   limitation. Otherwise, a 'can not open file' error will occur.
    
 1. Startup server manually
  # rftpd -D
@@ -128,7 +140,9 @@ Usage
  Name: ftp
  Password: ftp
 
-ftp/ftp is a kind of anonymous user/passwd pair, and the server would not set user id and group which makes regular user startup server possible.
+ftp/ftp is a kind of anonymous user/passwd pair, and the server would
+not set user id or group id which makes regular user permission
+startup server possible.
 
 4. Change directories
  ftp> lcd [local working directory]
@@ -149,15 +163,18 @@ ftp/ftp is a kind of anonymous user/passwd pair, and the server would not set us
  ftp> by
  221 Goodbye.
 
-
 Issues
 ======
 
-* splice has higher priority than sendfile. so if 'usesplice' and 'usesendfile' are both set as 'yes', the application will use splice to send data.
+* splice has higher priority than sendfile. so if 'usesplice' and
+  'usesendfile' are both set as 'yes', the application will use splice
+  to send data.
 
-* If concurrent clients are wanted, you could compose scripts for convenient to do repeatable task. For example, if you want to transfer some large file, you could do as follows,
+* A script could be used as an input for convenient, as shown in follows.
+
  # rcftp -n -i < [script]
  in the script file, you could write some task as you want,
+
 ------------
 open server-addr port
 user username password
@@ -168,3 +185,4 @@ cd remote-dir
 rput local-file remote-file
 bye
 ------------
+

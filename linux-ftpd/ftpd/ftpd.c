@@ -1155,7 +1155,7 @@ void rretrieve(const char *cmd, const char *name)
 	
 	TAILQ_INIT(&rcif_tqh);
 	
-	parsepath(name);
+	parsepath(name, name);
 
 	/* establish data connection */
 	ret = rdmadataconn(name, st.st_size, "w");
@@ -1188,7 +1188,7 @@ void mretrieve(const char *cmd, const char *name, int conn_number)
 	pthread_t sender_tid[1024];
 	
 	TAILQ_INIT(&finfo_tqh);
-	parsepath(name);
+	parsepath(name, name);
 	
 	syslog(LOG_ERR, "connection number is %d", conn_number);
 

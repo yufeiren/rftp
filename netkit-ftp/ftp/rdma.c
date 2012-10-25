@@ -392,7 +392,7 @@ handle_file_session_rep(struct rdma_info_blk *recvbuf)
 	
 	TAILQ_LOCK(&finfo_tqh);
 	TAILQ_FOREACH(item, &finfo_tqh, entries)
-		if (strcmp(item->lf, filename) == 0)
+		if (strcmp(item->rf, filename) == 0)
 			break;
 	
 	if (item == NULL) {
@@ -3344,7 +3344,9 @@ parsedir(const char *dir)
 	struct stat st;
 	
 	head = dir;
-	
+	if (*head == '/')
+		head += 1;
+
 	while ((tail = strchr(head, '/')) != NULL) {
 		memset(curpath, '\0', 256);
 		memcpy(curpath, dir, tail - dir);
@@ -3352,7 +3354,7 @@ parsedir(const char *dir)
 		if (stat(curpath, &st) != 0) {	/* create dir */
 			if (mkdir(curpath, S_IRWXU|S_IRGRP|S_IXGRP) != 0)
 				syslog(LOG_ERR, "mkdir %s fail: %d(%s)", \
-					dir, errno, strerror(errno));
+					curpath, errno, strerror(errno));
 		}
 		
 		head = tail + 1;
@@ -3362,7 +3364,7 @@ parsedir(const char *dir)
 }
 
 void
-parsepath(const char *path)
+parsepath(const char *local, const char *remote)
 {
 	/* recursively resolve files or folders */
 	FILEINFO *item;
@@ -3370,33 +3372,43 @@ parsepath(const char *path)
 	DIR *dp;
 	struct dirent *entry;
 	
-	if (stat(path, &st) != 0) {
-		syslog(LOG_ERR, "lstat fail: %d(%s)", errno, strerror(errno));
+	if (stat(local, &st) != 0) {
+		syslog(LOG_ERR, "lstat fail: %d(%s)", \
+			errno, strerror(errno));
 		return;
 	}
 	
 	if (S_ISDIR(st.st_mode)) {
-		char newpath[1024];
+		char new_local_path[1024];
+		char new_remote_path[1024];
 		
-		if((dp = opendir(path)) == NULL) {
-			syslog(LOG_ERR, "cannot open directory: %s\n", path);
+		if((dp = opendir(local)) == NULL) {
+			syslog(LOG_ERR, "cannot open directory: %s\n", local);
 			return;
 		}
 		
 		while((entry = readdir(dp)) != NULL) {
-			memset(newpath, '\0', 1024);
+			memset(new_local_path, '\0', 1024);
+			memset(new_remote_path, '\0', 1024);
 			
 			/* ignore . and .. */
 			if (strcmp(".", entry->d_name) == 0 || 
 				strcmp("..", entry->d_name) == 0)
 				continue;
 			
-			if (*(path + strlen(path) - 1) == '/')
-				snprintf(newpath, 1024, "%s%s", path, entry->d_name);
-			else
-				snprintf(newpath, 1024, "%s/%s", path, entry->d_name);
-			
-			parsepath(newpath);
+			if (*(local + strlen(local) - 1) == '/') {
+				snprintf(new_local_path, 1024, "%s%s", local, entry->d_name);
+			} else {
+				snprintf(new_local_path, 1024, "%s/%s", local, entry->d_name);
+			}
+
+			if (*(remote + strlen(remote) - 1) == '/') {
+				snprintf(new_remote_path, 1024, "%s%s", remote, entry->d_name);
+			} else {
+				snprintf(new_remote_path, 1024, "%s/%s", remote, entry->d_name);
+			}
+
+			parsepath(new_local_path, new_remote_path);
 		}
 		
 		closedir(dp);
@@ -3408,8 +3420,8 @@ parsepath(const char *path)
 		}
 		memset(item, '\0', sizeof(FILEINFO));
 	
-		strcpy(item->lf, path);
-		strcpy(item->rf, path);
+		strcpy(item->lf, local);
+		strcpy(item->rf, remote);
 		item->offset = 0;
 		
 		item->fsize = st.st_size;
@@ -3426,8 +3438,8 @@ parsepath(const char *path)
 		}
 		memset(item, '\0', sizeof(FILEINFO));
 	
-		strcpy(item->lf, path);
-		strcpy(item->rf, path);
+		strcpy(item->lf, local);
+		strcpy(item->rf, remote);
 		item->offset = 0;
 		
 		item->fsize = opt.devzerosiz;
@@ -3436,7 +3448,7 @@ parsepath(const char *path)
 		
 		TAILQ_INSERT_TAIL(&finfo_tqh, item, entries);
 	} else if (S_ISBLK(st.st_mode)) {
-		syslog(LOG_ERR, "IS BLK\n");
+		syslog(LOG_ERR, "IS BLK Device\n");
 	} else if (S_ISLNK(st.st_mode)) {
 		syslog(LOG_ERR, "IS LNK\n");
 	} else if (S_ISSOCK(st.st_mode)) {

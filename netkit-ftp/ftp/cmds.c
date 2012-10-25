@@ -514,7 +514,7 @@ usage:
 	transcurrlen = transtotallen = 0;
 	
 	/* for (i = 1; i < argc; i++) */
-	parsepath(argv[1]);
+	parsepath(argv[1], argv[2]);
 	
 	mssendrequest("MSTR", argv[1], argv[1], 1);
 	
@@ -573,7 +573,7 @@ usage:
 	
 	transcurrlen = transtotallen = 0;
 	
-	parsepath(argv[1]);
+	parsepath(argv[1], argv[2]);
 	
 	rdmasendrequest(cmd, argv[1], argv[2],
 	    argv[1] != oldargv1 || argv[2] != oldargv2);
@@ -777,7 +777,7 @@ rmput(int argc, char *argv[])
 	transcurrlen = transtotallen = 0;
 
 	for (i = 1; i < argc; i++)
-		parsepath(argv[i]);
+		parsepath(argv[i], argv[i]);
 	
 	rdmasendrequest("RSTR", argv[1], argv[1], 1);
 	
