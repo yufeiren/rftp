@@ -92,10 +92,12 @@ static const struct {
 	{ "cbufsiz",       &opt.cbufsiz,           cmd_byte },
 	{ "devzerosiz",    &opt.devzerosiz,        cmd_byte },
 	{ "directio",      &opt.directio,          cmd_boolean },
+	{ "diskiosiz",     &opt.disk_io_siz,       cmd_byte },
 	{ "evbufnum",      &opt.evbufnum,          cmd_number },
 	{ "ibaddr",        &opt.ibaddr,            cmd_string },
 	{ "ibdevname",     &opt.ib_devname,        cmd_string },
 	{ "ioengine",      &opt.ioengine,          cmd_string },
+	{ "maxbufpoolsiz", &opt.maxbufpoolsiz,     cmd_byte },
 	{ "rcstreamnum",   &opt.rcstreamnum,       cmd_number },
 	{ "rdmacqdepth",   &opt.rdma_cq_depth,     cmd_number },
 	{ "rdmaqprqdepth", &opt.rdma_qp_rq_depth,  cmd_number },
@@ -137,10 +139,11 @@ defaults (void)
      illegal, but porting Wget to a machine where NULL is not all-zero
      bit pattern will be the least of the implementors' worries.  */
 
-  opt.cbufsiz = 5242880; /* default buffer size is 5MB */
+  opt.cbufsiz = 524288; /* default buffer size is 512KB */
   opt.cbufnum = 10;
-  
-  opt.devzerosiz = 107374182400; /* default size of /dev/zero is 100GB */
+  opt.maxbufpoolsiz = 524288000; /* default buffer pool size is 500MB */
+
+  opt.devzerosiz = 10737418240; /* default size of /dev/zero is 10GB */
   
   opt.evbufnum = 100;
   opt.recvbufnum = 100;
@@ -157,11 +160,12 @@ defaults (void)
   
 /* opt.ioengine = "sync"; */
   opt.directio = false;
+  opt.disk_io_siz = opt.cbufsiz;
   
-  opt.rdma_qp_rq_depth = 64;
-  opt.rdma_qp_sq_depth = 64;
+  opt.rdma_qp_rq_depth = 128;
+  opt.rdma_qp_sq_depth = 128;
   
-  opt.rdma_cq_depth = 32;
+  opt.rdma_cq_depth = 128;
 
   opt.wc_event_num = opt.recvbufnum;
   opt.wc_thread_num = 4;

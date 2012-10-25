@@ -1,12 +1,12 @@
 # This is the spec file for rcftp
 
 %define _topdir         /home/ren/rftpbuild
-%define name                    rcftp
-%define release         rc3
+%define name            rcftp
+%define release         rc4
 %define version         0.15
-%define buildroot %{_topdir}/%{name}-%{version}-%{release}-root
+%define buildroot       %{_topdir}/%{name}-%{version}-%{release}-root
 
-BuildRoot:      %{buildroot}
+BuildRoot:              %{buildroot}
 Summary:                GPL rcftp
 License:                GPL
 Name:                   %{name}
@@ -46,6 +46,11 @@ rm -rf %{buildroot}
 %config /etc/rcftprc
 
 %changelog
+*Wed Oct 24 2012 Yufei Ren <yufei.ren@stonybrook.edu> - 0.15-rc4
+--client and server CPU usage statistics
+--introduce maximum buffer pool size (maxbufpoolsiz)
+--introduce dedicate disk IO block size (disk_io_siz)
+
 *Mon May 28 2012 <renyufei83@gmail.com>
 --once data sink gets FIN, it sends back 2 credits immediately
 --fix writers competition bug

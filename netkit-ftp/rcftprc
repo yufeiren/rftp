@@ -1,18 +1,46 @@
-cbufsiz = 1M
-cbufnum = 100
-usesendfile = no
-usesplice = no
-devzerosiz = 10G
-rmtaddrnum = 200
-evbufnum = 500
-recvbufnum = 500
-rcstreamnum = 1
-readernum = 1
-writernum = 1
-ioengine = sync
-directio = yes
-rdma_qp_sq_depth = 1280
-rdma_qp_rq_depth = 1280
-rdma_cq_depth = 2000
-wceventnum = 600
-wcthreadnum = 4
+# This is a demo configuration for rcftp
+# To overwrite these configurations for your account, copy this
+# file into your home directory as $HOME/.rcftprc. Then, change
+# some of them for better performance according to your system
+# configurations, such as RNIC, memory, disk, etc.
+
+# Buffer configuration
+# rftp designs a ring buffer to match RDMA asynchronize IO mechanism.
+# 'cbufsiz' specifies the size of each IO operation, while 'maxbufpoolsiz'
+# setup the ceiling size of memory used for data transfer.
+#cbufsiz = 1M
+#maxbufpoolsiz = 500M
+
+# RDMA related configuration
+# 'rcstreamnum' specifies the number of stream, queue pairs in RDMA, 
+# to be established for data transfer.
+# 'rdma_qp_sq_depth', 'rdma_qp_sq_depth' and 'rdma_cq_depth' setup
+# the depth of send queue, receive queue and completion
+# queue, correspondingly.
+# To handle various kinds of completion, RFTP designs three pools of thread,
+# 'send worker thread', 'recv worker thread' and 'write worker thread'.
+# 'wcthreadnum' defines the number of threads for each pool, and 'wceventnum'
+# specifies the maximum number of completion events.
+#rcstreamnum = 1
+#rdma_qp_sq_depth = 1280
+#rdma_qp_rq_depth = 1280
+#rdma_cq_depth = 2000
+#wceventnum = 600
+#wcthreadnum = 4
+
+# disk io parameters
+# 'devzerosiz' setups the /dev/zero size if a task loads data from /dev/zero.
+# 'readernum' and 'writernum' defines the number of disk io threads that
+# load and offload data between memory and disk. If direct IO is supported
+# by file system, 'directio' could enable this io accelaration feature.
+#devzerosiz = 10G
+#readernum = 1
+#writernum = 1
+#ioengine = sync
+#directio = yes
+
+# 'usesendfile' and 'usesplice' defines how the application performs
+# data transfer over TCP connections.
+#usesendfile = no
+#usesplice = no
+

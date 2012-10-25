@@ -506,7 +506,7 @@ int get_next_channel_event(struct rdma_event_channel *channel, enum rdma_cm_even
 void parsedir(const char *dir);
 
 /* data source */
-void parsepath(const char *path);
+void parsepath(const char *local, const char *remote);
 
 void dc_conn_req(struct rdma_cb *cb);
 
