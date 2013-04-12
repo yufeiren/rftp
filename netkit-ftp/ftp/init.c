@@ -162,10 +162,10 @@ defaults (void)
   opt.directio = false;
   opt.disk_io_siz = opt.cbufsiz;
   
-  opt.rdma_qp_rq_depth = 128;
-  opt.rdma_qp_sq_depth = 128;
+  opt.rdma_qp_rq_depth = 1280;
+  opt.rdma_qp_sq_depth = 1280;
   
-  opt.rdma_cq_depth = 128;
+  opt.rdma_cq_depth = 2000;
 
   opt.wc_event_num = opt.recvbufnum;
   opt.wc_thread_num = 4;
