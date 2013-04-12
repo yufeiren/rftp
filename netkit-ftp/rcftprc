@@ -4,15 +4,15 @@
 # some of them for better performance according to your system
 # configurations, such as RNIC, memory, disk, etc.
 
-# Buffer configuration
+# Memory configuration
 # rftp designs a ring buffer to match RDMA asynchronize IO mechanism.
 # 'cbufsiz' specifies the size of each IO operation, while 'maxbufpoolsiz'
-# setup the ceiling size of memory used for data transfer.
+# sets up the ceiling size of memory used for data transfer.
 #cbufsiz = 1M
-#maxbufpoolsiz = 500M
+#maxbufpoolsiz = 100M
 
 # RDMA related configuration
-# 'rcstreamnum' specifies the number of stream, queue pairs in RDMA, 
+# 'rcstreamnum' specifies the number of streams (queue pairs in RDMA),
 # to be established for data transfer.
 # 'rdma_qp_sq_depth', 'rdma_qp_sq_depth' and 'rdma_cq_depth' setup
 # the depth of send queue, receive queue and completion

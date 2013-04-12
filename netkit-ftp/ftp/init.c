@@ -141,7 +141,7 @@ defaults (void)
 
   opt.cbufsiz = 524288; /* default buffer size is 512KB */
   opt.cbufnum = 10;
-  opt.maxbufpoolsiz = 524288000; /* default buffer pool size is 500MB */
+  opt.maxbufpoolsiz = 104857600; /* default buffer pool size is 100MB */
 
   opt.devzerosiz = 10737418240; /* default size of /dev/zero is 10GB */
   
@@ -162,10 +162,10 @@ defaults (void)
   opt.directio = false;
   opt.disk_io_siz = opt.cbufsiz;
   
-  opt.rdma_qp_rq_depth = 128;
-  opt.rdma_qp_sq_depth = 128;
+  opt.rdma_qp_rq_depth = 1280;
+  opt.rdma_qp_sq_depth = 1280;
   
-  opt.rdma_cq_depth = 128;
+  opt.rdma_cq_depth = 2000;
 
   opt.wc_event_num = opt.recvbufnum;
   opt.wc_thread_num = 4;

@@ -1,22 +1,21 @@
-# This is a demo configuration for rcftp
+# This is a demo configuration for rftpd
 # To overwrite these configurations for your account, copy this
-# file into your home directory as $HOME/.rcftprc. Then, change
+# file into your home directory as $HOME/.rftpdrc. Then, change
 # some of them for better performance according to your system
 # configurations, such as RNIC, memory, disk, etc.
 
-# Buffer configuration
+# Memory configuration
 # rftp designs a ring buffer to match RDMA asynchronize IO mechanism.
-# 'cbufsiz' specifies the size of each IO operation, while 'maxbufpoolsiz'
-# setup the ceiling size of memory used for data transfer.
-#cbufsiz = 1M
-#maxbufpoolsiz = 500M
+# 'maxbufpoolsiz' sets up the ceiling size of memory used for data transfer.
+# Note: memory block size is determined by client side's configuration.
+#maxbufpoolsiz = 100M
 
+# Communication configuration
 # 'srvcomport' specifies the listening port for incoming connection.
+# Note: the number of data transfer streams is determined by client side.
 #srvcomport = 9987
 
 # RDMA related configuration
-# 'rcstreamnum' specifies the number of stream, queue pairs in RDMA, 
-# to be established for data transfer.
 # 'rdma_qp_sq_depth', 'rdma_qp_sq_depth' and 'rdma_cq_depth' setup
 # the depth of send queue, receive queue and completion
 # queue, correspondingly.
@@ -24,7 +23,6 @@
 # 'send worker thread', 'recv worker thread' and 'write worker thread'.
 # 'wcthreadnum' defines the number of threads for each pool, and 'wceventnum'
 # specifies the maximum number of completion events.
-#rcstreamnum = 1
 #rdma_qp_sq_depth = 1280
 #rdma_qp_rq_depth = 1280
 #rdma_cq_depth = 2000
