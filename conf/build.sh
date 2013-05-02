@@ -7,7 +7,12 @@ RELEASE=1
 
 TAG=v$VERSION-$RELEASE
 
-# clear
+for subdir in BUILD RPMS SOURCES SPECS SRPMS
+do
+	test -d $RPMDIR/$subdir || mkdir -p $RPMDIR/$subdir
+done
+
+# clean
 rm -rf $RPMDIR/BUILD/*
 
 # cp configuration file
