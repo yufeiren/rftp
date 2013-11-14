@@ -38,6 +38,7 @@
 #writernum = 1
 #ioengine = sync
 #directio = yes
+#disk_io_siz = 512K
 
 # 'usesendfile' and 'usesplice' defines how the application performs
 # data transfer over TCP connections.
