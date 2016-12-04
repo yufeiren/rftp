@@ -4,9 +4,11 @@ include ../MCONFIG
 include ../MRULES
 
 ifeq ($(USE_READLINE),1)
-CFLAGS += -D__USE_READLINE__ -DRCFTPRC
-LIBS += -lreadline $(LIBTERMCAP) -libverbs -lrdmacm -lpthread -lrt
+CFLAGS += -D__USE_READLINE__
+LIBS += -lreadline $(LIBTERMCAP)
 endif
+CFLAGS += -DRCFTPRC
+LIBS += -libverbs -lrdmacm -lpthread -lrt
 
 rcftp: cmds.o cmdtab.o domacro.o ftp.o glob.o main.o ruserpass.o rdma.o utils.o init.o
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@
